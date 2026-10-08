@@ -1,0 +1,457 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────── Enums ─────────────
+enum UserRole {
+  BUYER
+  SELLER
+  ADMIN
+}
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum KycStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum ListingStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  AUCTIONED
+}
+
+enum ListingCondition {
+  NEW
+  USED
+  NOT_APPLICABLE
+}
+
+enum AuctionStatus {
+  DRAFT
+  PENDING_APPROVAL
+  SCHEDULED
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+  CLOSED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CARD
+  BANK_TRANSFER
+  ESCROW_WALLET
+}
+
+enum TicketType {
+  SUPPORT
+  COMPLAINT
+  PROBLEM_REPORT
+  DISPUTE
+}
+
+enum TicketStatus {
+  OPEN
+  UNDER_INVESTIGATION
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum TokenType {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+// ───────────── Identity & RBAC ─────────────
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  baseRole    UserRole
+  permissions String[]
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+}
+
+model User {
+  id               String     @id @default(cuid())
+  name             String
+  email            String     @unique
+  passwordHash     String
+  phone            String?
+  avatarUrl        String?
+  role             UserRole   @default(BUYER)
+  roleId           String?
+  roleDef          Role?      @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  status           UserStatus @default(ACTIVE)
+  emailVerifiedAt  DateTime?
+  failedLoginCount Int        @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt      DateTime?
+  deletedAt        DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  sessions         Session[]
+  tokens           VerificationToken[]
+  sellerProfile    SellerProfile?
+  buyerProfile     BuyerProfile?
+  listings         Listing[]           @relation("SellerListings")
+  sellerAuctions   Auction[]           @relation("SellerAuctions")
+  bids             Bid[]               @relation("UserBids")
+  highestBids      Auction[]           @relation("HighestBidderAuctions")
+  wonAuctions      AuctionResult[]     @relation("WinningBidderResults")
+  watchlist        WatchlistItem[]
+  payments         Payment[]           @relation("UserPayments")
+  ticketsCreated   Ticket[]            @relation("TicketCreator")
+  ticketsAgainst   Ticket[]            @relation("TicketTarget")
+  ticketsAssigned  Ticket[]            @relation("TicketAssignee")
+  ticketMessages   TicketMessage[]
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+
+  @@index([role, status])
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      TokenType
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, type])
+}
+
+model SellerProfile {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nationalIdNumber String
+  businessName     String?
+  taxId            String?
+  address          String
+  idDocumentUrl    String?
+  status           KycStatus @default(PENDING)
+  reviewedById     String?
+  reviewNote       String?
+  reviewedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status])
+}
+
+model BuyerProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address           String?
+  preferredLocation String?
+  idDocumentUrl     String?
+  isVerified        Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ───────────── Categories & Listings ─────────────
+model Category {
+  id          String   @id @default(cuid())
+  slug        String   @unique // homes, cars-vehicles, land, commercial, industrial, other-assets
+  name        String
+  icon        String?
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  listings    Listing[]
+
+  @@index([isActive, sortOrder])
+}
+
+model Listing {
+  id              String           @id @default(cuid())
+  sellerId        String
+  seller          User             @relation("SellerListings", fields: [sellerId], references: [id], onDelete: Restrict)
+  categoryId      String
+  category        Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  title           String
+  description     String
+  condition       ListingCondition @default(NOT_APPLICABLE)
+  address         String?
+  city            String
+  region          String
+  country         String           @default("ET")
+  postalCode      String?
+  referenceNumber String?          @unique // parcel no., VIN, serial no. etc.
+  features        String[]
+  attributes      Json?            // category-specific fields (see lib/categories.ts)
+  status          ListingStatus    @default(DRAFT)
+  reviewedById    String?
+  rejectionReason String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  images          ListingImage[]
+  documents       ListingDocument[]
+  auctions        Auction[]
+
+  @@index([sellerId, status])
+  @@index([categoryId, status])
+  @@index([city, status])
+}
+
+model ListingImage {
+  id           String   @id @default(cuid())
+  listingId    String
+  listing      Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  url          String
+  isPrimary    Boolean  @default(false)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([listingId])
+}
+
+model ListingDocument {
+  id           String   @id @default(cuid())
+  listingId    String
+  listing      Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  title        String
+  documentType String   // e.g. TITLE_DEED, OWNERSHIP_CARD, INSPECTION_REPORT, INVOICE
+  fileUrl      String
+  isVerified   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([listingId])
+}
+
+// ───────────── Auctions & Bids ─────────────
+model Auction {
+  id                String        @id @default(cuid())
+  listingId         String
+  listing           Listing       @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  sellerId          String
+  seller            User          @relation("SellerAuctions", fields: [sellerId], references: [id], onDelete: Restrict)
+  startingPrice     Decimal       @db.Decimal(14, 2)
+  reservePrice      Decimal?      @db.Decimal(14, 2)
+  minBidIncrement   Decimal       @db.Decimal(14, 2)
+  currentHighestBid Decimal       @default(0) @db.Decimal(14, 2)
+  highestBidderId   String?
+  highestBidder     User?         @relation("HighestBidderAuctions", fields: [highestBidderId], references: [id], onDelete: SetNull)
+  startAt           DateTime
+  endAt             DateTime
+  status            AuctionStatus @default(DRAFT)
+  approvedById      String?
+  terms             String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  bids              Bid[]
+  result            AuctionResult?
+  tickets           Ticket[]
+  watchers          WatchlistItem[]
+
+  @@index([status, startAt, endAt])
+  @@index([sellerId, status])
+  @@index([listingId])
+}
+
+model Bid {
+  id        String   @id @default(cuid())
+  auctionId String
+  auction   Auction  @relation(fields: [auctionId], references: [id], onDelete: Restrict)
+  bidderId  String
+  bidder    User     @relation("UserBids", fields: [bidderId], references: [id], onDelete: Restrict)
+  amount    Decimal  @db.Decimal(14, 2)
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([auctionId, amount(sort: Desc)])
+  @@index([bidderId])
+}
+
+model WatchlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  auctionId String
+  auction   Auction  @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, auctionId])
+  @@index([auctionId])
+}
+
+model AuctionResult {
+  id                 String   @id @default(cuid())
+  auctionId          String   @unique
+  auction            Auction  @relation(fields: [auctionId], references: [id], onDelete: Restrict)
+  winningBidderId    String
+  winningBidder      User     @relation("WinningBidderResults", fields: [winningBidderId], references: [id], onDelete: Restrict)
+  winningAmount      Decimal  @db.Decimal(14, 2)
+  reserveMet         Boolean  @default(true)
+  depositDue         Decimal  @db.Decimal(14, 2)
+  settlementDeadline DateTime
+  isSettled          Boolean  @default(false)
+  createdAt          DateTime @default(now())
+
+  payments           Payment[]
+
+  @@index([winningBidderId, isSettled])
+}
+
+// ───────────── Payments & Escrow ─────────────
+model Payment {
+  id              String        @id @default(cuid())
+  auctionResultId String
+  auctionResult   AuctionResult @relation(fields: [auctionResultId], references: [id], onDelete: Restrict)
+  payerId         String
+  payer           User          @relation("UserPayments", fields: [payerId], references: [id], onDelete: Restrict)
+  amount          Decimal       @db.Decimal(14, 2)
+  currency        String        @default("ETB")
+  method          PaymentMethod @default(BANK_TRANSFER)
+  status          PaymentStatus @default(PENDING)
+  transactionRef  String?       @unique
+  receiptUrl      String?
+  notes           String?
+  verifiedById    String?
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([auctionResultId])
+  @@index([payerId, status])
+}
+
+// ───────────── Support & Complaints ─────────────
+model Ticket {
+  id            String         @id @default(cuid())
+  number        String         @unique // TK-000101
+  type          TicketType     @default(COMPLAINT)
+  subject       String
+  description   String
+  status        TicketStatus   @default(OPEN)
+  priority      TicketPriority @default(NORMAL)
+  createdById   String
+  createdBy     User           @relation("TicketCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  againstUserId String?
+  againstUser   User?          @relation("TicketTarget", fields: [againstUserId], references: [id], onDelete: SetNull)
+  auctionId     String?
+  auction       Auction?       @relation(fields: [auctionId], references: [id], onDelete: SetNull)
+  assignedToId  String?
+  assignedTo    User?          @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  resolution    String?
+  resolvedAt    DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  messages      TicketMessage[]
+
+  @@index([status, type])
+  @@index([createdById])
+}
+
+model TicketMessage {
+  id         String   @id @default(cuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  body       String
+  isInternal Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+// ───────────── Notifications & Audit ─────────────
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  actorId       String?
+  actor         User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action        String   // SELLER_APPROVED, LISTING_CREATED, BID_PLACED, AUCTION_COMPLETED
+  module        String   // USERS, KYC, LISTINGS, AUCTIONS, BIDS, PAYMENTS, SETTINGS
+  entityType    String?
+  entityId      String?
+  previousValue Json?
+  newValue      Json?
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+
+  @@index([module, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model SystemSetting {
+  key         String   @id
+  value       Json
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
