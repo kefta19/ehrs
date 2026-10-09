@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Sun, Moon, Sparkles, Palette, Check } from "lucide-react";
+import { Sun, Moon, Palette, Check } from "lucide-react";
 import { useTheme, type Theme } from "./theme-provider";
 
 const THEMES: { id: Theme; label: string; desc: string; iconColor: string; bgBadge: string }[] = [
@@ -140,7 +140,7 @@ export function ThemeToggle({
 
 /** Floating bottom-right toggle accessible on any view */
 export function FloatingThemeToggle() {
-  const { theme, setTheme, toggleTheme, isDark } = useTheme();
+  const { theme, setTheme, isDark } = useTheme();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 

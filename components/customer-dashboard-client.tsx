@@ -312,7 +312,7 @@ export function CustomerDashboardClient({
   };
 
   return (
-    <div className="flex min-h-screen bg-[#f8fafc] dark:bg-[#080d1a] text-slate-800 dark:text-slate-100 transition-colors">
+    <div className="flex min-h-screen bg-background text-slate-800 dark:text-slate-100 transition-colors">
       {/* Mobile backdrop */}
       {mobileMenuOpen && (
         <div

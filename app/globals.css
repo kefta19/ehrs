@@ -1,40 +1,49 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
-
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-border: #e2e8f0;
-}
+  /* Defaults; the tenant's values are set inline on <html> by layout.tsx */
+  --primary-color: #2563eb;
+  --secondary-color: #0f172a;
+  --background-color: #f8fafc;
+  --text-color: #1e293b;
 
-.dark {
-  --background: #090d16;
-  --foreground: #f1f5f9;
-  --card: #111827;
-  --card-border: #1e293b;
-}
+  --background: var(--background-color);
+  --foreground: var(--text-color);
 
-html.theme-midnight {
-  --background: #070d1e;
-  --foreground: #e2e8f0;
-  --card: #0d162d;
-  --card-border: #1e2d52;
-}
-
-html.theme-warm {
-  --background: #fbf8f2;
-  --foreground: #2d261e;
-  --card: #ffffff;
-  --card-border: #e8e0d0;
+  /* Bridge: existing `blue-*` utilities now follow the tenant's primary color */
+  --color-blue-50: color-mix(in oklab, var(--primary-color) 7%, white);
+  --color-blue-100: color-mix(in oklab, var(--primary-color) 14%, white);
+  --color-blue-200: color-mix(in oklab, var(--primary-color) 30%, white);
+  --color-blue-300: color-mix(in oklab, var(--primary-color) 50%, white);
+  --color-blue-400: color-mix(in oklab, var(--primary-color) 70%, white);
+  --color-blue-500: color-mix(in oklab, var(--primary-color) 85%, white);
+  --color-blue-600: var(--primary-color);
+  --color-blue-700: color-mix(in oklab, var(--primary-color) 85%, black);
+  --color-blue-800: color-mix(in oklab, var(--primary-color) 70%, black);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-primary: var(--primary-color);
+  --color-secondary: var(--secondary-color);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+html[data-theme="dark"] {
+  --background: #090d16;
+  --foreground: #f1f5f9;
+}
+
+html[data-theme="midnight"] {
+  --background: #070d1e;
+  --foreground: #e2e8f0;
+}
+
+html[data-theme="warm"] {
+  --background: #fbf8f2;
+  --foreground: #433b32;
 }
 
 html {
@@ -50,11 +59,9 @@ body {
 * {
   box-sizing: border-box;
 }
-
 a {
   text-decoration: none;
 }
-
 button,
 input,
 select,

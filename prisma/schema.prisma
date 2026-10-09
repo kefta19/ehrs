@@ -115,6 +115,8 @@ model User {
   role             UserRole   @default(BUYER)
   roleId           String?
   roleDef          Role?      @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  tenantId         String?
+  tenant           Tenant?    @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   status           UserStatus @default(ACTIVE)
   emailVerifiedAt  DateTime?
   failedLoginCount Int        @default(0)
@@ -143,6 +145,7 @@ model User {
   auditLogs        AuditLog[]
 
   @@index([role, status])
+  @@index([tenantId])
 }
 
 model Session {
@@ -454,4 +457,51 @@ model SystemSetting {
   value       Json
   updatedById String?
   updatedAt   DateTime @updatedAt
+}
+enum BrandingAssetKind {
+  LOGO
+  FAVICON
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  slug      String   @unique          // subdomain key, e.g. "acme" for acme.example.com
+  name      String
+  domain    String?  @unique          // verified custom domain, e.g. "auctions.acme.com"
+  isDefault Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users          User[]
+  branding       TenantBranding?
+  brandingAssets BrandingAsset[]
+}
+
+model TenantBranding {
+  id              String   @id @default(cuid())
+  tenantId        String   @unique
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  companyName     String
+  logoUrl         String?
+  faviconUrl      String?
+  primaryColor    String   @default("#2563EB")
+  secondaryColor  String   @default("#0F172A")
+  backgroundColor String   @default("#F8FAFC")
+  textColor       String   @default("#1E293B")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model BrandingAsset {
+  id        String            @id @default(cuid())
+  tenantId  String
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kind      BrandingAssetKind
+  mimeType  String
+  sizeBytes Int
+  data      Bytes
+  createdAt DateTime          @default(now())
+
+  @@index([tenantId, kind])
 }

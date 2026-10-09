@@ -15,44 +15,45 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_STORAGE_KEY = "ethome_theme_preference";
 
+function applyThemeClass(t: Theme) {
+  const root = document.documentElement;
+  root.classList.remove("dark", "theme-midnight", "theme-warm", "theme-light");
+
+  if (t === "dark") {
+    root.classList.add("dark");
+  } else if (t === "midnight") {
+    root.classList.add("dark", "theme-midnight");
+  } else if (t === "warm") {
+    root.classList.add("theme-warm");
+  } else {
+    root.classList.add("theme-light");
+  }
+
+  root.setAttribute("data-theme", t);
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("light");
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
-      if (stored && ["light", "dark", "midnight", "warm"].includes(stored)) {
-        setThemeState(stored);
-        applyThemeClass(stored);
-      } else {
-        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        const initial = prefersDark ? "dark" : "light";
-        setThemeState(initial);
-        applyThemeClass(initial);
+    const timeoutId = window.setTimeout(() => {
+      try {
+        const stored = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
+        if (stored && ["light", "dark", "midnight", "warm"].includes(stored)) {
+          setThemeState(stored);
+          applyThemeClass(stored);
+        } else {
+          const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          const initial = prefersDark ? "dark" : "light";
+          setThemeState(initial);
+          applyThemeClass(initial);
+        }
+      } catch {
+        // fallback
       }
-    } catch {
-      // fallback
-    }
-    setMounted(true);
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, []);
-
-  function applyThemeClass(t: Theme) {
-    const root = document.documentElement;
-    root.classList.remove("dark", "theme-midnight", "theme-warm", "theme-light");
-
-    if (t === "dark") {
-      root.classList.add("dark");
-    } else if (t === "midnight") {
-      root.classList.add("dark", "theme-midnight");
-    } else if (t === "warm") {
-      root.classList.add("theme-warm");
-    } else {
-      root.classList.add("theme-light");
-    }
-
-    root.setAttribute("data-theme", t);
-  }
 
   function setTheme(newTheme: Theme) {
     setThemeState(newTheme);

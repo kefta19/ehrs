@@ -217,7 +217,7 @@ export function AdminDashboardClient({
   });
 
   return (
-    <div className="flex min-h-screen bg-[#f8fafc] text-slate-800">
+    <div className="flex min-h-screen bg-background text-slate-800 dark:text-slate-100">
       {/* ─────────────────── LEFT SIDEBAR ─────────────────── */}
       <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-[#132238] bg-[#0A192F] text-slate-300">
         <div className="flex h-16 items-center px-6 border-b border-[#132644]">

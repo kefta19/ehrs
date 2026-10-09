@@ -77,7 +77,7 @@ export default async function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#090d16] text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
+    <div className="min-h-screen bg-background text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
       {/* ─────────────────── TOP HEADER / NAVBAR (Responsive + Theme Toggle) ─────────────────── */}
       <HomeHeader user={user} dashboardHref={user ? roleHome(user.role) : undefined} />
 

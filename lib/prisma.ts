@@ -19,15 +19,8 @@ function createPrismaClient() {
   return new PrismaClient({ adapter });
 }
 
-import { ensureBootstrap } from "./seed";
-
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
-
-// Ensure default roles, categories, settings, and admin account are bootstrapped
-ensureBootstrap().catch((err) => {
-  console.error("Bootstrap initialization error:", err);
-});

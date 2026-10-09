@@ -1,5 +1,6 @@
 "use client";
 
+import { useBranding } from "./branding-provider";
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { ETHomeLogo } from "./ethome-brand";
@@ -16,6 +17,9 @@ export function AuthForm({ mode = "login" }: { mode?: Mode }) {
     role: "BUYER",
     businessName: "",
   });
+  //inside componnent change the useBranding to get the companyName
+
+  const { companyName } = useBranding();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,7 +62,8 @@ export function AuthForm({ mode = "login" }: { mode?: Mode }) {
             password: form.password,
             phone: form.phone,
             role: form.role,
-            businessName: form.role === "SELLER" ? form.businessName : undefined,
+            businessName:
+              form.role === "SELLER" ? form.businessName : undefined,
           };
 
     try {
@@ -99,7 +104,9 @@ export function AuthForm({ mode = "login" }: { mode?: Mode }) {
             <ETHomeLogo size="md" href="/" />
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-            {mode === "login" ? "Sign in to ETHome" : "Create your account"}
+            {mode === "login"
+              ? `Sign in to ${companyName}`
+              : "Create your account"}
           </h2>
           <p className="mt-1 text-xs text-slate-500">
             {mode === "login"
@@ -117,8 +124,12 @@ export function AuthForm({ mode = "login" }: { mode?: Mode }) {
                 onChange={(e) => set("role", e.target.value)}
                 className={inputClass}
               >
-                <option value="BUYER">Customer / Buyer (Place bids on properties & assets)</option>
-                <option value="SELLER">Seller / Auction Owner (List items and host auctions)</option>
+                <option value="BUYER">
+                  Customer / Buyer (Place bids on properties & assets)
+                </option>
+                <option value="SELLER">
+                  Seller / Auction Owner (List items and host auctions)
+                </option>
               </select>
             </label>
 
@@ -197,21 +208,31 @@ export function AuthForm({ mode = "login" }: { mode?: Mode }) {
           disabled={loading}
           className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-md shadow-blue-500/20 transition hover:bg-blue-700 disabled:opacity-50"
         >
-          {loading ? "Please wait..." : mode === "login" ? "Sign In" : "Create Account"}
+          {loading
+            ? "Please wait..."
+            : mode === "login"
+              ? "Sign In"
+              : "Create Account"}
         </button>
 
         <p className="text-center text-xs text-slate-500 pt-2">
           {mode === "login" ? (
             <>
               Don&apos;t have an account?{" "}
-              <Link href="/register" className="font-semibold text-blue-600 hover:underline">
+              <Link
+                href="/register"
+                className="font-semibold text-blue-600 hover:underline"
+              >
                 Register here
               </Link>
             </>
           ) : (
             <>
               Already registered?{" "}
-              <Link href="/login" className="font-semibold text-blue-600 hover:underline">
+              <Link
+                href="/login"
+                className="font-semibold text-blue-600 hover:underline"
+              >
                 Sign in
               </Link>
             </>
@@ -229,7 +250,9 @@ export function AuthForm({ mode = "login" }: { mode?: Mode }) {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <button
               type="button"
-              onClick={() => handleLoginWith("buyer@propertyauction.et", "Buyer@1234")}
+              onClick={() =>
+                handleLoginWith("buyer@propertyauction.et", "Buyer@1234")
+              }
               className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-2.5 text-left hover:border-blue-400 hover:shadow-sm transition"
             >
               <div className="flex items-center gap-2">
@@ -237,7 +260,9 @@ export function AuthForm({ mode = "login" }: { mode?: Mode }) {
                   <User size={14} />
                 </div>
                 <div>
-                  <strong className="block text-slate-800 text-[11px]">Buyer</strong>
+                  <strong className="block text-slate-800 text-[11px]">
+                    Buyer
+                  </strong>
                   <span className="text-[10px] text-slate-400">Getachew</span>
                 </div>
               </div>
@@ -246,7 +271,9 @@ export function AuthForm({ mode = "login" }: { mode?: Mode }) {
 
             <button
               type="button"
-              onClick={() => handleLoginWith("seller@propertyauction.et", "Seller@1234")}
+              onClick={() =>
+                handleLoginWith("seller@propertyauction.et", "Seller@1234")
+              }
               className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-2.5 text-left hover:border-blue-400 hover:shadow-sm transition"
             >
               <div className="flex items-center gap-2">
@@ -254,7 +281,9 @@ export function AuthForm({ mode = "login" }: { mode?: Mode }) {
                   <Building2 size={14} />
                 </div>
                 <div>
-                  <strong className="block text-slate-800 text-[11px]">Seller</strong>
+                  <strong className="block text-slate-800 text-[11px]">
+                    Seller
+                  </strong>
                   <span className="text-[10px] text-slate-400">Dawit</span>
                 </div>
               </div>
@@ -263,7 +292,9 @@ export function AuthForm({ mode = "login" }: { mode?: Mode }) {
 
             <button
               type="button"
-              onClick={() => handleLoginWith("admin@propertyauction.et", "Admin@1234")}
+              onClick={() =>
+                handleLoginWith("admin@propertyauction.et", "Admin@1234")
+              }
               className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-2.5 text-left hover:border-blue-400 hover:shadow-sm transition"
             >
               <div className="flex items-center gap-2">
@@ -271,7 +302,9 @@ export function AuthForm({ mode = "login" }: { mode?: Mode }) {
                   <Shield size={14} />
                 </div>
                 <div>
-                  <strong className="block text-slate-800 text-[11px]">Admin</strong>
+                  <strong className="block text-slate-800 text-[11px]">
+                    Admin
+                  </strong>
                   <span className="text-[10px] text-slate-400">Executive</span>
                 </div>
               </div>

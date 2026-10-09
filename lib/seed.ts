@@ -1,3 +1,4 @@
+import { DEFAULT_BRANDING, DEFAULT_TENANT_SLUG } from "./branding-shared";
 import "server-only";
 
 import { hashPassword } from "./auth";
@@ -18,7 +19,9 @@ export function ensureBootstrap() {
 
 async function run() {
   // 1. Roles
-  for (const [baseRole, permissions] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
+  for (const [baseRole, permissions] of Object.entries(
+    DEFAULT_ROLE_PERMISSIONS,
+  )) {
     await prisma.role.upsert({
       where: { name: baseRole },
       update: {},
@@ -30,6 +33,22 @@ async function run() {
       },
     });
   }
+
+  // 1b. Default tenant + branding
+  const defaultTenant = await prisma.tenant.upsert({
+    where: { slug: DEFAULT_TENANT_SLUG },
+    update: {},
+    create: {
+      slug: DEFAULT_TENANT_SLUG,
+      name: DEFAULT_BRANDING.companyName,
+      isDefault: true,
+    },
+  });
+  await prisma.tenantBranding.upsert({
+    where: { tenantId: defaultTenant.id },
+    update: {},
+    create: { ...DEFAULT_BRANDING, tenantId: defaultTenant.id },
+  });
 
   // 2. Categories
   await seedCategories(prisma);
@@ -56,7 +75,9 @@ async function run() {
   }
 
   // 4. Admin Account
-  const adminEmail = (process.env.ADMIN_EMAIL || "admin@ethome.com").toLowerCase();
+  const adminEmail = (
+    process.env.ADMIN_EMAIL || "admin@ethome.com"
+  ).toLowerCase();
   const adminPassword = process.env.ADMIN_PASSWORD || "Admin@123456";
   const adminRole = await prisma.role.findUnique({ where: { name: "ADMIN" } });
 
@@ -92,8 +113,15 @@ async function run() {
   }
 
   // 5. Seed Verified Seller and Sample Buyers
-  const sellerRole = await prisma.role.findUnique({ where: { name: "SELLER" } });
+  const sellerRole = await prisma.role.findUnique({
+    where: { name: "SELLER" },
+  });
   const buyerRole = await prisma.role.findUnique({ where: { name: "BUYER" } });
+
+  await prisma.user.updateMany({
+    where: { tenantId: null },
+    data: { tenantId: defaultTenant.id },
+  });
 
   // Getachew Abebe (Customer / Buyer from screenshot)
   const getachew = await prisma.user.upsert({
@@ -107,7 +135,8 @@ async function run() {
       roleId: buyerRole?.id,
       status: "ACTIVE",
       phone: "+251911223344",
-      avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
+      avatarUrl:
+        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
       emailVerifiedAt: new Date(),
       buyerProfile: {
         create: {
@@ -162,7 +191,8 @@ async function run() {
           businessName: "Prime Estate Developers & Holdings LLC",
           taxId: "TIN-00984128",
           address: "Kazanchis Financial District, Kirkos, Addis Ababa",
-          idDocumentUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80",
+          idDocumentUrl:
+            "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80",
           status: "APPROVED",
           reviewedAt: new Date(),
         },
@@ -172,10 +202,16 @@ async function run() {
   });
 
   // Check if categories are fetched
-  const catHomes = await prisma.category.findUnique({ where: { slug: "homes" } });
-  const catCars = await prisma.category.findUnique({ where: { slug: "cars-vehicles" } });
+  const catHomes = await prisma.category.findUnique({
+    where: { slug: "homes" },
+  });
+  const catCars = await prisma.category.findUnique({
+    where: { slug: "cars-vehicles" },
+  });
   const catLand = await prisma.category.findUnique({ where: { slug: "land" } });
-  const catCommercial = await prisma.category.findUnique({ where: { slug: "commercial" } });
+  const catCommercial = await prisma.category.findUnique({
+    where: { slug: "commercial" },
+  });
 
   if (!catHomes || !catCars || !catLand || !catCommercial) return;
 
@@ -188,23 +224,51 @@ async function run() {
         sellerId: seller.id,
         categoryId: catHomes.id,
         title: "Modern Family House",
-        description: "Contemporary villa with 3 bedrooms, 2 bathrooms, modern open-concept kitchen, landscaped front garden, and paved private driveway. Situated in a quiet, gated community in Bole.",
+        description:
+          "Contemporary villa with 3 bedrooms, 2 bathrooms, modern open-concept kitchen, landscaped front garden, and paved private driveway. Situated in a quiet, gated community in Bole.",
         address: "Bole Subcity, Woreda 03",
         city: "Addis Ababa",
         region: "Bole",
         referenceNumber: "ETH-HOM-2026-001",
-        features: ["3 Beds", "2 Baths", "250 m²", "Solar Heating", "Water Tank", "Security Post"],
-        attributes: { propertyType: "House", bedrooms: 3, bathrooms: 2, buildingSizeSqm: 250, lotSizeSqm: 320, yearBuilt: 2022 },
+        features: [
+          "3 Beds",
+          "2 Baths",
+          "250 m²",
+          "Solar Heating",
+          "Water Tank",
+          "Security Post",
+        ],
+        attributes: {
+          propertyType: "House",
+          bedrooms: 3,
+          bathrooms: 2,
+          buildingSizeSqm: 250,
+          lotSizeSqm: 320,
+          yearBuilt: 2022,
+        },
         status: "APPROVED",
         images: {
           create: [
-            { url: "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80", isPrimary: true, displayOrder: 1 },
-            { url: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80", isPrimary: false, displayOrder: 2 },
+            {
+              url: "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80",
+              isPrimary: true,
+              displayOrder: 1,
+            },
+            {
+              url: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80",
+              isPrimary: false,
+              displayOrder: 2,
+            },
           ],
         },
         documents: {
           create: [
-            { title: "Authenticated Title Deed Certificate", documentType: "TITLE_DEED", fileUrl: "/docs/title-deed-house.pdf", isVerified: true },
+            {
+              title: "Authenticated Title Deed Certificate",
+              documentType: "TITLE_DEED",
+              fileUrl: "/docs/title-deed-house.pdf",
+              isVerified: true,
+            },
           ],
         },
       },
@@ -222,22 +286,43 @@ async function run() {
         startAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
         endAt: new Date(Date.now() + 52 * 60 * 60 * 1000), // Ends in 2d 4h 32m
         status: "ACTIVE",
-        terms: "5% deposit required upon winning. Balance settled within 14 calendar days.",
+        terms:
+          "5% deposit required upon winning. Balance settled within 14 calendar days.",
       },
     });
 
     // Bids on Modern Family House
     await prisma.bid.create({
-      data: { auctionId: auctionHouse.id, bidderId: hanna.id, amount: 290000, createdAt: new Date(Date.now() - 18 * 60 * 60 * 1000) },
+      data: {
+        auctionId: auctionHouse.id,
+        bidderId: hanna.id,
+        amount: 290000,
+        createdAt: new Date(Date.now() - 18 * 60 * 60 * 1000),
+      },
     });
     await prisma.bid.create({
-      data: { auctionId: auctionHouse.id, bidderId: getachew.id, amount: 305000, createdAt: new Date(Date.now() - 10 * 60 * 60 * 1000) },
+      data: {
+        auctionId: auctionHouse.id,
+        bidderId: getachew.id,
+        amount: 305000,
+        createdAt: new Date(Date.now() - 10 * 60 * 60 * 1000),
+      },
     });
     await prisma.bid.create({
-      data: { auctionId: auctionHouse.id, bidderId: hanna.id, amount: 315000, createdAt: new Date(Date.now() - 4 * 60 * 60 * 1000) },
+      data: {
+        auctionId: auctionHouse.id,
+        bidderId: hanna.id,
+        amount: 315000,
+        createdAt: new Date(Date.now() - 4 * 60 * 60 * 1000),
+      },
     });
     await prisma.bid.create({
-      data: { auctionId: auctionHouse.id, bidderId: getachew.id, amount: 320000, createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000) },
+      data: {
+        auctionId: auctionHouse.id,
+        bidderId: getachew.id,
+        amount: 320000,
+        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      },
     });
 
     // 2. Toyota Land Cruiser (2021)
@@ -246,22 +331,46 @@ async function run() {
         sellerId: seller.id,
         categoryId: catCars.id,
         title: "Toyota Land Cruiser (2021)",
-        description: "Immaculate Toyota Land Cruiser V8 Prado VX, 4WD, automatic transmission, full leather interior, sunroof, pearl white finish, meticulously dealer-serviced with authentic mileage records.",
+        description:
+          "Immaculate Toyota Land Cruiser V8 Prado VX, 4WD, automatic transmission, full leather interior, sunroof, pearl white finish, meticulously dealer-serviced with authentic mileage records.",
         address: "Bole Medhanialem",
         city: "Addis Ababa",
         region: "Addis Ababa",
         referenceNumber: "ETH-CAR-2021-LC200",
-        features: ["4WD", "65,000 km", "V8 Engine", "Leather Seats", "Sunroof", "Reverse Camera"],
-        attributes: { make: "Toyota", model: "Land Cruiser", year: 2021, mileageKm: 65000, transmission: "Automatic", fuelType: "Diesel" },
+        features: [
+          "4WD",
+          "65,000 km",
+          "V8 Engine",
+          "Leather Seats",
+          "Sunroof",
+          "Reverse Camera",
+        ],
+        attributes: {
+          make: "Toyota",
+          model: "Land Cruiser",
+          year: 2021,
+          mileageKm: 65000,
+          transmission: "Automatic",
+          fuelType: "Diesel",
+        },
         status: "APPROVED",
         images: {
           create: [
-            { url: "https://images.unsplash.com/photo-1594502184342-2e12f877aa73?auto=format&fit=crop&w=1200&q=80", isPrimary: true, displayOrder: 1 },
+            {
+              url: "https://images.unsplash.com/photo-1594502184342-2e12f877aa73?auto=format&fit=crop&w=1200&q=80",
+              isPrimary: true,
+              displayOrder: 1,
+            },
           ],
         },
         documents: {
           create: [
-            { title: "Vehicle Registration & Ownership Certificate (Libre)", documentType: "OWNERSHIP_CARD", fileUrl: "/docs/libre-lc.pdf", isVerified: true },
+            {
+              title: "Vehicle Registration & Ownership Certificate (Libre)",
+              documentType: "OWNERSHIP_CARD",
+              fileUrl: "/docs/libre-lc.pdf",
+              isVerified: true,
+            },
           ],
         },
       },
@@ -278,7 +387,8 @@ async function run() {
         startAt: new Date(Date.now() + 84 * 60 * 60 * 1000), // Starts in 3d 12h
         endAt: new Date(Date.now() + 150 * 60 * 60 * 1000),
         status: "SCHEDULED",
-        terms: "Full payment via bank transfer within 48 hours of auction closing.",
+        terms:
+          "Full payment via bank transfer within 48 hours of auction closing.",
       },
     });
 
@@ -288,22 +398,42 @@ async function run() {
         sellerId: seller.id,
         categoryId: catLand.id,
         title: "Residential Land (1,000 m²)",
-        description: "Prime residential plot zoned for upscale residential villa or multi-unit apartments. Ready water and 3-phase electricity infrastructure, flat topography, graded road frontage.",
+        description:
+          "Prime residential plot zoned for upscale residential villa or multi-unit apartments. Ready water and 3-phase electricity infrastructure, flat topography, graded road frontage.",
         address: "Quiha Expansion Zone, Plot 42",
         city: "Mekelle",
         region: "Tigray",
         referenceNumber: "ETH-LND-2026-1000M",
-        features: ["1,000 m²", "Clear Title", "Corner Plot", "Road Access", "Water Connected"],
-        attributes: { plotSizeSqm: 1000, zoning: "Residential", titleType: "Freehold/Leasehold" },
+        features: [
+          "1,000 m²",
+          "Clear Title",
+          "Corner Plot",
+          "Road Access",
+          "Water Connected",
+        ],
+        attributes: {
+          plotSizeSqm: 1000,
+          zoning: "Residential",
+          titleType: "Freehold/Leasehold",
+        },
         status: "APPROVED",
         images: {
           create: [
-            { url: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80", isPrimary: true, displayOrder: 1 },
+            {
+              url: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80",
+              isPrimary: true,
+              displayOrder: 1,
+            },
           ],
         },
         documents: {
           create: [
-            { title: "Cadastral Land Certificate & Masterplan", documentType: "TITLE_DEED", fileUrl: "/docs/land-cert.pdf", isVerified: true },
+            {
+              title: "Cadastral Land Certificate & Masterplan",
+              documentType: "TITLE_DEED",
+              fileUrl: "/docs/land-cert.pdf",
+              isVerified: true,
+            },
           ],
         },
       },
@@ -326,10 +456,20 @@ async function run() {
     });
 
     await prisma.bid.create({
-      data: { auctionId: auctionLand.id, bidderId: hanna.id, amount: 75000, createdAt: new Date(Date.now() - 20 * 60 * 60 * 1000) },
+      data: {
+        auctionId: auctionLand.id,
+        bidderId: hanna.id,
+        amount: 75000,
+        createdAt: new Date(Date.now() - 20 * 60 * 60 * 1000),
+      },
     });
     await prisma.bid.create({
-      data: { auctionId: auctionLand.id, bidderId: getachew.id, amount: 85000, createdAt: new Date(Date.now() - 8 * 60 * 60 * 1000) },
+      data: {
+        auctionId: auctionLand.id,
+        bidderId: getachew.id,
+        amount: 85000,
+        createdAt: new Date(Date.now() - 8 * 60 * 60 * 1000),
+      },
     });
 
     // 4. Commercial Building
@@ -338,22 +478,43 @@ async function run() {
         sellerId: seller.id,
         categoryId: catCommercial.id,
         title: "Commercial Building",
-        description: "G+4 Modern commercial complex with ground-floor showroom, 12 partitioned office suites, basement parking for 15 vehicles, backup generator, and lift shaft.",
+        description:
+          "G+4 Modern commercial complex with ground-floor showroom, 12 partitioned office suites, basement parking for 15 vehicles, backup generator, and lift shaft.",
         address: "Kezira Commercial Hub, Boulevard 02",
         city: "Dire Dawa",
         region: "Dire Dawa",
         referenceNumber: "ETH-COM-2026-DIR",
-        features: ["2,500 m²", "G+4 Structure", "Basement Parking", "Generator", "High Foot Traffic"],
-        attributes: { buildingType: "Office", floorAreaSqm: 2500, floors: 5, yearBuilt: 2021 },
+        features: [
+          "2,500 m²",
+          "G+4 Structure",
+          "Basement Parking",
+          "Generator",
+          "High Foot Traffic",
+        ],
+        attributes: {
+          buildingType: "Office",
+          floorAreaSqm: 2500,
+          floors: 5,
+          yearBuilt: 2021,
+        },
         status: "APPROVED",
         images: {
           create: [
-            { url: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80", isPrimary: true, displayOrder: 1 },
+            {
+              url: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80",
+              isPrimary: true,
+              displayOrder: 1,
+            },
           ],
         },
         documents: {
           create: [
-            { title: "Commercial Construction Certificate & Deed", documentType: "TITLE_DEED", fileUrl: "/docs/commercial-deed.pdf", isVerified: true },
+            {
+              title: "Commercial Construction Certificate & Deed",
+              documentType: "TITLE_DEED",
+              fileUrl: "/docs/commercial-deed.pdf",
+              isVerified: true,
+            },
           ],
         },
       },
@@ -370,7 +531,8 @@ async function run() {
         startAt: new Date(Date.now() + 120 * 60 * 60 * 1000), // Starts in 5d 8h
         endAt: new Date(Date.now() + 240 * 60 * 60 * 1000),
         status: "SCHEDULED",
-        terms: "Certified bank guarantee or bank escrow deposit required prior to bidding.",
+        terms:
+          "Certified bank guarantee or bank escrow deposit required prior to bidding.",
       },
     });
 
@@ -391,7 +553,8 @@ async function run() {
         sellerId: seller.id,
         categoryId: catLand.id,
         title: "Prime Farmland Plot (5 Hectares)",
-        description: "Irrigated fertile agricultural land with river frontage and access roads.",
+        description:
+          "Irrigated fertile agricultural land with river frontage and access roads.",
         city: "Bishoftu",
         region: "Oromia",
         referenceNumber: "ETH-FARM-WON-01",
@@ -399,7 +562,10 @@ async function run() {
         status: "APPROVED",
         images: {
           create: [
-            { url: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80", isPrimary: true },
+            {
+              url: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80",
+              isPrimary: true,
+            },
           ],
         },
       },
@@ -482,7 +648,8 @@ async function run() {
         number: "TK-10021",
         type: "COMPLAINT",
         subject: "Verification document delay inquiry",
-        description: "I submitted title deed documents for verification yesterday, requesting status update on the review process.",
+        description:
+          "I submitted title deed documents for verification yesterday, requesting status update on the review process.",
         status: "OPEN",
         priority: "NORMAL",
         createdById: getachew.id,
