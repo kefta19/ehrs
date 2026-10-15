@@ -222,7 +222,7 @@ export function AdminDashboardClient({
   const [kycNote, setKycNote] = useState("");
 
   // Listing Review Modal
-  const [reviewingListing, setReviewingListing] = useState<AdminListing | null>(null);
+  const [reviewingListingId, setReviewingListingId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [listingChecks, setListingChecks] = useState<ListingReviewCheckKey[]>([]);
   const [listingFilter, setListingFilter] = useState<
@@ -268,8 +268,12 @@ export function AdminDashboardClient({
       ? pendingListings
       : pendingListings.filter((listing) => listing.status === listingFilter);
 
+  const reviewingListing = reviewingListingId
+    ? pendingListings.find((listing) => listing.id === reviewingListingId) ?? null
+    : null;
+
   const openListingReview = (listing: AdminListing) => {
-    setReviewingListing(listing);
+    setReviewingListingId(listing.id);
     setRejectionReason("");
     setListingChecks([]);
   };
@@ -1566,7 +1570,7 @@ export function AdminDashboardClient({
                 </h2>
               </div>
               <button
-                onClick={() => setReviewingListing(null)}
+                onClick={() => setReviewingListingId(null)}
                 aria-label="Close listing review"
               >
                 <X size={18} />
@@ -1868,7 +1872,7 @@ export function AdminDashboardClient({
                   </span>
                   <button
                     onClick={() => {
-                      setReviewingListing(null);
+                      setReviewingListingId(null);
                       setActiveTab("kyc");
                     }}
                     className="rounded-lg bg-rose-600 px-3 py-1.5 font-semibold text-white hover:bg-rose-700"
@@ -1938,7 +1942,7 @@ export function AdminDashboardClient({
                         startTransition(async () => {
                           const res = await reviewListingAction(formData);
                           setActionMsg(res);
-                          setReviewingListing(null);
+                          setReviewingListingId(null);
                         });
                       }}
                       disabled={!rejectionReason.trim() || isPending}
@@ -1958,7 +1962,7 @@ export function AdminDashboardClient({
                           startTransition(async () => {
                             const res = await reviewListingAction(formData);
                             setActionMsg(res);
-                            setReviewingListing(null);
+                            setReviewingListingId(null);
                           });
                         }}
                         disabled={
