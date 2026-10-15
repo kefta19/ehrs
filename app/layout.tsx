@@ -1,58 +1,36 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "@/components/theme-provider";
-import { FloatingThemeToggle } from "@/components/theme-toggle";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+import { BrandingProvider } from "@/components/branding-provider";
+import { getRequestBranding } from "@/lib/branding";
+import { brandingStyleVars } from "@/lib/branding-shared";
 
+const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "ETHome - Online Property & Asset Auction Marketplace",
-  description:
-    "Transparent, secure property, vehicle, and asset auction bidding platform with escrow settlement and real-time live bidding.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const b = await getRequestBranding();
+  return {
+    title: { default: b.companyName, template: `%s | ${b.companyName}` },
+    description: `${b.companyName} – online auction marketplace`,
+    icons: b.faviconUrl ? { icon: b.faviconUrl } : undefined,
+  };
+}
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const branding = await getRequestBranding();
   return (
     <html
       lang="en"
-      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      style={brandingStyleVars(branding) as React.CSSProperties}
     >
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){
-              try {
-                var t = localStorage.getItem("ethome_theme_preference");
-                var d = document.documentElement;
-                if (t === "dark") { d.classList.add("dark"); d.setAttribute("data-theme","dark"); }
-                else if (t === "midnight") { d.classList.add("dark", "theme-midnight"); d.setAttribute("data-theme","midnight"); }
-                else if (t === "warm") { d.classList.add("theme-warm"); d.setAttribute("data-theme","warm"); }
-                else if (!t && window.matchMedia("(prefers-color-scheme: dark)").matches) { d.classList.add("dark"); d.setAttribute("data-theme","dark"); }
-                else { d.classList.add("theme-light"); d.setAttribute("data-theme","light"); }
-              } catch(e){}
-            })()`,
-          }}
-        />
-      </head>
-      <body className="min-h-full text-slate-900 dark:text-slate-100 transition-colors duration-200">
-        <ThemeProvider>
-          {children}
-          <FloatingThemeToggle />
-        </ThemeProvider>
+      <body className="min-h-full bg-background text-foreground">
+        <BrandingProvider branding={branding}>{children}</BrandingProvider>
       </body>
     </html>
   );

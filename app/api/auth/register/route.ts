@@ -9,7 +9,9 @@ import { registerSchema } from "@/lib/validation";
 
 export async function POST(request: NextRequest) {
   try {
-    await ensureBootstrap();
+    // Run bootstrap asynchronously without blocking
+    ensureBootstrap().catch((e) => console.error("Bootstrap error:", e));
+
     const body = await request.json();
     const parsed = registerSchema.safeParse(body);
 
@@ -35,6 +37,16 @@ export async function POST(request: NextRequest) {
     }
 
     const roleDef = await prisma.role.findUnique({ where: { name: role } });
+    const defaultTenant = await prisma.tenant.findFirst({
+      where: { isDefault: true, isActive: true },
+      select: { id: true },
+    });
+    if (!defaultTenant) {
+      return NextResponse.json(
+        { success: false, error: "The marketplace organization is not configured." },
+        { status: 503 },
+      );
+    }
     const passwordHash = await hashPassword(password);
 
     const user = await prisma.user.create({
@@ -45,6 +57,7 @@ export async function POST(request: NextRequest) {
         passwordHash,
         role,
         roleId: roleDef?.id,
+        tenantId: defaultTenant.id,
         status: "ACTIVE",
         ...(role === "BUYER"
           ? {

@@ -24,7 +24,11 @@ async function run() {
   )) {
     await prisma.role.upsert({
       where: { name: baseRole },
-      update: {},
+      update: {
+        baseRole: baseRole as "BUYER" | "SELLER" | "ADMIN",
+        permissions,
+        isSystem: true,
+      },
       create: {
         name: baseRole,
         baseRole: baseRole as "BUYER" | "SELLER" | "ADMIN",
@@ -55,15 +59,16 @@ async function run() {
 
   // 3. System Settings
   const defaults: Record<string, unknown> = {
-    "system.name": "ETHome - Online Auction Marketplace",
+    "system.name": "ETAuction - Online Auction Marketplace",
     "system.currency": "USD",
     "system.timezone": "Africa/Addis_Ababa",
-    "auction.softCloseMinutes": 5,
+    "auction.softCloseMinutes": 2,
     "auction.depositPercent": 10,
+    "auction.entryFeePercent": 2.5,
     "auction.settlementHours": 72,
     "platform.commissionPercent": 2.5,
-    "contact.phone": "+251 11 123 4567",
-    "contact.email": "info@ethome.com",
+    "contact.phone": "+251948841228",
+    "contact.email": "kefie712@gmail.com",
     "contact.address": "Bole Subcity, Addis Ababa, Ethiopia",
   };
   for (const [key, value] of Object.entries(defaults)) {
@@ -101,7 +106,7 @@ async function run() {
       where: { email: "admin@propertyauction.et" },
       update: {},
       create: {
-        name: "ETHome Admin",
+        name: "ETAuction Admin",
         email: "admin@propertyauction.et",
         passwordHash: await hashPassword("Admin@1234"),
         role: "ADMIN",
@@ -128,7 +133,7 @@ async function run() {
     where: { email: "buyer@propertyauction.et" },
     update: { name: "Getachew Abebe" },
     create: {
-      name: "Getachew Abebe",
+      name: "Gedefaw Abebe",
       email: "buyer@propertyauction.et",
       passwordHash: await hashPassword("Buyer@1234"),
       role: "BUYER",
@@ -149,12 +154,12 @@ async function run() {
     include: { buyerProfile: true },
   });
 
-  // Competing Buyer: Hanna Worku
+  // Competing Buyer: Nahom Shiferaw
   const hanna = await prisma.user.upsert({
     where: { email: "hanna@propertyauction.et" },
     update: {},
     create: {
-      name: "Hanna Worku",
+      name: "Nahom Siferaw",
       email: "hanna@propertyauction.et",
       passwordHash: await hashPassword("Buyer@1234"),
       role: "BUYER",
@@ -164,8 +169,8 @@ async function run() {
       emailVerifiedAt: new Date(),
       buyerProfile: {
         create: {
-          address: "Old Airport, Addis Ababa",
-          preferredLocation: "Addis Ababa",
+          address: "desse, wollo",
+          preferredLocation: "wollo",
           isVerified: true,
         },
       },
@@ -177,7 +182,7 @@ async function run() {
     where: { email: "seller@propertyauction.et" },
     update: {},
     create: {
-      name: "Dawit Wolde",
+      name: "gedefaw sintie",
       email: "seller@propertyauction.et",
       passwordHash: await hashPassword("Seller@1234"),
       role: "SELLER",
@@ -555,8 +560,8 @@ async function run() {
         title: "Prime Farmland Plot (5 Hectares)",
         description:
           "Irrigated fertile agricultural land with river frontage and access roads.",
-        city: "Bishoftu",
-        region: "Oromia",
+        city: "Bahir Dar",
+        region: "Amhara",
         referenceNumber: "ETH-FARM-WON-01",
         features: ["5 Hectares", "Irrigation System", "River Access"],
         status: "APPROVED",

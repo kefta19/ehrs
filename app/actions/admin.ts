@@ -1,70 +1,70 @@
 "use server";
 
+import type { AuctionStatus } from "@/app/generated/prisma/enums";
+import { allowedTransitions } from "@/lib/auction-state";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notify";
 import { logAudit } from "@/lib/security";
 
-export async function verifySellerKycAction(formData: FormData) {
+export async function updateAuctionStatusAction(formData: FormData) {
   const user = await getCurrentUser();
   if (!user || user.role !== "ADMIN")
     return { success: false, error: "Unauthorized" };
 
-  const sellerProfileId = formData.get("sellerProfileId") as string;
-  const status = formData.get("status") as
-    | "APPROVED"
-    | "REJECTED"
-    | "UNDER_REVIEW";
-  const reviewNote = (formData.get("reviewNote") as string) || "";
+  const auctionId = formData.get("auctionId") as string;
+  const status = formData.get("status") as AuctionStatus;
 
-  const sellerProfile = await prisma.sellerProfile.findUnique({
-    where: { id: sellerProfileId },
-    include: { user: true },
+  const auction = await prisma.auction.findUnique({
+    where: { id: auctionId },
+    include: { listing: true },
   });
+  if (!auction) return { success: false, error: "Auction not found." };
 
-  if (!sellerProfile)
-    return { success: false, error: "Seller profile not found." };
+  if (auction.status === "PENDING_APPROVAL")
+    return {
+      success: false,
+      error:
+        "Use Approve / Reject in the Listings tab to review new submissions.",
+    };
+  if (!allowedTransitions(auction.status, "ADMIN").includes(status))
+    return {
+      success: false,
+      error: `An auction cannot move from ${auction.status} to ${status}.`,
+    };
 
-  const prevStatus = sellerProfile.status;
+  const next: AuctionStatus =
+    status === "ACTIVE" && auction.startAt > new Date() ? "SCHEDULED" : status;
 
-  await prisma.sellerProfile.update({
-    where: { id: sellerProfileId },
-    data: {
-      status,
-      reviewedById: user.id,
-      reviewedAt: new Date(),
-      reviewNote,
-    },
+  await prisma.auction.update({
+    where: { id: auctionId },
+    data: { status: next, approvedById: user.id },
   });
 
   await logAudit({
     actorId: user.id,
-    action: `SELLER_KYC_${status}`,
-    module: "KYC",
-    entityType: "SellerProfile",
-    entityId: sellerProfileId,
-    previousValue: { status: prevStatus },
-    newValue: { status, reviewNote },
+    action: `AUCTION_${next}`,
+    module: "AUCTIONS",
+    entityType: "Auction",
+    entityId: auctionId,
+    newValue: { status: next },
   });
-
-  await notify(sellerProfile.userId, {
-    type: `SELLER_KYC_${status}`,
-    title:
-      status === "APPROVED"
-        ? "Seller Account Approved!"
-        : `KYC Status: ${status}`,
-    body:
-      status === "APPROVED"
-        ? "Congratulations! Your seller verification has been approved. You can now create property and asset auction listings."
-        : `Your seller verification was marked as ${status}. Review notes: ${reviewNote || "No notes provided."}`,
-    link: `/seller`,
+  await notify(auction.sellerId, {
+    type: "AUCTION_STATUS_CHANGED",
+    title: `Auction status: ${next}`,
+    body: `Your auction for "${auction.listing.title}" is now ${next}.`,
+    link: "/seller",
   });
 
   revalidatePath("/admin");
   revalidatePath("/seller");
-  return { success: true, message: `Seller KYC updated to ${status}.` };
+  revalidatePath("/buyer");
+  revalidatePath("/");
+  return { success: true, message: `Auction status set to ${next}.` };
 }
+
+import { syncAuctionStatuses } from "@/lib/auction-lifecycle";
 
 export async function reviewListingAction(formData: FormData) {
   const user = await getCurrentUser();
@@ -77,89 +77,131 @@ export async function reviewListingAction(formData: FormData) {
 
   const listing = await prisma.listing.findUnique({
     where: { id: listingId },
-    include: { seller: true },
+    include: {
+      seller: true,
+      auctions: { orderBy: { createdAt: "desc" } },
+      entryFees: { orderBy: { createdAt: "desc" } },
+    },
   });
 
   if (!listing) return { success: false, error: "Listing not found." };
 
-  await prisma.listing.update({
-    where: { id: listingId },
-    data: {
-      status,
-      reviewedById: user.id,
-      rejectionReason: status === "REJECTED" ? rejectionReason : null,
-    },
-  });
+  const now = new Date();
 
-  await logAudit({
-    actorId: user.id,
-    action: `LISTING_${status}`,
-    module: "LISTINGS",
-    entityType: "Listing",
-    entityId: listingId,
-    newValue: { status, rejectionReason },
-  });
+  if (status === "APPROVED") {
+    // 1. Approve listing & confirm entry fee
+    await prisma.listing.update({
+      where: { id: listingId },
+      data: {
+        status: "APPROVED",
+        entryFeeStatus: "CONFIRMED",
+        reviewedById: user.id,
+        reviewedAt: now,
+        rejectionReason: null,
+      },
+    });
 
-  await notify(listing.sellerId, {
-    type: `LISTING_${status}`,
-    title: status === "APPROVED" ? "Listing Approved!" : "Listing Rejected",
-    body:
-      status === "APPROVED"
-        ? `Your listing "${listing.title}" was approved by administrator. You can now schedule an auction for it.`
-        : `Your listing "${listing.title}" was rejected. Reason: ${rejectionReason || "Please verify documentation and resubmit."}`,
-    link: `/seller`,
-  });
+    // 2. Confirm any entry fee records
+    await prisma.auctionEntryFee.updateMany({
+      where: { listingId },
+      data: {
+        status: "CONFIRMED",
+        confirmedAt: now,
+        verifiedById: user.id,
+      },
+    });
+
+    // 3. Set auction(s) to ACTIVE (Live Bid!)
+    const auctions = listing.auctions;
+    if (auctions.length > 0) {
+      for (const a of auctions) {
+        const endAt =
+          a.endAt <= now
+            ? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+            : a.endAt;
+
+        await prisma.auction.update({
+          where: { id: a.id },
+          data: {
+            status: "ACTIVE",
+            startAt: a.startAt > now ? now : a.startAt,
+            endAt,
+            approvedById: user.id,
+          },
+        });
+      }
+    }
+
+    await syncAuctionStatuses(now);
+
+    await logAudit({
+      actorId: user.id,
+      action: "LISTING_AND_AUCTION_APPROVED_LIVE",
+      module: "LISTINGS",
+      entityType: "Listing",
+      entityId: listingId,
+      newValue: { status: "APPROVED", auctionStatus: "ACTIVE" },
+    });
+
+    await notify(listing.sellerId, {
+      type: "LISTING_APPROVED",
+      title: "Listing Approved & Live!",
+      body: `Your listing "${listing.title}" and entry fee have been verified. It is now LIVE for public bidding!`,
+      link: `/seller`,
+    });
+  } else {
+    // REJECTED
+    await prisma.listing.update({
+      where: { id: listingId },
+      data: {
+        status: "REJECTED",
+        reviewedById: user.id,
+        rejectionReason: rejectionReason || "Please verify documentation and resubmit.",
+        reviewedAt: now,
+      },
+    });
+
+    await prisma.auction.updateMany({
+      where: {
+        listingId,
+        status: { in: ["PENDING_APPROVAL", "SCHEDULED"] },
+      },
+      data: { status: "DRAFT" },
+    });
+
+    await logAudit({
+      actorId: user.id,
+      action: "LISTING_REJECTED",
+      module: "LISTINGS",
+      entityType: "Listing",
+      entityId: listingId,
+      newValue: { status: "REJECTED", rejectionReason },
+    });
+
+    await notify(listing.sellerId, {
+      type: "LISTING_REJECTED",
+      title: "Listing Verification Rejected",
+      body: `Your listing "${listing.title}" was rejected. Reason: ${rejectionReason || "Please verify documentation and resubmit."}`,
+      link: `/seller`,
+    });
+  }
 
   revalidatePath("/admin");
   revalidatePath("/seller");
-  revalidatePath("/");
-  return { success: true, message: `Listing marked as ${status}.` };
-}
-
-export async function updateAuctionStatusAction(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user || user.role !== "ADMIN")
-    return { success: false, error: "Unauthorized" };
-
-  const auctionId = formData.get("auctionId") as string;
-  const status = formData.get("status") as any; // ACTIVE, SCHEDULED, SUSPENDED, CANCELLED, CLOSED
-
-  const auction = await prisma.auction.findUnique({
-    where: { id: auctionId },
-    include: { listing: true },
-  });
-
-  if (!auction) return { success: false, error: "Auction not found." };
-
-  await prisma.auction.update({
-    where: { id: auctionId },
-    data: {
-      status,
-      approvedById: user.id,
-    },
-  });
-
-  await logAudit({
-    actorId: user.id,
-    action: `AUCTION_${status}`,
-    module: "AUCTIONS",
-    entityType: "Auction",
-    entityId: auctionId,
-    newValue: { status },
-  });
-
-  await notify(auction.sellerId, {
-    type: `AUCTION_STATUS_CHANGED`,
-    title: `Auction Status: ${status}`,
-    body: `Your auction for "${auction.listing.title}" is now set to ${status}.`,
-    link: `/seller`,
-  });
-
-  revalidatePath("/admin");
-  revalidatePath("/seller");
+  revalidatePath("/provider");
   revalidatePath("/buyer");
   revalidatePath("/");
-  return { success: true, message: `Auction status set to ${status}.` };
+  if (listing.auctions[0]) {
+    revalidatePath(`/auction/${listing.auctions[0].id}`);
+  }
+
+  return {
+    success: true,
+    message:
+      status === "APPROVED"
+        ? `Listing approved and published to Live Bidding!`
+        : `Listing marked as REJECTED.`,
+  };
 }
 
 export async function verifyPaymentAction(formData: FormData) {
@@ -390,4 +432,53 @@ export async function updateSystemSettingsAction(formData: FormData) {
 
   revalidatePath("/admin");
   return { success: true, message: "System settings saved successfully." };
+}
+
+export async function verifySellerKycAction(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "ADMIN")
+    return { success: false, error: "Unauthorized" };
+
+  const sellerProfileId = formData.get("sellerProfileId") as string;
+  const status = formData.get("status") as "APPROVED" | "REJECTED";
+  const reviewNote = (formData.get("reviewNote") as string) || "";
+
+  const sellerProfile = await prisma.sellerProfile.findUnique({
+    where: { id: sellerProfileId },
+  });
+
+  if (!sellerProfile) return { success: false, error: "Seller profile not found." };
+
+  await prisma.sellerProfile.update({
+    where: { id: sellerProfileId },
+    data: {
+      status: status === "APPROVED" ? "APPROVED" : "REJECTED",
+      reviewNote,
+      reviewedAt: new Date(),
+      reviewedById: user.id,
+    },
+  });
+
+  await logAudit({
+    actorId: user.id,
+    action: `SELLER_KYC_${status}`,
+    module: "KYC",
+    entityType: "SellerProfile",
+    entityId: sellerProfileId,
+    newValue: { status, reviewNote },
+  });
+
+  await notify(sellerProfile.userId, {
+    type: `SELLER_KYC_${status}`,
+    title: status === "APPROVED" ? "Seller Verification Approved!" : "Seller Verification Rejected",
+    body:
+      status === "APPROVED"
+        ? "Your seller identity verification has been approved. You can now create listings."
+        : `Your seller identity verification was rejected. Reason: ${reviewNote || "Please resubmit with correct documentation."}`,
+    link: "/seller",
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/seller");
+  return { success: true, message: `Seller KYC ${status.toLowerCase()}.` };
 }

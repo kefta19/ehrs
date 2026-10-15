@@ -24,7 +24,7 @@ export const CATEGORY_DEFS: CategoryDef[] = [
     slug: "homes",
     name: "Homes",
     icon: "🏠",
-    description: "Houses, apartments and residential units",
+    description: "Houses, apartments villa residential units",
     sortOrder: 1,
     attributes: [
       {
@@ -69,7 +69,7 @@ export const CATEGORY_DEFS: CategoryDef[] = [
         type: "select",
         options: ["Petrol", "Diesel", "Electric", "Hybrid"],
       },
-      { key: "plateNumber", label: "Plate number", type: "text" },
+      { key: "plateNumber", label:  "Plate number", type: "text" },
     ],
   },
   {

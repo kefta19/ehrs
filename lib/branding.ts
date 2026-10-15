@@ -1,6 +1,5 @@
 import "server-only";
 
-import { cache } from "react";
 import { headers } from "next/headers";
 
 import { getCurrentUser } from "./auth";
@@ -47,36 +46,34 @@ export function assertTenantAdmin(actor: Actor): string {
 
 /* ───────────── Tenant resolution ───────────── */
 
-export const resolveRequestTenantId = cache(
-  async (): Promise<string | null> => {
-    // 1. Authenticated session is authoritative.
-    const user = await getCurrentUser();
-    if (user?.tenantId) return user.tenantId;
+export async function resolveRequestTenantId(): Promise<string | null> {
+  // 1. Authenticated session is authoritative.
+  const user = await getCurrentUser();
+  if (user?.tenantId) return user.tenantId;
 
-    // 2. Public pages (login/register): host / subdomain.
-    const host = (await headers()).get("host")?.split(":")[0]?.toLowerCase();
-    if (host) {
-      const root = process.env.TENANT_ROOT_DOMAIN?.toLowerCase();
-      const or: Array<{ domain: string } | { slug: string }> = [
-        { domain: host },
-      ];
-      if (root && host.endsWith(`.${root}`))
-        or.push({ slug: host.slice(0, -(root.length + 1)) });
-      const t = await prisma.tenant.findFirst({
-        where: { isActive: true, OR: or },
-        select: { id: true },
-      });
-      if (t) return t.id;
-    }
-
-    // 3. Default tenant.
-    const def = await prisma.tenant.findFirst({
-      where: { isDefault: true, isActive: true },
+  // 2. Public pages (login/register): host / subdomain.
+  const host = (await headers()).get("host")?.split(":")[0]?.toLowerCase();
+  if (host) {
+    const root = process.env.TENANT_ROOT_DOMAIN?.toLowerCase();
+    const or: Array<{ domain: string } | { slug: string }> = [
+      { domain: host },
+    ];
+    if (root && host.endsWith(`.${root}`))
+      or.push({ slug: host.slice(0, -(root.length + 1)) });
+    const t = await prisma.tenant.findFirst({
+      where: { isActive: true, OR: or },
       select: { id: true },
     });
-    return def?.id ?? null;
-  },
-);
+    if (t) return t.id;
+  }
+
+  // 3. Default tenant.
+  const def = await prisma.tenant.findFirst({
+    where: { isDefault: true, isActive: true },
+    select: { id: true },
+  });
+  return def?.id ?? null;
+}
 
 export async function getBrandingByTenantId(
   tenantId?: string | null,
@@ -94,9 +91,9 @@ export async function getBrandingByTenantId(
   };
 }
 
-export const getRequestBranding = cache(async () =>
-  getBrandingByTenantId(await resolveRequestTenantId()),
-);
+export async function getRequestBranding(): Promise<Branding> {
+  return getBrandingByTenantId(await resolveRequestTenantId());
+}
 
 /** Create-when-missing (race-safe via unique tenantId upsert). */
 export async function getOrCreateBranding(tenantId: string): Promise<Branding> {
@@ -163,7 +160,7 @@ export async function resetBranding(actor: Actor) {
 export const ASSET_RULES = {
   LOGO: {
     maxBytes: 2 * 1024 * 1024,
-    allowed: ["image/png", "image/jpeg", "image/webp"],
+    allowed: ["image/png", "image/jpeg", "image/webp" ],
   },
   FAVICON: { maxBytes: 256 * 1024, allowed: ["image/png", "image/x-icon"] },
 } as const;

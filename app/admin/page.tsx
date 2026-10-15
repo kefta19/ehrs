@@ -1,3 +1,4 @@
+import { syncAuctionStatuses } from "@/lib/auction-lifecycle";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { roleHome } from "@/lib/rbac";
@@ -10,6 +11,8 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
+  await syncAuctionStatuses();
+
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role !== "ADMIN") redirect(roleHome(user.role));
@@ -46,17 +49,38 @@ export default async function AdminPage() {
     }),
     prisma.listing.findMany({
       include: {
-        seller: true,
+        seller: {
+          include: {
+            sellerProfile: true,
+          },
+        },
         category: true,
-        images: true,
+        images: { orderBy: { displayOrder: "asc" } },
         documents: true,
+        biometricVerification: true,
+        entryFees: { orderBy: { createdAt: "desc" } },
+        auctions: {
+          include: {
+            entryFees: { orderBy: { createdAt: "desc" } },
+            bids: { orderBy: { amount: "desc" }, take: 5 },
+          },
+          orderBy: { createdAt: "desc" },
+        },
       },
       orderBy: { createdAt: "desc" },
     }),
     prisma.auction.findMany({
       include: {
-        listing: { include: { category: true } },
-        seller: true,
+        listing: {
+          include: {
+            category: true,
+            images: true,
+            documents: true,
+            seller: { include: { sellerProfile: true } },
+          },
+        },
+        seller: { include: { sellerProfile: true } },
+        entryFees: { orderBy: { createdAt: "desc" } },
         bids: { take: 10, orderBy: { createdAt: "desc" } },
       },
       orderBy: { createdAt: "desc" },
@@ -87,7 +111,9 @@ export default async function AdminPage() {
     .filter((p) => p.status === "PAID")
     .reduce((sum, p) => sum + Number(p.amount), 0);
 
-  const dashboardUser = JSON.parse(JSON.stringify(user)) as unknown as AdminUser;
+  const dashboardUser = JSON.parse(
+    JSON.stringify(user),
+  ) as unknown as AdminUser;
 
   return (
     <AdminDashboardClient

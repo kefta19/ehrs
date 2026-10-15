@@ -32,17 +32,14 @@
 }
 
 html[data-theme="dark"] {
-  --background: #090d16;
   --foreground: #f1f5f9;
 }
 
 html[data-theme="midnight"] {
-  --background: #070d1e;
   --foreground: #e2e8f0;
 }
 
 html[data-theme="warm"] {
-  --background: #fbf8f2;
   --foreground: #433b32;
 }
 

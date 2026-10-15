@@ -4,6 +4,7 @@ import { roleHome } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { HomeHeader } from "@/components/home-header";
 import { ETHomeLogo } from "@/components/ethome-brand";
+import { syncAuctionStatuses } from "@/lib/auction-lifecycle";
 import {
   Search,
   ShieldCheck,
@@ -23,14 +24,17 @@ import {
   Building2,
   Factory,
   Package,
+  Check,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
+  await syncAuctionStatuses();
+
   const user = await getCurrentUser();
 
-  const [categories, featuredAuctions] = await Promise.all([
+  const [categories, featuredAuctions, approvedListings] = await Promise.all([
     prisma.category.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: "asc" },
@@ -40,7 +44,7 @@ export default async function HomePage() {
     }),
     prisma.auction.findMany({
       where: {
-        status: { in: ["ACTIVE", "SCHEDULED"] },
+        status: "ACTIVE",
       },
       include: {
         listing: {
@@ -52,6 +56,21 @@ export default async function HomePage() {
       },
       orderBy: { createdAt: "desc" },
       take: 8,
+    }),
+    prisma.auction.findMany({
+      where: {
+        listing: { status: "APPROVED" },
+      },
+      include: {
+        listing: {
+          include: {
+            images: { orderBy: { displayOrder: "asc" } },
+            category: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 6,
     }),
   ]);
 
@@ -228,7 +247,7 @@ export default async function HomePage() {
                   </div>
                   <h3 className="font-bold text-slate-900 dark:text-white text-sm">{c.name}</h3>
                   <span className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-                    {c._count?.listings || (c.slug === "homes" ? 12 : c.slug === "cars-vehicles" ? 18 : 8)} Auctions
+                    {c._count?.listings || 0} Auctions
                   </span>
                 </Link>
               );
@@ -339,15 +358,144 @@ export default async function HomePage() {
                   </div>
 
                   <div className="p-4 pt-0">
+                    {isLive ? (
+                      user ? (
+                        <Link
+                          href={`/auction/${auc.id}`}
+                          className="flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow hover:bg-blue-700 transition-colors"
+                        >
+                          Place Bid
+                        </Link>
+                      ) : (
+                        <Link
+                          href={`/login?redirect=/auction/${auc.id}`}
+                          className="flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow hover:bg-blue-700 transition-colors"
+                        >
+                          Place Bid
+                        </Link>
+                      )
+                    ) : (
+                      <Link
+                        href={`/auction/${auc.id}`}
+                        className="flex w-full items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 px-4 py-2.5 text-xs font-semibold shadow transition-colors"
+                      >
+                        View Details
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────────── APPROVED LISTINGS ─────────────────── */}
+      <section className="py-16 bg-slate-50 dark:bg-[#0c1220] transition-colors">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                Approved Listings
+              </h2>
+              <span className="flex items-center gap-1.5 rounded-md bg-blue-600 px-2.5 py-1 text-xs font-bold text-white shadow">
+                <Check size={12} />
+                Verified
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Link
+                href="/buyer?tab=browse"
+                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 flex items-center gap-1"
+              >
+                View All <ChevronRight size={14} />
+              </Link>
+            </div>
+          </div>
+
+          {/* Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {approvedListings.map((auc) => {
+              const isLive = auc.status === "ACTIVE";
+              const isUpcoming = auc.status === "SCHEDULED";
+              const currentBid = Number(auc.currentHighestBid || auc.startingPrice);
+
+              return (
+                <div
+                  key={auc.id}
+                  className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs hover:shadow-md transition-all"
+                >
+                  <div>
+                    {/* Thumbnail + Badge */}
+                    <div className="relative aspect-[16/11] w-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+                      <img
+                        src={
+                          auc.listing.images?.[0]?.url ||
+                          "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=600&q=80"
+                        }
+                        alt={auc.listing.title}
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                      <div className="absolute top-3 left-3">
+                        {isLive ? (
+                          <span className="flex items-center gap-1.5 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white shadow">
+                            <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+                            Live
+                          </span>
+                        ) : isUpcoming ? (
+                          <span className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-bold text-white shadow">
+                            Scheduled
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-slate-600 px-2.5 py-1 text-xs font-bold text-white shadow">
+                            {auc.status}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Card Content */}
+                    <div className="p-4 space-y-2">
+                      <h3 className="font-bold text-slate-900 dark:text-white text-sm line-clamp-1">
+                        {auc.listing.title}
+                      </h3>
+
+                      <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        <MapPin size={12} className="text-slate-400" />
+                        <span>
+                          {auc.listing.city}
+                          {auc.listing.region ? `, ${auc.listing.region}` : ""}
+                        </span>
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-end justify-between">
+                        <div>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
+                            Starting Price
+                          </span>
+                          <span className="text-base font-bold text-slate-900 dark:text-white">
+                            $ {Number(auc.startingPrice).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="text-right text-[11px] text-slate-500 dark:text-slate-400">
+                          <span className="block text-[10px] text-slate-400 dark:text-slate-500">
+                            Status
+                          </span>
+                          <span className="font-semibold text-blue-600 dark:text-blue-400">
+                            {isLive ? "Live" : isUpcoming ? "Scheduled" : auc.status}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 pt-0">
                     <Link
-                      href="/buyer?tab=browse"
-                      className={`flex w-full items-center justify-center rounded-xl py-2.5 text-xs font-semibold shadow transition-colors ${
-                        isLive
-                          ? "bg-blue-600 text-white hover:bg-blue-700"
-                          : "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60"
-                      }`}
+                      href={`/auction/${auc.id}`}
+                      className="flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow hover:bg-blue-700 transition-colors"
                     >
-                      {isLive ? "Place Bid" : "View Details"}
+                      View Details
                     </Link>
                   </div>
                 </div>

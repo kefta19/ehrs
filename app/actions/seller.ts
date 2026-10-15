@@ -3,8 +3,37 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { notify, notifyAdmins } from "@/lib/notify";
+import { notifyAdmins } from "@/lib/notify";
 import { logAudit } from "@/lib/security";
+import { can } from "@/lib/rbac";
+import { assertTransition, canTransition } from "@/lib/auction-state";
+import {
+  BIOMETRIC_MAX_AGE_MS,
+  buildChecklist,
+  failedItems,
+} from "@/lib/listing-readiness";
+import {
+  createListingSchema,
+  submitAuctionSchema,
+} from "@/lib/listing-validation";
+
+type Fail = { success: false; error: string };
+const fail = (error: string): Fail => ({ success: false, error });
+const str = (fd: FormData, key: string) => {
+  const v = fd.get(key);
+  return typeof v === "string" ? v : "";
+};
+
+class ActionError extends Error {}
+
+function refresh() {
+  revalidatePath("/seller");
+  revalidatePath("/provider");
+  revalidatePath("/admin");
+  revalidatePath("/");
+}
+
+/* ───────────────────────── KYC (unchanged) ───────────────────────── */
 
 export async function submitSellerKycAction(formData: FormData) {
   const user = await getCurrentUser();
@@ -58,192 +87,336 @@ export async function submitSellerKycAction(formData: FormData) {
 
   revalidatePath("/seller");
   revalidatePath("/provider");
-  return { success: true, message: "KYC documents submitted. Your profile is currently under admin review." };
+  return {
+    success: true,
+    message:
+      "KYC documents submitted. Your profile is currently under admin review.",
+  };
 }
 
-export async function createListingAction(formData: FormData) {
+/* ─────────────── STEP 1: "Add listing" (stays a private DRAFT) ─────────────── */
+
+export async function createListingAction(
+  formData: FormData,
+): Promise<
+  Fail | { success: true; message: string; listingId: string; title: string }
+> {
   const user = await getCurrentUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user || !can(user, "listing:create")) return fail("Unauthorized");
 
-  const categoryId = formData.get("categoryId") as string;
-  const title = formData.get("title") as string;
-  const description = formData.get("description") as string;
-  const city = formData.get("city") as string;
-  const region = (formData.get("region") as string) || city;
-  const address = formData.get("address") as string;
-  const referenceNumber = formData.get("referenceNumber") as string;
-  const condition = (formData.get("condition") as any) || "NOT_APPLICABLE";
-  const featuresRaw = (formData.get("features") as string) || "";
-  const imageUrlsRaw = (formData.get("imageUrls") as string) || "";
-  const docTitle = (formData.get("docTitle") as string) || "Ownership / Legal Deed Certificate";
-  const docUrl = (formData.get("docUrl") as string) || "";
-  const docType = (formData.get("docType") as string) || "TITLE_DEED";
-
-  // Dynamic attributes based on category
-  const attributesRaw = (formData.get("attributes") as string) || "{}";
-  let attributes = {};
+  let imageIdsRaw: unknown = [];
   try {
-    attributes = JSON.parse(attributesRaw);
+    imageIdsRaw = JSON.parse(str(formData, "imageIds") || "[]");
   } catch {}
 
-  if (!title || !description || !city || !categoryId) {
-    return { success: false, error: "Please fill in all required fields (Category, Title, City, Description)." };
+  const parsed = createListingSchema.safeParse({
+    categoryId: str(formData, "categoryId"),
+    title: str(formData, "title"),
+    description: str(formData, "description"),
+    city: str(formData, "city"),
+    region: str(formData, "region") || undefined,
+    address: str(formData, "address") || undefined,
+    referenceNumber: str(formData, "referenceNumber") || undefined,
+    condition: str(formData, "condition") || "NOT_APPLICABLE",
+    features: str(formData, "features")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    imageIds: Array.isArray(imageIdsRaw)
+      ? [...new Set(imageIdsRaw.map(String))]
+      : [],
+    videoId: str(formData, "videoId"),
+    nationalIdNumber: str(formData, "nationalIdNumber"),
+    idDocumentId: str(formData, "idDocumentId"),
+    ownershipDocumentId: str(formData, "ownershipDocumentId") || undefined,
+    biometricVerificationId: str(formData, "biometricVerificationId"),
+  });
+  if (!parsed.success) return fail(parsed.error.issues[0].message);
+  const d = parsed.data;
+
+  let attributes = {};
+  try {
+    attributes = JSON.parse(str(formData, "attributes") || "{}");
+  } catch {}
+
+  const category = await prisma.category.findFirst({
+    where: { id: d.categoryId, isActive: true },
+    select: { id: true },
+  });
+  if (!category) return fail("Selected category is not available.");
+
+  try {
+    const listing = await prisma.$transaction(async (tx) => {
+      const now = new Date();
+
+      const consumed = await tx.biometricVerification.updateMany({
+        where: {
+          id: d.biometricVerificationId,
+          userId: user.id,
+          consumedAt: null,
+          createdAt: { gte: new Date(now.getTime() - BIOMETRIC_MAX_AGE_MS) },
+        },
+        data: { consumedAt: now },
+      });
+      if (consumed.count !== 1)
+        throw new ActionError(
+          "Fingerprint verification expired. Please verify again.",
+        );
+
+      const wanted = [
+        ...d.imageIds,
+        d.videoId,
+        d.idDocumentId,
+        ...(d.ownershipDocumentId ? [d.ownershipDocumentId] : []),
+      ];
+      const files = await tx.mediaFile.findMany({
+        where: { id: { in: wanted }, ownerId: user.id, attachedAt: null },
+      });
+      const byId = new Map(files.map((f) => [f.id, f]));
+      const kindOk = (id: string, kind: string) => byId.get(id)?.kind === kind;
+      if (!d.imageIds.every((id) => kindOk(id, "IMAGE")))
+        throw new ActionError(
+          "One of the photos is missing or invalid. Please upload it again.",
+        );
+      if (!kindOk(d.videoId, "VIDEO"))
+        throw new ActionError(
+          "The video is missing or invalid. Please upload it again.",
+        );
+      if (!kindOk(d.idDocumentId, "ID_DOCUMENT"))
+        throw new ActionError(
+          "The national ID file is missing or invalid. Please upload it again.",
+        );
+      if (
+        d.ownershipDocumentId &&
+        !kindOk(d.ownershipDocumentId, "OWNERSHIP_DOCUMENT")
+      )
+        throw new ActionError(
+          "The ownership document is invalid. Please upload it again.",
+        );
+
+      const created = await tx.listing.create({
+        data: {
+          sellerId: user.id,
+          categoryId: d.categoryId,
+          title: d.title,
+          description: d.description,
+          city: d.city,
+          region: d.region || d.city,
+          address: d.address,
+          referenceNumber: d.referenceNumber || undefined,
+          condition: d.condition,
+          features: d.features,
+          attributes,
+          status: "DRAFT",
+          videoUrl: `/api/media/${d.videoId}`,
+          ownerNationalId: d.nationalIdNumber,
+          idDocumentMediaId: d.idDocumentId,
+          biometricVerificationId: d.biometricVerificationId,
+          images: {
+            create: d.imageIds.map((id, i) => ({
+              url: `/api/media/${id}`,
+              isPrimary: i === 0,
+              displayOrder: i + 1,
+            })),
+          },
+          documents: d.ownershipDocumentId
+            ? {
+                create: [
+                  {
+                    title: "Ownership / Legal Deed Certificate",
+                    documentType: "TITLE_DEED",
+                    fileUrl: `/api/media/${d.ownershipDocumentId}`,
+                    isVerified: false,
+                  },
+                ],
+              }
+            : undefined,
+        },
+      });
+
+      await tx.mediaFile.updateMany({
+        where: { id: { in: wanted } },
+        data: { attachedAt: now },
+      });
+      return created;
+    });
+
+    await logAudit({
+      actorId: user.id,
+      action: "LISTING_CREATED",
+      module: "LISTINGS",
+      entityType: "Listing",
+      entityId: listing.id,
+    });
+
+    refresh();
+    return {
+      success: true,
+      listingId: listing.id,
+      title: listing.title,
+      message: `Listing "${listing.title}" added. Now set the auction schedule and submit it for review.`,
+    };
+  } catch (err) {
+    if (err instanceof ActionError) return fail(err.message);
+    if ((err as { code?: string })?.code === "P2002")
+      return fail(
+        "A listing with this reference / parcel / VIN number already exists.",
+      );
+    console.error("[createListingAction]", err);
+    return fail("Could not save the listing. Please try again.");
   }
-
-  const features = featuresRaw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  const images = imageUrlsRaw
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  const listing = await prisma.listing.create({
-    data: {
-      sellerId: user.id,
-      categoryId,
-      title,
-      description,
-      city,
-      region,
-      address,
-      referenceNumber: referenceNumber || undefined,
-      condition,
-      features,
-      attributes,
-      status: "APPROVED", // Auto-approved for verified demo or set to PENDING_REVIEW
-      images: {
-        create: images.length > 0
-          ? images.map((url, idx) => ({ url, isPrimary: idx === 0, displayOrder: idx + 1 }))
-          : [{ url: "https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1200&q=80", isPrimary: true, displayOrder: 1 }],
-      },
-      documents: {
-        create: docUrl
-          ? [{ title: docTitle, fileUrl: docUrl, documentType: docType, isVerified: true }]
-          : [{ title: docTitle, fileUrl: "/docs/ownership.pdf", documentType: docType, isVerified: true }],
-      },
-    },
-  });
-
-  await notifyAdmins({
-    type: "LISTING_CREATED",
-    title: "New Auction Item Created",
-    body: `${user.name} created a new listing: "${title}".`,
-    link: `/admin?tab=listings`,
-  });
-
-  await logAudit({
-    actorId: user.id,
-    action: "LISTING_CREATED",
-    module: "LISTINGS",
-    entityType: "Listing",
-    entityId: listing.id,
-  });
-
-  revalidatePath("/seller");
-  revalidatePath("/provider");
-  revalidatePath("/");
-  return { success: true, message: `Listing "${title}" created successfully! You can now create an auction for it.` };
 }
 
-export async function createAuctionAction(formData: FormData) {
+/* ─────── STEP 2: schedule + requirements -> "Upcoming" (pending admin review) ─────── */
+
+export async function createAuctionAction(
+  formData: FormData,
+): Promise<Fail | { success: true; message: string }> {
   const user = await getCurrentUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user || !can(user, "auction:create")) return fail("Unauthorized");
 
-  const listingId = formData.get("listingId") as string;
-  const startingPrice = parseFloat(formData.get("startingPrice") as string);
-  const reservePriceRaw = formData.get("reservePrice") as string;
-  const reservePrice = reservePriceRaw ? parseFloat(reservePriceRaw) : undefined;
-  const minBidIncrement = parseFloat(formData.get("minBidIncrement") as string);
-  const startAtStr = formData.get("startAt") as string;
-  const endAtStr = formData.get("endAt") as string;
-  const terms = (formData.get("terms") as string) || "";
-
-  if (!listingId || isNaN(startingPrice) || isNaN(minBidIncrement) || !startAtStr || !endAtStr) {
-    return { success: false, error: "Please enter all auction parameters accurately." };
-  }
-
-  const startAt = new Date(startAtStr);
-  const endAt = new Date(endAtStr);
-
-  if (endAt <= startAt) {
-    return { success: false, error: "Auction closing time must be strictly after the start time." };
-  }
+  const parsed = submitAuctionSchema.safeParse({
+    listingId: str(formData, "listingId"),
+    startingPrice: str(formData, "startingPrice"),
+    reservePrice: str(formData, "reservePrice"),
+    minBidIncrement: str(formData, "minBidIncrement"),
+    startAt: str(formData, "startAt"),
+    endAt: str(formData, "endAt"),
+    terms: str(formData, "terms") || undefined,
+  });
+  if (!parsed.success) return fail(parsed.error.issues[0].message);
+  const d = parsed.data;
 
   const listing = await prisma.listing.findUnique({
-    where: { id: listingId },
+    where: { id: d.listingId },
+    include: { images: true, auctions: true },
   });
+  if (!listing || listing.sellerId !== user.id)
+    return fail(
+      "Listing not found or you do not have permission to auction it.",
+    );
+  if (listing.status !== "DRAFT" && listing.status !== "REJECTED")
+    return fail("This listing has already been submitted for review.");
+  if (
+    listing.auctions.some(
+      (a) => a.status !== "DRAFT" && a.status !== "CANCELLED",
+    )
+  )
+    return fail("This listing already has an auction in progress.");
 
-  if (!listing || listing.sellerId !== user.id) {
-    return { success: false, error: "Listing not found or you do not have permission to auction it." };
-  }
+  const missing = failedItems(buildChecklist(listing));
+  if (missing.length)
+    return fail(
+      `Listing is incomplete: ${missing.map((m) => m.label).join("; ")}.`,
+    );
 
-  const now = new Date();
-  const initialStatus = startAt <= now ? "ACTIVE" : "SCHEDULED";
+  assertTransition("DRAFT", "PENDING_APPROVAL", "SELLER");
 
-  const auction = await prisma.auction.create({
-    data: {
-      listingId,
-      sellerId: user.id,
-      startingPrice,
-      reservePrice: reservePrice || null,
-      minBidIncrement,
-      currentHighestBid: 0,
-      startAt,
-      endAt,
-      status: initialStatus,
-      terms,
-    },
-    include: { listing: true },
+  const data = {
+    startingPrice: d.startingPrice,
+    reservePrice: d.reservePrice ?? null,
+    minBidIncrement: d.minBidIncrement,
+    startAt: new Date(d.startAt),
+    endAt: new Date(d.endAt),
+    terms: d.terms || null,
+  };
+  const draft = listing.auctions.find((a) => a.status === "DRAFT");
+
+  const auction = await prisma.$transaction(async (tx) => {
+    const a = draft
+      ? await tx.auction.update({
+          where: { id: draft.id },
+          data: { ...data, status: "PENDING_APPROVAL", approvedById: null },
+        })
+      : await tx.auction.create({
+          data: {
+            ...data,
+            listingId: listing.id,
+            sellerId: user.id,
+            currentHighestBid: 0,
+            status: "PENDING_APPROVAL",
+          },
+        });
+    await tx.listing.update({
+      where: { id: listing.id },
+      data: {
+        status: "PENDING_REVIEW",
+        rejectionReason: null,
+        submittedAt: new Date(),
+      },
+    });
+    return a;
   });
 
   await notifyAdmins({
-    type: "AUCTION_CREATED",
-    title: "New Auction Scheduled",
-    body: `${user.name} created auction for "${listing.title}" starting at $${startingPrice.toLocaleString()}.`,
-    link: `/admin?tab=auctions`,
+    type: "AUCTION_SUBMITTED",
+    title: "Listing awaiting approval",
+    body: `${user.name} submitted "${listing.title}" for review.`,
+    link: `/admin?tab=listings`,
   });
-
   await logAudit({
     actorId: user.id,
-    action: "AUCTION_CREATED",
+    action: "AUCTION_SUBMITTED",
     module: "AUCTIONS",
     entityType: "Auction",
     entityId: auction.id,
-    newValue: { startingPrice, minBidIncrement, startAt, endAt },
+    newValue: {
+      startAt: data.startAt,
+      endAt: data.endAt,
+      startingPrice: d.startingPrice,
+    },
   });
 
-  revalidatePath("/seller");
-  revalidatePath("/provider");
-  revalidatePath("/");
-  return { success: true, message: `Auction scheduled successfully!` };
+  refresh();
+  return {
+    success: true,
+    message:
+      "Submitted! Status: Upcoming. An admin will check your documents and approve or reject it.",
+  };
 }
+
+/* ───────────────────────── Cancel ───────────────────────── */
 
 export async function cancelAuctionAction(auctionId: string) {
   const user = await getCurrentUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return fail("Unauthorized");
 
   const auction = await prisma.auction.findUnique({
     where: { id: auctionId },
-    include: { bids: true },
+    include: {
+      listing: { select: { id: true, status: true } },
+      _count: { select: { bids: true } },
+    },
   });
+  if (!auction || auction.sellerId !== user.id)
+    return fail("Auction not found or permission denied.");
 
-  if (!auction || auction.sellerId !== user.id) {
-    return { success: false, error: "Auction not found or permission denied." };
+  if (
+    !canTransition(auction.status, "CANCELLED", "SELLER", {
+      hasBids: auction._count.bids > 0,
+    })
+  ) {
+    return fail(
+      auction._count.bids > 0
+        ? "Cannot cancel an auction that has already received bids. Please contact admin."
+        : "This auction can no longer be cancelled.",
+    );
   }
 
-  if (auction.bids.length > 0) {
-    return {
-      success: false,
-      error: "Cannot cancel an auction that has already received active bids. Please contact admin.",
-    };
-  }
-
-  await prisma.auction.update({
-    where: { id: auctionId },
-    data: { status: "CANCELLED" },
+  await prisma.$transaction(async (tx) => {
+    await tx.auction.update({
+      where: { id: auctionId },
+      data: { status: "CANCELLED" },
+    });
+    if (
+      auction.listing.status === "PENDING_REVIEW" ||
+      auction.listing.status === "APPROVED"
+    ) {
+      await tx.listing.update({
+        where: { id: auction.listing.id },
+        data: { status: "DRAFT" },
+      });
+    }
   });
 
   await logAudit({
@@ -254,8 +427,6 @@ export async function cancelAuctionAction(auctionId: string) {
     entityId: auctionId,
   });
 
-  revalidatePath("/seller");
-  revalidatePath("/provider");
-  return { success: true, message: "Auction cancelled successfully." };
+  refresh();
+  return { success: true as const, message: "Auction cancelled successfully." };
 }
-

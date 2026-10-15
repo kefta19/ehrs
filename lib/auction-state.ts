@@ -26,6 +26,7 @@ const TRANSITIONS: Record<AuctionStatus, Edge[]> = {
   ],
   PENDING_APPROVAL: [
     { to: "SCHEDULED", actors: ["ADMIN"] }, // approve
+    { to: "ACTIVE", actors: ["ADMIN"] }, // approve (when startAt <= now)
     { to: "DRAFT", actors: ["ADMIN"] }, // reject / request changes
     { to: "CANCELLED", actors: ["SELLER", "ADMIN"] },
   ],

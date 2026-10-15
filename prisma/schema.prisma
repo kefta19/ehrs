@@ -143,6 +143,13 @@ model User {
   ticketMessages   TicketMessage[]
   notifications    Notification[]
   auditLogs        AuditLog[]
+    entryFeesPaid          AuctionEntryFee[]   @relation("EntryFeePayer")
+    mediaFiles             MediaFile[]
+  biometricCredentials   BiometricCredential[]
+  biometricVerifications BiometricVerification[]
+  webauthnChallenges     WebAuthnChallenge[]
+  buyerRegistrations     BuyerBidRegistration[] @relation("BuyerRegistrations")
+  buyerEntryFees         BuyerAuctionEntryFee[] @relation("BuyerEntryFees")
 
   @@index([role, status])
   @@index([tenantId])
@@ -245,14 +252,25 @@ model Listing {
   rejectionReason String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+    videoUrl                String?
+  ownerNationalId         String?
+  idDocumentMediaId       String?
+  biometricVerificationId String?                @unique
+  biometricVerification   BiometricVerification? @relation(fields: [biometricVerificationId], references: [id], onDelete: SetNull)
+  submittedAt             DateTime?
+  reviewedAt              DateTime?
 
   images          ListingImage[]
   documents       ListingDocument[]
   auctions        Auction[]
+    tenantId        String?
+  entryFeeStatus    EntryFeeStatus @default(UNPAID)
+  entryFees         AuctionEntryFee[]
 
   @@index([sellerId, status])
   @@index([categoryId, status])
   @@index([city, status])
+    @@index([tenantId, status])
 }
 
 model ListingImage {
@@ -302,9 +320,12 @@ model Auction {
   updatedAt         DateTime      @updatedAt
 
   bids              Bid[]
+  buyerEntryFees    BuyerAuctionEntryFee[]
+  entryFees         AuctionEntryFee[]
   result            AuctionResult?
   tickets           Ticket[]
   watchers          WatchlistItem[]
+  buyerRegistrations BuyerBidRegistration[]
 
   @@index([status, startAt, endAt])
   @@index([sellerId, status])
@@ -323,6 +344,31 @@ model Bid {
 
   @@index([auctionId, amount(sort: Desc)])
   @@index([bidderId])
+}
+
+// Buyer entrance fee to participate in an auction
+model BuyerAuctionEntryFee {
+  id            String         @id @default(cuid())
+  auctionId     String
+  auction       Auction        @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  buyerId       String
+  buyer         User           @relation("BuyerEntryFees", fields: [buyerId], references: [id], onDelete: Cascade)
+  amount        Decimal        @db.Decimal(14, 2)
+  currency      String         @default("ETB")
+  status        EntryFeeStatus @default(UNPAID)
+  method        String?
+  txRef         String         @unique
+  providerRef   String?
+  bankReference String?        @unique
+  failureReason String?
+  verifiedById  String?
+  confirmedAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([auctionId, buyerId])
+  @@index([buyerId, status])
+  @@index([auctionId, status])
 }
 
 model WatchlistItem {
@@ -504,4 +550,148 @@ model BrandingAsset {
   createdAt DateTime          @default(now())
 
   @@index([tenantId, kind])
+}
+enum MediaKind {
+  IMAGE
+  VIDEO
+  ID_DOCUMENT
+  OWNERSHIP_DOCUMENT
+}
+model MediaFile {
+  id         String    @id @default(cuid())
+  ownerId    String
+  owner      User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  kind       MediaKind
+  mimeType   String
+  sizeBytes  Int
+  storageKey String    @unique
+  attachedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([ownerId, kind])
+  @@index([attachedAt, createdAt])
+}
+
+model BiometricCredential {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId  String   @unique
+  publicKey     Bytes
+  counter       Int      @default(0)
+  transports    String[]
+  lastUsedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  verifications BiometricVerification[]
+
+  @@index([userId])
+}
+
+model BiometricVerification {
+  id           String              @id @default(cuid())
+  userId       String
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId String
+  credential   BiometricCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  method       String
+  consumedAt   DateTime?
+  createdAt    DateTime            @default(now())
+
+  listing      Listing?
+
+  @@index([userId, createdAt])
+}
+
+model WebAuthnChallenge {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge String
+  purpose   String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+enum EntryFeeStatus {
+  UNPAID
+  PENDING
+  CONFIRMED
+  FAILED
+  SUPERSEDED
+}
+
+enum EntryFeeMethod {
+  CHAPA
+  TELEBIRR
+  CBE
+  BANK_TRANSFER
+}
+
+model AuctionEntryFee {
+  id            String          @id @default(cuid())
+  tenantId      String
+  listingId     String
+  listing       Listing         @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  auctionId     String
+  auction       Auction         @relation(fields: [auctionId], references: [id], onDelete: Restrict)
+  payerId       String
+  payer         User            @relation("EntryFeePayer", fields: [payerId], references: [id], onDelete: Restrict)
+  basisAmount   Decimal         @db.Decimal(14, 2)
+  ratePercent   Decimal         @db.Decimal(5, 2)
+  amount        Decimal         @db.Decimal(14, 2)
+  currency      String          @default("ETB")
+  method        EntryFeeMethod?
+  status        EntryFeeStatus  @default(UNPAID)
+  txRef         String          @unique
+  providerRef   String?
+  bankReference String?         @unique
+  verifiedById  String?
+  confirmedAt   DateTime?
+  failureReason String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([auctionId, status])
+  @@index([listingId, status])
+  @@index([tenantId, status])
+}
+
+model PaymentWebhookEvent {
+  id          String   @id @default(cuid())
+  provider    String
+  eventKey    String
+  txRef       String?
+  processedAt DateTime @default(now())
+
+  @@unique([provider, eventKey])
+}
+
+// ───────────── Buyer Bid Registration (Entrance Fee) ─────────────
+enum BuyerRegistrationStatus {
+  PENDING
+  PAID
+  WAIVED
+  REJECTED
+}
+
+model BuyerBidRegistration {
+  id         String                  @id @default(cuid())
+  auctionId  String
+  auction    Auction                 @relation(fields: [auctionId], references: [id], onDelete: Restrict)
+  buyerId    String
+  buyer      User                    @relation("BuyerRegistrations", fields: [buyerId], references: [id], onDelete: Restrict)
+  status     BuyerRegistrationStatus @default(PENDING)
+  feeAmount  Decimal                 @default(0) @db.Decimal(14, 2)
+  currency   String                  @default("ETB")
+  txRef      String?                 @unique
+  paidAt     DateTime?
+  note       String?
+  createdAt  DateTime                @default(now())
+  updatedAt  DateTime                @updatedAt
+
+  @@unique([auctionId, buyerId])
+  @@index([auctionId, status])
+  @@index([buyerId, status])
 }

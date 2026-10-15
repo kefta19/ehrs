@@ -52,11 +52,22 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 
 type UserLike = {
   role: UserRole;
-  roleDef?: { permissions: string[] } | null;
+  roleDef?: {
+    baseRole: UserRole;
+    isSystem: boolean;
+    permissions: string[];
+  } | null;
 };
 
 export function permissionsFor(user: UserLike): string[] {
-  return user.roleDef?.permissions ?? DEFAULT_ROLE_PERMISSIONS[user.role];
+  if (
+    !user.roleDef ||
+    user.roleDef.isSystem ||
+    user.roleDef.baseRole !== user.role
+  ) {
+    return DEFAULT_ROLE_PERMISSIONS[user.role];
+  }
+  return user.roleDef.permissions;
 }
 
 export function can(user: UserLike | null | undefined, permission: Permission) {

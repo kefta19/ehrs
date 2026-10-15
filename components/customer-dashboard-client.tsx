@@ -35,6 +35,7 @@ import {
   updateBuyerProfileAction,
   markNotificationReadAction,
 } from "@/app/actions/buyer";
+import { auctionPhase } from "@/lib/auction-eligibility";
 
 type DashboardUser = {
   id: string;
@@ -70,6 +71,7 @@ type DashboardListing = {
   };
   images?: Array<{ url?: string | null }>;
   features?: string[];
+  status: string;
 };
 
 type DashboardAuction = {
@@ -80,6 +82,7 @@ type DashboardAuction = {
   startingPrice: number | string;
   currentHighestBid?: number | string | null;
   minBidIncrement: number | string;
+  entryFeeStatus: string;
   highestBidderId?: string | null;
   listing: DashboardListing;
   terms?: string;
@@ -670,7 +673,7 @@ export function CustomerDashboardClient({
                       Total Spent
                     </div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">
-                      $ {totalSpent > 0 ? totalSpent.toLocaleString() : "4,850"}
+                      $ {totalSpent.toLocaleString()}
                     </div>
                   </div>
                 </div>
@@ -693,9 +696,83 @@ export function CustomerDashboardClient({
                       Watchlist
                     </div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">
-                      {watchedIds.size || 8}
+                      {watchedIds.size}
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Live Auctions Section */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900">
+                      Live Auctions
+                    </h3>
+                    <span className="flex items-center gap-1.5 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white shadow">
+                      <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+                      Live Now
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedStatus("ACTIVE");
+                      setActiveTab("browse");
+                    }}
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                  >
+                    View All
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {auctions.filter(a => a.status === "ACTIVE").slice(0, 6).map((auc) => (
+                    <div
+                      key={auc.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-slate-100 p-3 hover:border-slate-200 transition-colors"
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <img
+                          src={
+                            auc.listing.images?.[0]?.url ||
+                            "https://images.unsplash.com/photo-1594502184342-2e12f877aa73?auto=format&fit=crop&w=300&q=80"
+                          }
+                          alt={auc.listing.title}
+                          className="h-14 w-20 rounded-lg object-cover"
+                        />
+                        <div>
+                          <h4 className="font-semibold text-slate-900 text-sm">
+                            {auc.listing.title}
+                          </h4>
+                          <p className="text-xs text-slate-500">
+                            {auc.listing.category.name} • {auc.listing.city}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-6 text-xs">
+                        <div>
+                          <span className="text-slate-400 block">Current Bid</span>
+                          <span className="font-bold text-slate-900">
+                            $ {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block">Ends in</span>
+                          <span className="font-medium text-emerald-600 flex items-center gap-1">
+                            <Clock size={12} />
+                            {formatTimeLeft(auc.endAt)}
+                          </span>
+                        </div>
+                        <a
+                          href={`/auction/${auc.id}`}
+                          className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                        >
+                          Bid Now
+                        </a>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -755,12 +832,150 @@ export function CustomerDashboardClient({
                             $ {Number(auc.startingPrice).toLocaleString()}
                           </span>
                         </div>
-                        <button
-                          onClick={() => setDetailAuction(auc)}
+                        <a
+                          href={`/auction/${auc.id}`}
                           className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
                         >
                           View
-                        </button>
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Approved Listings Section */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900">
+                      All Approved Listings
+                    </h3>
+                    <span className="flex items-center gap-1.5 rounded-md bg-blue-600 px-2.5 py-1 text-xs font-bold text-white shadow">
+                      <Check size={12} />
+                      Verified
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab("browse")}
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                  >
+                    View All
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {auctions.filter(a => a.listing.status === "APPROVED").slice(0, 6).map((auc) => (
+                    <div
+                      key={auc.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-slate-100 p-3 hover:border-slate-200 transition-colors"
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <img
+                          src={
+                            auc.listing.images?.[0]?.url ||
+                            "https://images.unsplash.com/photo-1594502184342-2e12f877aa73?auto=format&fit=crop&w=300&q=80"
+                          }
+                          alt={auc.listing.title}
+                          className="h-14 w-20 rounded-lg object-cover"
+                        />
+                        <div>
+                          <h4 className="font-semibold text-slate-900 text-sm">
+                            {auc.listing.title}
+                          </h4>
+                          <p className="text-xs text-slate-500">
+                            {auc.listing.category.name} • {auc.listing.city}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-6 text-xs">
+                        <div>
+                          <span className="text-slate-400 block">Status</span>
+                          <span className="font-medium text-blue-600">
+                            {auc.status === "ACTIVE" ? "Live" : auc.status === "SCHEDULED" ? "Scheduled" : auc.status}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block">Starting from</span>
+                          <span className="font-bold text-slate-900">
+                            $ {Number(auc.startingPrice).toLocaleString()}
+                          </span>
+                        </div>
+                        <a
+                          href={`/auction/${auc.id}`}
+                          className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                        >
+                          View
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Upcoming Auctions Section (Matching Screenshot) */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-bold text-slate-900">
+                    Upcoming Auctions
+                  </h3>
+                  <button
+                    onClick={() => {
+                      setSelectedStatus("SCHEDULED");
+                      setActiveTab("browse");
+                    }}
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                  >
+                    View All
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {upcomingAuctions.slice(0, 3).map((auc) => (
+                    <div
+                      key={auc.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-slate-100 p-3 hover:border-slate-200 transition-colors"
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <img
+                          src={
+                            auc.listing.images?.[0]?.url ||
+                            "https://images.unsplash.com/photo-1594502184342-2e12f877aa73?auto=format&fit=crop&w=300&q=80"
+                          }
+                          alt={auc.listing.title}
+                          className="h-14 w-20 rounded-lg object-cover"
+                        />
+                        <div>
+                          <h4 className="font-semibold text-slate-900 text-sm">
+                            {auc.listing.title}
+                          </h4>
+                          <p className="text-xs text-slate-500">
+                            {auc.listing.category.name} • {auc.listing.city}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-6 text-xs">
+                        <div>
+                          <span className="text-slate-400 block">Starts in</span>
+                          <span className="font-medium text-slate-700 flex items-center gap-1">
+                            <Clock size={12} className="text-blue-500" />
+                            {formatTimeLeft(auc.startAt)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block">Starting from</span>
+                          <span className="font-bold text-slate-900">
+                            $ {Number(auc.startingPrice).toLocaleString()}
+                          </span>
+                        </div>
+                        <a
+                          href={`/auction/${auc.id}`}
+                          className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                        >
+                          View
+                        </a>
                       </div>
                     </div>
                   ))}
@@ -1092,8 +1307,18 @@ export function CustomerDashboardClient({
               {/* Auction Grid (Matching Screenshot Featured Cards) */}
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {filteredAuctions.map((auc) => {
-                  const isLive = auc.status === "ACTIVE";
-                  const isUpcoming = auc.status === "SCHEDULED";
+                  const phase = auctionPhase(
+                    {
+                      auctionStatus: auc.status,
+                      listingStatus: auc.listing.status,
+                      entryFeeStatus: auc.entryFeeStatus,
+                      startAt: new Date(auc.startAt),
+                      endAt: new Date(auc.endAt),
+                    },
+                    new Date(),
+                  );
+                  const isLive = phase === "LIVE";
+                  const isUpcoming = phase === "UPCOMING";
                   const currentBid = Number(auc.currentHighestBid || auc.startingPrice);
                   const isWatched = watchedIds.has(auc.id);
 
@@ -1200,12 +1425,12 @@ export function CustomerDashboardClient({
 
                       {/* Card Action Buttons */}
                       <div className="px-5 pb-5 pt-0 grid grid-cols-2 gap-2">
-                        <button
-                          onClick={() => setDetailAuction(auc)}
-                          className="rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                        <a
+                          href={`/auction/${auc.id}`}
+                          className="rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-center"
                         >
                           View Details
-                        </button>
+                        </a>
                         {isLive ? (
                           <button
                             onClick={() => handleOpenBid(auc)}
@@ -1214,12 +1439,12 @@ export function CustomerDashboardClient({
                             Place Bid
                           </button>
                         ) : (
-                          <button
-                            onClick={() => setDetailAuction(auc)}
-                            className="rounded-xl bg-slate-100 px-3 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors"
+                          <a
+                            href={`/auction/${auc.id}`}
+                            className="rounded-xl bg-slate-100 px-3 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors text-center"
                           >
                             Set Reminder
-                          </button>
+                          </a>
                         )}
                       </div>
                     </div>
@@ -1949,7 +2174,16 @@ export function CustomerDashboardClient({
                 >
                   Close
                 </button>
-                {detailAuction.status === "ACTIVE" && (
+                {auctionPhase(
+                  {
+                    auctionStatus: detailAuction.status,
+                    listingStatus: detailAuction.listing.status,
+                    entryFeeStatus: detailAuction.entryFeeStatus,
+                    startAt: new Date(detailAuction.startAt),
+                    endAt: new Date(detailAuction.endAt),
+                  },
+                  new Date(),
+                ) === "LIVE" && (
                   <button
                     onClick={() => {
                       const a = detailAuction;

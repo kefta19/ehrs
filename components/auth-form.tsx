@@ -5,10 +5,11 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { ETHomeLogo } from "./ethome-brand";
 import { User, Shield, Building2, ArrowRight } from "lucide-react";
+import { AnimatedInput } from "./animated-input";
 
 type Mode = "login" | "register";
 
-export function AuthForm({ mode = "login" }: { mode?: Mode }) {
+export function AuthForm({ mode = "login", redirectUrl }: { mode?: Mode; redirectUrl?: string }) {
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -83,7 +84,7 @@ export function AuthForm({ mode = "login" }: { mode?: Mode }) {
         setLoading(false);
         return;
       }
-      window.location.href = data.redirectTo ?? "/dashboard";
+      window.location.href = data.redirectTo ?? redirectUrl ?? "/dashboard";
     } catch {
       setError("Network error. Please try again.");
       setLoading(false);
@@ -93,12 +94,33 @@ export function AuthForm({ mode = "login" }: { mode?: Mode }) {
   const inputClass =
     "mt-1.5 w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100 placeholder:text-slate-400";
 
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const phonePattern = /^\+?[1-9]\d{1,14}$/;
+
   return (
     <div className="space-y-6">
       <form
         onSubmit={onSubmit}
-        className="space-y-4 rounded-3xl border border-slate-200/80 bg-white p-8 shadow-xl"
+        className="space-y-6 rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white to-blue-50/30 p-8 shadow-xl"
       >
+        {mode === "register" && (
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white font-bold text-sm">1</div>
+                <span className="text-sm font-semibold text-slate-700">Account Setup</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-slate-500 font-bold text-sm">2</div>
+                <span className="text-sm font-semibold text-slate-400">KYC Verification</span>
+              </div>
+            </div>
+            <div className="h-1 w-full bg-slate-200 rounded-full overflow-hidden">
+              <div className="h-full w-1/2 bg-blue-600 rounded-full transition-all duration-500"></div>
+            </div>
+          </div>
+        )}
+
         <div className="text-center pb-2">
           <div className="flex justify-center mb-3">
             <ETHomeLogo size="md" href="/" />
@@ -133,69 +155,77 @@ export function AuthForm({ mode = "login" }: { mode?: Mode }) {
               </select>
             </label>
 
-            <label className="block text-xs font-semibold text-slate-700">
-              Full Name
-              <input
-                className={inputClass}
-                placeholder="Getachew Abebe"
-                value={form.name}
-                onChange={(e) => set("name", e.target.value)}
-                required
-              />
-            </label>
+            <AnimatedInput
+              label="Full Name"
+              placeholder="Getachew Abebe"
+              value={form.name}
+              onChange={(v) => set("name", v)}
+              required
+              minLength={2}
+              maxLength={100}
+            />
 
             {form.role === "SELLER" && (
-              <label className="block text-xs font-semibold text-slate-700">
-                Business / Company Name (Optional)
-                <input
-                  className={inputClass}
-                  placeholder="Prime Real Estate LLC"
-                  value={form.businessName}
-                  onChange={(e) => set("businessName", e.target.value)}
-                />
-              </label>
+              <AnimatedInput
+                label="Business / Company Name (Optional)"
+                placeholder="Prime Real Estate LLC"
+                value={form.businessName}
+                onChange={(v) => set("businessName", v)}
+                maxLength={100}
+              />
             )}
 
-            <label className="block text-xs font-semibold text-slate-700">
-              Phone Number
-              <input
-                className={inputClass}
-                value={form.phone}
-                onChange={(e) => set("phone", e.target.value)}
-                placeholder="+251 91 122 3344"
-              />
-            </label>
+            <AnimatedInput
+              label="Phone Number"
+              placeholder="+251 91 122 3344"
+              value={form.phone}
+              onChange={(v) => set("phone", v)}
+              required
+              pattern={phonePattern}
+              validate={(v) => {
+                if (!v.startsWith("+")) {
+                  return { valid: false, message: "Include country code (e.g., +251)" };
+                }
+                return { valid: true };
+              }}
+            />
           </>
         )}
 
-        <label className="block text-xs font-semibold text-slate-700">
-          Email Address
-          <input
-            type="email"
-            className={inputClass}
-            placeholder="you@example.com"
-            value={form.email}
-            onChange={(e) => set("email", e.target.value)}
-            required
-          />
-        </label>
+        <AnimatedInput
+          label="Email Address"
+          type="email"
+          placeholder="you@example.com"
+          value={form.email}
+          onChange={(v) => set("email", v)}
+          required
+          pattern={emailPattern}
+        />
 
-        <label className="block text-xs font-semibold text-slate-700">
-          Password
-          <input
-            type="password"
-            className={inputClass}
-            placeholder="••••••••"
-            value={form.password}
-            onChange={(e) => set("password", e.target.value)}
-            required
-          />
-          {mode === "register" && (
-            <span className="mt-1 block text-[11px] text-slate-400">
-              At least 8 characters with upper, lowercase and a number.
-            </span>
-          )}
-        </label>
+        <AnimatedInput
+          label="Password"
+          type="password"
+          placeholder="••••••••"
+          value={form.password}
+          onChange={(v) => set("password", v)}
+          required
+          minLength={8}
+          maxLength={128}
+          validate={(v) => {
+            if (mode === "register") {
+              const hasUpper = /[A-Z]/.test(v);
+              const hasLower = /[a-z]/.test(v);
+              const hasNumber = /[0-9]/.test(v);
+              if (!hasUpper || !hasLower || !hasNumber) {
+                return {
+                  valid: false,
+                  message: "Must include uppercase, lowercase, and a number",
+                };
+              }
+            }
+            return { valid: true };
+          }}
+        />
 
         {error && (
           <p className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs text-rose-700">

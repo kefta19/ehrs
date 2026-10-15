@@ -57,6 +57,20 @@ export async function placeBidAction(formData: FormData) {
     return { success: false, error: "This auction has already closed." };
   }
 
+  // Check if buyer has paid entrance fee
+  const buyerEntryFee = await prisma.buyerAuctionEntryFee.findUnique({
+    where: {
+      auctionId_buyerId: {
+        auctionId: auctionId,
+        buyerId: user.id,
+      },
+    },
+  });
+
+  if (!buyerEntryFee || buyerEntryFee.status !== "CONFIRMED") {
+    return { success: false, error: "You must pay the entrance fee before placing a bid." };
+  }
+
   const currentBid = Number(auction.currentHighestBid);
   const minIncrement = Number(auction.minBidIncrement);
   const startingPrice = Number(auction.startingPrice);
@@ -362,4 +376,86 @@ export async function markNotificationReadAction(notificationId: string) {
   revalidatePath("/buyer");
   revalidatePath("/customer");
   return { success: true };
+}
+
+// Buyer entrance fee payment
+export async function payBuyerEntranceFeeAction(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Please sign in to pay entrance fee." };
+
+  const auctionId = formData.get("auctionId") as string;
+  const method = formData.get("method") as "CHAPA" | "BANK_TRANSFER";
+
+  if (!auctionId) {
+    return { success: false, error: "Auction ID is required." };
+  }
+
+  if (!method || (method !== "CHAPA" && method !== "BANK_TRANSFER")) {
+    return { success: false, error: "Invalid payment method." };
+  }
+
+  // Check if auction exists and is approved
+  const auction = await prisma.auction.findUnique({
+    where: { id: auctionId },
+    include: { listing: true },
+  });
+
+  if (!auction) {
+    return { success: false, error: "Auction not found." };
+  }
+
+  if (auction.listing.status !== "APPROVED") {
+    return { success: false, error: "This auction is not yet approved." };
+  }
+
+  // Check if user already paid entrance fee
+  const existingFee = await prisma.buyerAuctionEntryFee.findUnique({
+    where: {
+      auctionId_buyerId: {
+        auctionId,
+        buyerId: user.id,
+      },
+    },
+  });
+
+  if (existingFee && existingFee.status === "CONFIRMED") {
+    return { success: false, error: "You have already paid the entrance fee for this auction." };
+  }
+
+  // Create entrance fee record
+  const { ensureBuyerEntranceFee } = await import("@/lib/buyer-entrance-fee-service");
+  const fee = await prisma.$transaction(async (tx) => {
+    return await ensureBuyerEntranceFee(tx, auctionId, user.id);
+  });
+
+  if (method === "CHAPA") {
+    // For Chapa, return the checkout URL (this would integrate with Chapa API)
+    // For now, return a placeholder response
+    return {
+      success: true,
+      message: "Entrance fee record created. Chapa integration pending.",
+      feeId: fee.id,
+      txRef: fee.txRef,
+      amount: Number(fee.amount),
+      currency: fee.currency,
+    };
+  } else if (method === "BANK_TRANSFER") {
+    // For bank transfer, return bank details
+    return {
+      success: true,
+      message: "Please use the transaction reference for your bank transfer.",
+      feeId: fee.id,
+      txRef: fee.txRef,
+      amount: Number(fee.amount),
+      currency: fee.currency,
+      bankDetails: {
+        accountName: "EHRS Auction Platform",
+        accountNumber: "1000123456789",
+        bank: "Commercial Bank of Ethiopia",
+        branch: "Bole Branch",
+      },
+    };
+  }
+
+  return { success: false, error: "Payment method not implemented." };
 }

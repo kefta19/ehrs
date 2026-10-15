@@ -3,10 +3,13 @@ import { getCurrentUser } from "@/lib/auth";
 import { roleHome } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { ProviderDashboardClient } from "@/components/provider-dashboard-client";
+import { syncAuctionStatuses } from "@/lib/auction-lifecycle";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProviderPage() {
+  await syncAuctionStatuses();
+
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role !== "SELLER" && user.role !== "ADMIN") redirect(roleHome(user.role));
@@ -37,6 +40,7 @@ export default async function ProviderPage() {
           bids: {
             orderBy: { amount: "desc" },
           },
+          entryFees: { orderBy: { createdAt: "desc" }, take: 1 },
           result: {
             include: {
               winningBidder: true,

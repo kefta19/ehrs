@@ -1,5 +1,5 @@
 "use client";
-
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import {
   LayoutDashboard,
@@ -26,6 +26,14 @@ import {
   Clock,
   MapPin,
   ExternalLink,
+  Palette,
+  User,
+  FileText,
+  Fingerprint,
+  Phone,
+  Mail,
+  Building2,
+  Video,
 } from "lucide-react";
 import { ETHomeLogo } from "./ethome-brand";
 import { LogoutButton } from "./logout-button";
@@ -44,9 +52,18 @@ export type AdminUser = {
   id: string;
   name: string;
   email: string;
+  phone?: string | null;
   role: string;
   status: string;
   createdAt: string;
+  sellerProfile?: {
+    nationalIdNumber?: string;
+    businessName?: string | null;
+    taxId?: string | null;
+    address?: string;
+    idDocumentUrl?: string | null;
+    status?: string;
+  } | null;
 };
 
 type AdminSellerProfile = {
@@ -64,11 +81,63 @@ type AdminListing = {
   title: string;
   description: string;
   status: string;
-  category: { name: string };
+  condition?: string;
+  category: { id?: string; name: string };
   seller: AdminUser;
-  referenceNumber: string;
+  referenceNumber?: string | null;
   city: string;
-  images?: Array<{ url?: string }>;
+  region?: string | null;
+  address?: string | null;
+  features?: string[];
+  attributes?: Record<string, any> | null;
+  videoUrl?: string | null;
+  ownerNationalId?: string | null;
+  idDocumentMediaId?: string | null;
+  biometricVerificationId?: string | null;
+  biometricVerification?: {
+    method?: string;
+    createdAt?: string;
+    credentialId?: string;
+  } | null;
+  images?: Array<{ id?: string; url: string; isPrimary?: boolean }>;
+  documents?: Array<{
+    id: string;
+    title: string;
+    documentType: string;
+    fileUrl: string;
+    isVerified?: boolean;
+  }>;
+  entryFeeStatus?: string;
+  entryFees?: Array<{
+    id: string;
+    status: string;
+    amount: number | string;
+    currency: string;
+    method?: string | null;
+    ratePercent?: number | string;
+    txRef?: string | null;
+    bankReference?: string | null;
+    createdAt?: string;
+  }>;
+  auctions?: Array<{
+    id: string;
+    status: string;
+    startingPrice: number | string;
+    reservePrice?: number | string | null;
+    minBidIncrement: number | string;
+    startAt: string;
+    endAt: string;
+    terms?: string | null;
+    entryFees?: Array<{
+      id: string;
+      status: string;
+      amount: number | string;
+      currency: string;
+      method?: string | null;
+      txRef?: string | null;
+      bankReference?: string | null;
+    }>;
+  }>;
 };
 
 type AdminAuction = {
@@ -186,26 +255,38 @@ export function AdminDashboardClient({
   const [userRoleFilter, setUserRoleFilter] = useState("ALL");
 
   // KYC Review Modal
-  const [reviewingKyc, setReviewingKyc] = useState<AdminSellerProfile | null>(null);
+  const [reviewingKyc, setReviewingKyc] = useState<AdminSellerProfile | null>(
+    null,
+  );
   const [kycNote, setKycNote] = useState("");
 
   // Listing Review Modal
-  const [reviewingListing, setReviewingListing] = useState<AdminListing | null>(null);
+  const [reviewingListing, setReviewingListing] = useState<AdminListing | null>(
+    null,
+  );
   const [rejectionReason, setRejectionReason] = useState("");
 
   // Payment Verification Modal
-  const [verifyingPayment, setVerifyingPayment] = useState<AdminPayment | null>(null);
+  const [verifyingPayment, setVerifyingPayment] = useState<AdminPayment | null>(
+    null,
+  );
   const [paymentNote, setPaymentNote] = useState("");
 
   // Ticket Resolution Modal
-  const [resolvingTicket, setResolvingTicket] = useState<AdminTicket | null>(null);
+  const [resolvingTicket, setResolvingTicket] = useState<AdminTicket | null>(
+    null,
+  );
   const [ticketResolution, setTicketResolution] = useState("");
 
   // Category Add
   const [showCategoryModal, setShowCategoryModal] = useState(false);
 
   // Global action notification
-  const [actionMsg, setActionMsg] = useState<{ error?: string; message?: string; success?: boolean } | null>(null);
+  const [actionMsg, setActionMsg] = useState<{
+    error?: string;
+    message?: string;
+    success?: boolean;
+  } | null>(null);
 
   const filteredUsers = usersList.filter((u) => {
     const matchSearch =
@@ -217,7 +298,7 @@ export function AdminDashboardClient({
   });
 
   return (
-    <div className="flex min-h-screen bg-background text-slate-800 dark:text-slate-100">
+    <div className="flex min-h-screen bg-[#f8fafc] text-slate-800">
       {/* ─────────────────── LEFT SIDEBAR ─────────────────── */}
       <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-[#132238] bg-[#0A192F] text-slate-300">
         <div className="flex h-16 items-center px-6 border-b border-[#132644]">
@@ -404,6 +485,14 @@ export function AdminDashboardClient({
             </button>
           </nav>
 
+          <Link
+            href="/dashboard/settings/branding"
+            className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+          >
+            <Palette size={16} />
+            <span>Branding</span>
+          </Link>
+
           <div className="border-t border-[#132644] pt-3">
             <LogoutButton className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2 text-xs font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors" />
           </div>
@@ -419,7 +508,8 @@ export function AdminDashboardClient({
               Admin Portal
             </span>
             <h1 className="text-xl font-bold tracking-tight text-slate-900">
-              {activeTab === "dashboard" && "Platform Operations & Intelligence"}
+              {activeTab === "dashboard" &&
+                "Platform Operations & Intelligence"}
               {activeTab === "users" && "User Directory & Access Control"}
               {activeTab === "kyc" && "Seller Verification Queue"}
               {activeTab === "listings" && "Auction Listing Approvals"}
@@ -457,7 +547,11 @@ export function AdminDashboardClient({
                   : "bg-emerald-50 text-emerald-700 border border-emerald-200"
               }`}
             >
-              <span>{actionMsg.error || actionMsg.message || "Action processed successfully."}</span>
+              <span>
+                {actionMsg.error ||
+                  actionMsg.message ||
+                  "Action processed successfully."}
+              </span>
               <button onClick={() => setActionMsg(null)}>
                 <X size={16} />
               </button>
@@ -478,30 +572,46 @@ export function AdminDashboardClient({
                     <span className="text-[11px] text-slate-400">Total</span>
                   </div>
                   <div className="mt-4">
-                    <div className="text-xs text-slate-500 font-medium">Registered Users</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">{stats.totalUsers}</div>
+                    <div className="text-xs text-slate-500 font-medium">
+                      Registered Users
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                      {stats.totalUsers}
+                    </div>
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-center justify-between text-amber-600">
                     <ShieldCheck size={20} />
-                    <span className="text-[11px] text-amber-600 font-semibold">Queue</span>
+                    <span className="text-[11px] text-amber-600 font-semibold">
+                      Queue
+                    </span>
                   </div>
                   <div className="mt-4">
-                    <div className="text-xs text-slate-500 font-medium">Pending KYC</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">{stats.pendingKycCount}</div>
+                    <div className="text-xs text-slate-500 font-medium">
+                      Pending KYC
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                      {stats.pendingKycCount}
+                    </div>
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-center justify-between text-emerald-600">
                     <Gavel size={20} />
-                    <span className="text-[11px] text-emerald-600 font-semibold">Active</span>
+                    <span className="text-[11px] text-emerald-600 font-semibold">
+                      Active
+                    </span>
                   </div>
                   <div className="mt-4">
-                    <div className="text-xs text-slate-500 font-medium">Live Auctions</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">{stats.activeAuctionsCount}</div>
+                    <div className="text-xs text-slate-500 font-medium">
+                      Live Auctions
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                      {stats.activeAuctionsCount}
+                    </div>
                   </div>
                 </div>
 
@@ -511,7 +621,9 @@ export function AdminDashboardClient({
                     <span className="text-[11px] text-slate-400">GMV</span>
                   </div>
                   <div className="mt-4">
-                    <div className="text-xs text-slate-500 font-medium">Platform Volume</div>
+                    <div className="text-xs text-slate-500 font-medium">
+                      Platform Volume
+                    </div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">
                       $ {stats.totalVolume.toLocaleString()}
                     </div>
@@ -521,11 +633,17 @@ export function AdminDashboardClient({
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex items-center justify-between text-rose-600">
                     <MessageSquareWarning size={20} />
-                    <span className="text-[11px] text-rose-600 font-semibold">Action</span>
+                    <span className="text-[11px] text-rose-600 font-semibold">
+                      Action
+                    </span>
                   </div>
                   <div className="mt-4">
-                    <div className="text-xs text-slate-500 font-medium">Open Disputes</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">{stats.openTicketsCount}</div>
+                    <div className="text-xs text-slate-500 font-medium">
+                      Open Disputes
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                      {stats.openTicketsCount}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -562,7 +680,8 @@ export function AdminDashboardClient({
                               {k.user.name}
                             </span>
                             <span className="text-slate-400">
-                              ID: {k.nationalIdNumber} • {k.businessName || "Individual"}
+                              ID: {k.nationalIdNumber} •{" "}
+                              {k.businessName || "Individual"}
                             </span>
                           </div>
                           <button
@@ -639,7 +758,10 @@ export function AdminDashboardClient({
 
                 <div className="divide-y divide-slate-100 text-xs">
                   {allBids.slice(0, 5).map((b, idx) => (
-                    <div key={idx} className="flex items-center justify-between py-3">
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between py-3"
+                    >
                       <div>
                         <span className="font-semibold text-slate-900 block">
                           {b.auction?.listing?.title || "Auction Item"}
@@ -672,7 +794,8 @@ export function AdminDashboardClient({
                     User Directory & Roles
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Inspect user profiles, grant administrative privileges, or suspend delinquent accounts.
+                    Inspect user profiles, grant administrative privileges, or
+                    suspend delinquent accounts.
                   </p>
                 </div>
 
@@ -711,7 +834,9 @@ export function AdminDashboardClient({
                   <tbody className="divide-y divide-slate-100">
                     {filteredUsers.map((u) => (
                       <tr key={u.id} className="hover:bg-slate-50">
-                        <td className="py-3 font-semibold text-slate-900">{u.name}</td>
+                        <td className="py-3 font-semibold text-slate-900">
+                          {u.name}
+                        </td>
                         <td className="py-3 text-slate-600">{u.email}</td>
                         <td className="py-3">
                           <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700">
@@ -740,10 +865,13 @@ export function AdminDashboardClient({
                                 formData.append("userId", u.id);
                                 formData.append(
                                   "status",
-                                  u.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE"
+                                  u.status === "ACTIVE"
+                                    ? "SUSPENDED"
+                                    : "ACTIVE",
                                 );
                                 startTransition(async () => {
-                                  const res = await updateUserStatusAction(formData);
+                                  const res =
+                                    await updateUserStatusAction(formData);
                                   setActionMsg(res);
                                 });
                               }}
@@ -769,7 +897,8 @@ export function AdminDashboardClient({
                   Seller Identity Verification Queue
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Inspect National ID, Business registration, Tax Identification Numbers, and approve credentials.
+                  Inspect National ID, Business registration, Tax Identification
+                  Numbers, and approve credentials.
                 </p>
               </div>
 
@@ -788,10 +917,16 @@ export function AdminDashboardClient({
                   <tbody className="divide-y divide-slate-100">
                     {pendingKyc.map((k) => (
                       <tr key={k.id} className="hover:bg-slate-50">
-                        <td className="py-3 font-semibold text-slate-900">{k.user.name}</td>
+                        <td className="py-3 font-semibold text-slate-900">
+                          {k.user.name}
+                        </td>
                         <td className="py-3 font-mono">{k.nationalIdNumber}</td>
-                        <td className="py-3 text-slate-600">{k.businessName || "N/A"}</td>
-                        <td className="py-3 text-slate-600">{k.taxId || "N/A"}</td>
+                        <td className="py-3 text-slate-600">
+                          {k.businessName || "N/A"}
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          {k.taxId || "N/A"}
+                        </td>
                         <td className="py-3">
                           <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
                             {k.status}
@@ -821,7 +956,8 @@ export function AdminDashboardClient({
                   Approve Auction Items & Listings
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Inspect title deeds, vehicle ownership libre, building surveys, and approve for scheduled auctions.
+                  Inspect title deeds, vehicle ownership libre, building
+                  surveys, and approve for scheduled auctions.
                 </p>
               </div>
 
@@ -834,17 +970,27 @@ export function AdminDashboardClient({
                     <div>
                       <div className="aspect-[16/10] bg-slate-100">
                         <img
-                          src={l.images?.[0]?.url || "https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=400&q=80"}
+                          src={
+                            l.images?.[0]?.url ||
+                            "https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=400&q=80"
+                          }
                           alt={l.title}
                           className="h-full w-full object-cover"
                         />
                       </div>
                       <div className="p-4 space-y-2 text-xs">
-                        <span className="font-bold text-blue-600">{l.category.name}</span>
-                        <h4 className="font-bold text-slate-900 text-sm">{l.title}</h4>
-                        <p className="text-slate-500 line-clamp-2">{l.description}</p>
+                        <span className="font-bold text-blue-600">
+                          {l.category.name}
+                        </span>
+                        <h4 className="font-bold text-slate-900 text-sm">
+                          {l.title}
+                        </h4>
+                        <p className="text-slate-500 line-clamp-2">
+                          {l.description}
+                        </p>
                         <div className="text-slate-400">
-                          Seller: <strong>{l.seller.name}</strong> • Ref: {l.referenceNumber}
+                          Seller: <strong>{l.seller.name}</strong> • Ref:{" "}
+                          {l.referenceNumber}
                         </div>
                       </div>
                     </div>
@@ -874,7 +1020,8 @@ export function AdminDashboardClient({
                   Auction Moderation & Approvals
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Approve scheduled auctions, monitor live sessions, or suspend auctions in dispute.
+                  Approve scheduled auctions, monitor live sessions, or suspend
+                  auctions in dispute.
                 </p>
               </div>
 
@@ -886,13 +1033,17 @@ export function AdminDashboardClient({
                       <th className="pb-3 font-semibold">Seller</th>
                       <th className="pb-3 font-semibold">Starting Price</th>
                       <th className="pb-3 font-semibold">Status</th>
-                      <th className="pb-3 font-semibold text-right">Moderation Actions</th>
+                      <th className="pb-3 font-semibold text-right">
+                        Moderation Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {allAuctions.map((a) => (
                       <tr key={a.id} className="hover:bg-slate-50">
-                        <td className="py-3 font-semibold text-slate-900">{a.listing.title}</td>
+                        <td className="py-3 font-semibold text-slate-900">
+                          {a.listing.title}
+                        </td>
                         <td className="py-3 text-slate-600">{a.seller.name}</td>
                         <td className="py-3 font-bold text-slate-900">
                           $ {Number(a.startingPrice).toLocaleString()}
@@ -910,7 +1061,8 @@ export function AdminDashboardClient({
                                 formData.append("auctionId", a.id);
                                 formData.append("status", "ACTIVE");
                                 startTransition(async () => {
-                                  const res = await updateAuctionStatusAction(formData);
+                                  const res =
+                                    await updateAuctionStatusAction(formData);
                                   setActionMsg(res);
                                 });
                               }}
@@ -926,7 +1078,8 @@ export function AdminDashboardClient({
                                 formData.append("auctionId", a.id);
                                 formData.append("status", "SUSPENDED");
                                 startTransition(async () => {
-                                  const res = await updateAuctionStatusAction(formData);
+                                  const res =
+                                    await updateAuctionStatusAction(formData);
                                   setActionMsg(res);
                                 });
                               }}
@@ -952,7 +1105,8 @@ export function AdminDashboardClient({
                   Global Live Bidding Stream
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Real-time tamper-evident stream of all bids placed on the platform.
+                  Real-time tamper-evident stream of all bids placed on the
+                  platform.
                 </p>
               </div>
 
@@ -973,11 +1127,15 @@ export function AdminDashboardClient({
                         <td className="py-3 font-semibold text-slate-900">
                           {b.auction?.listing?.title}
                         </td>
-                        <td className="py-3 text-slate-600">{b.bidder?.name}</td>
+                        <td className="py-3 text-slate-600">
+                          {b.bidder?.name}
+                        </td>
                         <td className="py-3 font-bold text-blue-600">
                           $ {Number(b.amount).toLocaleString()}
                         </td>
-                        <td className="py-3 font-mono text-slate-400">{b.ipAddress || "127.0.0.1"}</td>
+                        <td className="py-3 font-mono text-slate-400">
+                          {b.ipAddress || "127.0.0.1"}
+                        </td>
                         <td className="py-3 text-slate-400">
                           {new Date(b.createdAt).toLocaleString()}
                         </td>
@@ -997,7 +1155,8 @@ export function AdminDashboardClient({
                   Escrow Deposit & Settlement Verification
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Verify bank wire receipts, approve escrow funds, and mark conveyances as settled.
+                  Verify bank wire receipts, approve escrow funds, and mark
+                  conveyances as settled.
                 </p>
               </div>
 
@@ -1009,7 +1168,9 @@ export function AdminDashboardClient({
                       <th className="pb-3 font-semibold">Payer</th>
                       <th className="pb-3 font-semibold">Amount</th>
                       <th className="pb-3 font-semibold">Status</th>
-                      <th className="pb-3 font-semibold text-right">Verification</th>
+                      <th className="pb-3 font-semibold text-right">
+                        Verification
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1042,7 +1203,9 @@ export function AdminDashboardClient({
                               Verify Deposit
                             </button>
                           ) : (
-                            <span className="text-emerald-600 font-semibold">Verified</span>
+                            <span className="text-emerald-600 font-semibold">
+                              Verified
+                            </span>
                           )}
                         </td>
                       </tr>
@@ -1061,7 +1224,8 @@ export function AdminDashboardClient({
                   Disputes, Complaints & Support Tickets
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Resolve user complaints regarding property discrepancies, misrepresentation, or escrow delays.
+                  Resolve user complaints regarding property discrepancies,
+                  misrepresentation, or escrow delays.
                 </p>
               </div>
 
@@ -1073,11 +1237,15 @@ export function AdminDashboardClient({
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <span className="font-mono font-bold text-blue-600">{t.number}</span>
+                        <span className="font-mono font-bold text-blue-600">
+                          {t.number}
+                        </span>
                         <span className="rounded bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
                           {t.type}
                         </span>
-                        <h4 className="font-bold text-slate-900 text-sm">{t.subject}</h4>
+                        <h4 className="font-bold text-slate-900 text-sm">
+                          {t.subject}
+                        </h4>
                       </div>
                       <span
                         className={`rounded-full px-2.5 py-0.5 font-bold ${
@@ -1092,7 +1260,8 @@ export function AdminDashboardClient({
 
                     <p className="text-slate-600">{t.description}</p>
                     <div className="text-slate-400">
-                      Filed by: <strong>{t.createdBy?.name}</strong> • {new Date(t.createdAt).toLocaleString()}
+                      Filed by: <strong>{t.createdBy?.name}</strong> •{" "}
+                      {new Date(t.createdAt).toLocaleString()}
                     </div>
 
                     {t.resolution && (
@@ -1124,11 +1293,14 @@ export function AdminDashboardClient({
                     Platform Analytics & Financial Reports
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Gross merchandise value, clearance rates, commission earnings, and growth.
+                    Gross merchandise value, clearance rates, commission
+                    earnings, and growth.
                   </p>
                 </div>
                 <button
-                  onClick={() => alert("Downloading Platform Audit & Financial Report...")}
+                  onClick={() =>
+                    alert("Downloading Platform Audit & Financial Report...")
+                  }
                   className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-slate-800"
                 >
                   Export Financial Report
@@ -1137,25 +1309,33 @@ export function AdminDashboardClient({
 
               <div className="grid grid-cols-1 gap-5 md:grid-cols-4 text-xs">
                 <div className="rounded-xl bg-slate-50 p-4">
-                  <span className="text-slate-400 block">Total Auctions Hosted</span>
+                  <span className="text-slate-400 block">
+                    Total Auctions Hosted
+                  </span>
                   <span className="text-2xl font-bold text-slate-900 mt-1 block">
                     {allAuctions.length}
                   </span>
                 </div>
                 <div className="rounded-xl bg-slate-50 p-4">
-                  <span className="text-slate-400 block">Total Bids Processed</span>
+                  <span className="text-slate-400 block">
+                    Total Bids Processed
+                  </span>
                   <span className="text-2xl font-bold text-slate-900 mt-1 block">
                     {allBids.length}
                   </span>
                 </div>
                 <div className="rounded-xl bg-slate-50 p-4">
-                  <span className="text-slate-400 block">Platform Gross GMV</span>
+                  <span className="text-slate-400 block">
+                    Platform Gross GMV
+                  </span>
                   <span className="text-2xl font-bold text-emerald-600 mt-1 block">
                     $ {stats.totalVolume.toLocaleString()}
                   </span>
                 </div>
                 <div className="rounded-xl bg-slate-50 p-4">
-                  <span className="text-slate-400 block">Estimated Commission (2.5%)</span>
+                  <span className="text-slate-400 block">
+                    Estimated Commission (2.5%)
+                  </span>
                   <span className="text-2xl font-bold text-blue-600 mt-1 block">
                     $ {(stats.totalVolume * 0.025).toLocaleString()}
                   </span>
@@ -1193,8 +1373,12 @@ export function AdminDashboardClient({
                     <div className="flex items-center gap-3">
                       <span className="text-2xl">{c.icon || "📦"}</span>
                       <div>
-                        <h4 className="font-bold text-slate-900 text-sm">{c.name}</h4>
-                        <span className="text-slate-400 text-xs font-mono">{c.slug}</span>
+                        <h4 className="font-bold text-slate-900 text-sm">
+                          {c.name}
+                        </h4>
+                        <span className="text-slate-400 text-xs font-mono">
+                          {c.slug}
+                        </span>
                       </div>
                     </div>
                     <span className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
@@ -1214,7 +1398,8 @@ export function AdminDashboardClient({
                   Platform Governance & Auction Parameters
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Configure global anti-sniping soft close windows, earnest deposit rates, and escrow rules.
+                  Configure global anti-sniping soft close windows, earnest
+                  deposit rates, and escrow rules.
                 </p>
               </div>
 
@@ -1309,7 +1494,8 @@ export function AdminDashboardClient({
                   Immutable Platform Audit Trail
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Cryptographically traceable log of administrative actions, bid submissions, and status mutations.
+                  Cryptographically traceable log of administrative actions, bid
+                  submissions, and status mutations.
                 </p>
               </div>
 
@@ -1327,14 +1513,20 @@ export function AdminDashboardClient({
                   <tbody className="divide-y divide-slate-100">
                     {auditLogs.map((a) => (
                       <tr key={a.id} className="hover:bg-slate-50">
-                        <td className="py-3 font-mono font-bold text-slate-900">{a.action}</td>
+                        <td className="py-3 font-mono font-bold text-slate-900">
+                          {a.action}
+                        </td>
                         <td className="py-3">
                           <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
                             {a.module}
                           </span>
                         </td>
-                        <td className="py-3 font-mono text-slate-500">{a.actorId || "SYSTEM"}</td>
-                        <td className="py-3 font-mono text-slate-400">{a.ipAddress || "127.0.0.1"}</td>
+                        <td className="py-3 font-mono text-slate-500">
+                          {a.actorId || "SYSTEM"}
+                        </td>
+                        <td className="py-3 font-mono text-slate-400">
+                          {a.ipAddress || "127.0.0.1"}
+                        </td>
                         <td className="py-3 text-slate-400">
                           {new Date(a.createdAt).toLocaleString()}
                         </td>
@@ -1353,7 +1545,9 @@ export function AdminDashboardClient({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-5 animate-in fade-in">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <span className="font-bold text-blue-600">Review Seller Verification</span>
+              <span className="font-bold text-blue-600">
+                Review Seller Verification
+              </span>
               <button onClick={() => setReviewingKyc(null)}>
                 <X size={18} />
               </button>
@@ -1362,11 +1556,15 @@ export function AdminDashboardClient({
             <div className="space-y-2 text-xs">
               <div>
                 <span className="text-slate-400 block">Seller Name</span>
-                <strong className="text-sm text-slate-900">{reviewingKyc.user.name}</strong>
+                <strong className="text-sm text-slate-900">
+                  {reviewingKyc.user.name}
+                </strong>
               </div>
               <div>
                 <span className="text-slate-400 block">National ID Number</span>
-                <span className="font-mono text-slate-800">{reviewingKyc.nationalIdNumber}</span>
+                <span className="font-mono text-slate-800">
+                  {reviewingKyc.nationalIdNumber}
+                </span>
               </div>
               <div>
                 <span className="text-slate-400 block">Business Name</span>
@@ -1428,82 +1626,468 @@ export function AdminDashboardClient({
         </div>
       )}
 
-      {/* ─────────────────── MODAL: REVIEW LISTING ─────────────────── */}
-      {reviewingListing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-5 animate-in fade-in">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <span className="font-bold text-blue-600">Review Auction Listing</span>
-              <button onClick={() => setReviewingListing(null)}>
-                <X size={18} />
-              </button>
-            </div>
+      {/* ─────────────────── MODAL: FULL INSPECTION & LIVE APPROVAL ─────────────────── */}
+      {reviewingListing && (() => {
+        const auc = reviewingListing.auctions?.[0];
+        const fee = reviewingListing.entryFees?.[0] || auc?.entryFees?.[0];
+        const profile = reviewingListing.seller.sellerProfile;
+        const nationalId =
+          reviewingListing.ownerNationalId || profile?.nationalIdNumber;
 
-            <div className="space-y-2 text-xs">
-              <h4 className="font-bold text-slate-900 text-sm">
-                {reviewingListing.title}
-              </h4>
-              <p className="text-slate-600">{reviewingListing.description}</p>
-              <div>
-                Seller: <strong>{reviewingListing.seller.name}</strong> • City: {reviewingListing.city}
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl space-y-6 animate-in fade-in text-xs">
+              {/* Header */}
+              <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="rounded-full bg-blue-100 px-3 py-0.5 font-bold text-blue-700 text-[11px]">
+                      {reviewingListing.category.name}
+                    </span>
+                    <span className="rounded-full bg-amber-100 px-3 py-0.5 font-bold text-amber-800 text-[11px]">
+                      STATUS: {reviewingListing.status}
+                    </span>
+                    {reviewingListing.referenceNumber && (
+                      <span className="text-slate-400 font-mono">
+                        Ref: {reviewingListing.referenceNumber}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900">
+                    {reviewingListing.title}
+                  </h3>
+                  <p className="text-slate-500">
+                    {reviewingListing.city}
+                    {reviewingListing.region ? `, ${reviewingListing.region}` : ""}
+                    {reviewingListing.address ? ` • ${reviewingListing.address}` : ""}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setReviewingListing(null)}
+                  className="rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-slate-200"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* 2-Column Details Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Left Column: Owner & Document Identity */}
+                <div className="space-y-4">
+                  {/* Owner Info Card */}
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
+                    <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-slate-800 font-bold text-sm">
+                      <User size={16} className="text-blue-600" />
+                      <h4>Owner & Seller Information</h4>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Full Name</span>
+                        <strong className="text-slate-900">
+                          {reviewingListing.seller.name}
+                        </strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Email</span>
+                        <span className="font-mono text-slate-700">
+                          {reviewingListing.seller.email}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Phone</span>
+                        <span className="font-medium text-slate-800">
+                          {reviewingListing.seller.phone || "Not specified"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Business / Trade Name</span>
+                        <span className="text-slate-800">
+                          {profile?.businessName || "Individual Owner"}
+                        </span>
+                      </div>
+                      {profile?.taxId && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Tax ID (TIN)</span>
+                          <span className="font-mono text-slate-700">
+                            {profile.taxId}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Registered Address</span>
+                        <span className="text-slate-700 text-right max-w-[200px] truncate">
+                          {profile?.address || reviewingListing.address || "—"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center pt-1 border-t border-slate-200">
+                        <span className="text-slate-500">Seller KYC Status</span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            profile?.status === "APPROVED"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {profile?.status || "PENDING"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Documents & Verification Card */}
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
+                    <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-slate-800 font-bold text-sm">
+                      <ShieldCheck size={16} className="text-emerald-600" />
+                      <h4>Identity & Legal Documentation</h4>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">National ID Number</span>
+                        <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
+                          {nationalId || "Not recorded"}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">National ID Document</span>
+                        {reviewingListing.idDocumentMediaId ? (
+                          <a
+                            href={`/api/media/${reviewingListing.idDocumentMediaId}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1 font-bold text-blue-600 hover:underline bg-white px-2.5 py-1 rounded-lg border border-blue-200"
+                          >
+                            <FileText size={13} /> View ID Document
+                          </a>
+                        ) : profile?.idDocumentUrl ? (
+                          <a
+                            href={profile.idDocumentUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1 font-bold text-blue-600 hover:underline bg-white px-2.5 py-1 rounded-lg border border-blue-200"
+                          >
+                            <FileText size={13} /> View KYC Document
+                          </a>
+                        ) : (
+                          <span className="text-rose-500 font-semibold">
+                            Not uploaded
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Title Deed / Ownership Documents */}
+                      <div className="space-y-1.5 pt-1 border-t border-slate-200">
+                        <span className="text-slate-500 font-semibold block">
+                          Legal Deeds & Ownership Certificates
+                        </span>
+                        {reviewingListing.documents &&
+                        reviewingListing.documents.length > 0 ? (
+                          <div className="space-y-1">
+                            {reviewingListing.documents.map((doc) => (
+                              <div
+                                key={doc.id}
+                                className="flex items-center justify-between rounded-lg bg-white p-2 border border-slate-200"
+                              >
+                                <div>
+                                  <p className="font-bold text-slate-900">
+                                    {doc.title}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 uppercase">
+                                    {doc.documentType}
+                                  </p>
+                                </div>
+                                <a
+                                  href={doc.fileUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="font-bold text-blue-600 hover:underline flex items-center gap-1 text-[11px]"
+                                >
+                                  <ExternalLink size={12} /> Open File
+                                </a>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-rose-600 text-[11px]">
+                            No ownership documents attached.
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Biometric Verification */}
+                      <div className="pt-1 border-t border-slate-200">
+                        {reviewingListing.biometricVerification ? (
+                          <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-2 text-emerald-800 border border-emerald-200">
+                            <Fingerprint size={18} className="text-emerald-600" />
+                            <div>
+                              <p className="font-bold">
+                                Passkey Fingerprint Signed on Device
+                              </p>
+                              <p className="text-[10px] text-emerald-600">
+                                Method:{" "}
+                                {reviewingListing.biometricVerification.method ||
+                                  "WebAuthn"}{" "}
+                                ·{" "}
+                                {new Date(
+                                  reviewingListing.biometricVerification.createdAt!,
+                                ).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 rounded-lg bg-amber-50 p-2 text-amber-800 border border-amber-200">
+                            <ShieldCheck size={18} className="text-amber-600" />
+                            <p className="text-[11px]">
+                              Standard authenticated session (No device passkey)
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Auction Terms, Entry Fee, & Photos */}
+                <div className="space-y-4">
+                  {/* Auction Terms Card */}
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
+                    <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-slate-800 font-bold text-sm">
+                      <Gavel size={16} className="text-blue-600" />
+                      <h4>Auction Pricing & Schedule</h4>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Starting Price</span>
+                        <strong className="text-base text-slate-900 font-black">
+                          {auc
+                            ? `${Number(auc.startingPrice).toLocaleString()} ETB`
+                            : "Not scheduled yet"}
+                        </strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Reserve Price</span>
+                        <span className="font-semibold text-slate-800">
+                          {auc?.reservePrice
+                            ? `${Number(auc.reservePrice).toLocaleString()} ETB`
+                            : "None (No Reserve)"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Min Bid Increment</span>
+                        <span className="font-semibold text-slate-800">
+                          {auc
+                            ? `${Number(auc.minBidIncrement).toLocaleString()} ETB`
+                            : "—"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Scheduled Starts At</span>
+                        <span className="font-medium text-slate-800">
+                          {auc ? new Date(auc.startAt).toLocaleString() : "—"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Scheduled Ends At</span>
+                        <span className="font-medium text-slate-800">
+                          {auc ? new Date(auc.endAt).toLocaleString() : "—"}
+                        </span>
+                      </div>
+                      {auc?.terms && (
+                        <div className="border-t border-slate-200 pt-1 text-slate-600 text-[11px]">
+                          <strong>Seller Terms:</strong> {auc.terms}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Entry Fee Payment Card */}
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                      <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
+                        <CreditCard size={16} className="text-emerald-600" />
+                        <h4>Listing Entry Fee Verification</h4>
+                      </div>
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+                          fee?.status === "CONFIRMED" ||
+                          reviewingListing.entryFeeStatus === "CONFIRMED"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        {fee?.status ||
+                          reviewingListing.entryFeeStatus ||
+                          "UNPAID"}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Fee Amount</span>
+                        <strong className="text-sm font-bold text-emerald-700">
+                          {fee
+                            ? `${Number(fee.amount).toLocaleString()} ${fee.currency || "ETB"}`
+                            : "Pending quotation"}
+                        </strong>
+                      </div>
+                      {fee?.ratePercent && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Fee Rate</span>
+                          <span className="text-slate-700">
+                            {fee.ratePercent}% of starting price
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Payment Method</span>
+                        <span className="font-semibold text-slate-800">
+                          {fee?.method || "BANK_TRANSFER"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">
+                          Bank / Transaction Reference
+                        </span>
+                        <span className="font-mono font-bold bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-900">
+                          {fee?.bankReference || fee?.txRef || "—"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Photos & Video Preview */}
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2">
+                    <h4 className="font-bold text-slate-800">
+                      Uploaded Photos & Media ({reviewingListing.images?.length || 0})
+                    </h4>
+                    {reviewingListing.images &&
+                    reviewingListing.images.length > 0 ? (
+                      <div className="grid grid-cols-4 gap-2">
+                        {reviewingListing.images.map((img, idx) => (
+                          <a
+                            key={idx}
+                            href={img.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="aspect-square rounded-lg overflow-hidden border border-slate-200 bg-white"
+                          >
+                            <img
+                              src={img.url}
+                              alt="Item"
+                              className="w-full h-full object-cover hover:scale-105 transition"
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-slate-400 text-[11px]">No photos uploaded.</p>
+                    )}
+
+                    {reviewingListing.videoUrl && (
+                      <div className="pt-2">
+                        <p className="font-bold text-slate-700 mb-1 flex items-center gap-1">
+                          <Video size={14} /> Item Video Walkthrough:
+                        </p>
+                        <video
+                          src={reviewingListing.videoUrl}
+                          controls
+                          className="w-full max-h-40 rounded-xl bg-black"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Item Description & Features */}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
+                <h4 className="font-bold text-slate-800">Item Description</h4>
+                <p className="text-slate-600 whitespace-pre-line leading-relaxed">
+                  {reviewingListing.description}
+                </p>
+                {reviewingListing.features &&
+                  reviewingListing.features.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-2">
+                      {reviewingListing.features.map((f, i) => (
+                        <span
+                          key={i}
+                          className="rounded-full bg-white border border-slate-200 px-2.5 py-0.5 text-[10px] font-medium text-slate-700"
+                        >
+                          {f}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+              </div>
+
+              {/* Rejection Note & Actions */}
+              <div className="border-t border-slate-200 pt-4 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Rejection Reason (Required only if rejecting this listing)
+                  </label>
+                  <input
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    placeholder="e.g. Unclear ownership deed, invalid national ID number, missing video..."
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs outline-none focus:border-blue-600"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      if (!rejectionReason.trim()) {
+                        alert("Please specify a reason for rejection.");
+                        return;
+                      }
+                      const formData = new FormData();
+                      formData.append("listingId", reviewingListing.id);
+                      formData.append("status", "REJECTED");
+                      formData.append("rejectionReason", rejectionReason);
+                      startTransition(async () => {
+                        const res = await reviewListingAction(formData);
+                        setActionMsg(res);
+                        setReviewingListing(null);
+                      });
+                    }}
+                    className="flex-1 rounded-xl border border-rose-200 py-3 font-bold text-rose-600 hover:bg-rose-50 transition"
+                  >
+                    Reject Listing
+                  </button>
+                  <button
+                    onClick={() => {
+                      const formData = new FormData();
+                      formData.append("listingId", reviewingListing.id);
+                      formData.append("status", "APPROVED");
+                      startTransition(async () => {
+                        const res = await reviewListingAction(formData);
+                        setActionMsg(res);
+                        setReviewingListing(null);
+                      });
+                    }}
+                    className="flex-2 rounded-xl bg-emerald-600 py-3 px-6 font-bold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition flex items-center justify-center gap-2"
+                  >
+                    <Gavel size={16} />
+                    Approve Full Listing & Launch to Live Bid
+                  </button>
+                </div>
               </div>
             </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Rejection Reason (if rejecting)
-              </label>
-              <input
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
-                placeholder="Reason for rejection..."
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none focus:border-blue-600"
-              />
-            </div>
-
-            <div className="flex items-center gap-3 pt-2 text-xs">
-              <button
-                onClick={() => {
-                  const formData = new FormData();
-                  formData.append("listingId", reviewingListing.id);
-                  formData.append("status", "REJECTED");
-                  formData.append("rejectionReason", rejectionReason);
-                  startTransition(async () => {
-                    const res = await reviewListingAction(formData);
-                    setActionMsg(res);
-                    setReviewingListing(null);
-                  });
-                }}
-                className="flex-1 rounded-xl border border-rose-200 py-2.5 font-bold text-rose-600 hover:bg-rose-50"
-              >
-                Reject
-              </button>
-              <button
-                onClick={() => {
-                  const formData = new FormData();
-                  formData.append("listingId", reviewingListing.id);
-                  formData.append("status", "APPROVED");
-                  startTransition(async () => {
-                    const res = await reviewListingAction(formData);
-                    setActionMsg(res);
-                    setReviewingListing(null);
-                  });
-                }}
-                className="flex-1 rounded-xl bg-blue-600 py-2.5 font-bold text-white hover:bg-blue-700"
-              >
-                Approve Listing
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ─────────────────── MODAL: VERIFY PAYMENT ─────────────────── */}
       {verifyingPayment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-5 animate-in fade-in">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <span className="font-bold text-blue-600">Verify Escrow Payment</span>
+              <span className="font-bold text-blue-600">
+                Verify Escrow Payment
+              </span>
               <button onClick={() => setVerifyingPayment(null)}>
                 <X size={18} />
               </button>
@@ -1516,7 +2100,9 @@ export function AdminDashboardClient({
               </div>
               <div>
                 <span className="text-slate-400 block">Reference No.</span>
-                <span className="font-mono text-sm font-bold">{verifyingPayment.transactionRef}</span>
+                <span className="font-mono text-sm font-bold">
+                  {verifyingPayment.transactionRef}
+                </span>
               </div>
               <div>
                 <span className="text-slate-400 block">Deposit Amount</span>
@@ -1581,15 +2167,21 @@ export function AdminDashboardClient({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-5 animate-in fade-in">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <span className="font-bold text-blue-600">Resolve Dispute Ticket</span>
+              <span className="font-bold text-blue-600">
+                Resolve Dispute Ticket
+              </span>
               <button onClick={() => setResolvingTicket(null)}>
                 <X size={18} />
               </button>
             </div>
 
             <div className="space-y-1 text-xs">
-              <span className="font-mono font-bold text-blue-600">{resolvingTicket.number}</span>
-              <h4 className="font-bold text-slate-900">{resolvingTicket.subject}</h4>
+              <span className="font-mono font-bold text-blue-600">
+                {resolvingTicket.number}
+              </span>
+              <h4 className="font-bold text-slate-900">
+                {resolvingTicket.subject}
+              </h4>
               <p className="text-slate-600">{resolvingTicket.description}</p>
             </div>
 

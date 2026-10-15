@@ -30,12 +30,15 @@ import {
 import { ETHomeLogo } from "./ethome-brand";
 import { LogoutButton } from "./logout-button";
 import { ThemeToggle } from "./theme-toggle";
+import { PaymentMethodDialog } from "./payment-method-dialog";
+import { WorkflowSuccessDialog } from "./workflow-success-dialog";
+import { AnimatedInput } from "./animated-input";
 import {
   submitSellerKycAction,
-  createListingAction,
-  createAuctionAction,
   cancelAuctionAction,
 } from "@/app/actions/seller";
+import { ListingWizard } from "./listing-wizard";
+import { auctionStatusMeta, listingStatusMeta, TONE_CLASS } from "@/lib/status-labels";
 
 type SellerUser = {
   name: string;
@@ -72,6 +75,7 @@ type Listing = {
   city?: string;
   region?: string;
   status?: string;
+  rejectionReason?: string | null;
   referenceNumber?: string;
   category?: ListingCategory;
   images?: ListingImage[];
@@ -91,6 +95,12 @@ type Auction = {
   status?: string;
   startingPrice?: number | string;
   currentHighestBid?: number | string;
+  entryFeeStatus?: string;
+  entryFees?: Array<{
+    status: string;
+    amount: number | string;
+    currency: string;
+  }>;
   bids?: Bid[];
   listing?: {
     title?: string;
@@ -164,10 +174,27 @@ export function ProviderDashboardClient({
   const [showAuctionModal, setShowAuctionModal] = useState(false);
   const [selectedListingForAuction, setSelectedListingForAuction] = useState<Listing | null>(null);
 
+  // Payment and success dialogs
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [successDialogData, setSuccessDialogData] = useState<{
+    title: string;
+    message: string;
+    nextStep?: string;
+    icon?: "success" | "info" | "warning";
+  } | null>(null);
+
   // Form messages
   const [kycMsg, setKycMsg] = useState<{ error?: string; success?: string } | null>(null);
-  const [listingMsg, setListingMsg] = useState<{ error?: string; success?: string } | null>(null);
-  const [auctionMsg, setAuctionMsg] = useState<{ error?: string; success?: string } | null>(null);
+
+  // KYC form state
+  const [kycForm, setKycForm] = useState({
+    nationalIdNumber: sellerProfile?.nationalIdNumber || "",
+    businessName: sellerProfile?.businessName || "",
+    taxId: sellerProfile?.taxId || "",
+    address: sellerProfile?.address || "",
+    idDocumentUrl: sellerProfile?.idDocumentUrl || "",
+  });
 
   // Active category selection in listing creation
   const [selectedCatSlug, setSelectedCatSlug] = useState<string>("homes");
@@ -647,9 +674,7 @@ export function ProviderDashboardClient({
                           alt={l.title}
                           className="h-full w-full object-cover"
                         />
-                        <span className="absolute top-3 left-3 rounded-md bg-slate-900/80 px-2 py-0.5 text-xs font-semibold text-white backdrop-blur-sm">
-                          {l.status}
-                        </span>
+                        <span className={`absolute top-3 left-3 rounded-md px-2 py-0.5 text-xs font-semibold ${TONE_CLASS[listingStatusMeta(l.status || "DRAFT").tone]}`}>  {listingStatusMeta(l.status || "DRAFT").label}</span>
                       </div>
 
                       <div className="p-5 space-y-2">
@@ -662,6 +687,7 @@ export function ProviderDashboardClient({
                         <p className="text-xs text-slate-500 line-clamp-2">
                           {l.description}
                         </p>
+                        {l.status === "REJECTED" && l.rejectionReason && (  <p className="rounded-lg bg-rose-50 p-2 text-[11px] text-rose-700">Admin: {l.rejectionReason}</p>)}
                         <div className="flex items-center gap-1 text-[11px] text-slate-400">
                           <MapPin size={12} /> {l.city}, {l.region}
                         </div>
@@ -672,15 +698,17 @@ export function ProviderDashboardClient({
                       <span className="text-slate-500 font-mono text-[11px]">
                         Ref: {l.referenceNumber || "ETH-LST"}
                       </span>
-                      <button
-                        onClick={() => {
-                          setSelectedListingForAuction(l);
-                          setShowAuctionModal(true);
-                        }}
-                        className="rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-700"
-                      >
-                        Create Auction &rarr;
-                      </button>
+                      {(l.status === "DRAFT" || l.status === "REJECTED") && (
+                        <button
+                          onClick={() => {
+                            setSelectedListingForAuction(l);
+                            setShowAuctionModal(true);
+                          }}
+                          className="rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-700"
+                        >
+                          Create Auction &rarr;
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -716,6 +744,7 @@ export function ProviderDashboardClient({
                       <th className="pb-3 font-semibold">Starting Price</th>
                       <th className="pb-3 font-semibold">Current High Bid</th>
                       <th className="pb-3 font-semibold">Status</th>
+                      <th className="pb-3 font-semibold">Entry Fee</th>
                       <th className="pb-3 font-semibold">Dates</th>
                       <th className="pb-3 font-semibold text-right">Actions</th>
                     </tr>
@@ -733,17 +762,18 @@ export function ProviderDashboardClient({
                           $ {Number(auc.currentHighestBid || 0).toLocaleString()}
                         </td>
                         <td className="py-3">
-                          <span
-                            className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
-                              auc.status === "ACTIVE"
-                                ? "bg-emerald-50 text-emerald-700"
-                                : auc.status === "SCHEDULED"
-                                ? "bg-blue-50 text-blue-700"
-                                : "bg-slate-100 text-slate-700"
-                            }`}
-                          >
-                            {auc.status}
+                          <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${TONE_CLASS[auctionStatusMeta(auc.status || "DRAFT").tone]}`}>  {auctionStatusMeta(auc.status || "DRAFT").label}</span>
+                        </td>
+                        <td className="py-3">
+                          <span className="font-semibold">
+                            {auc.entryFees?.[0]?.status ?? auc.entryFeeStatus ?? "UNPAID"}
                           </span>
+                          {auc.entryFees?.[0] && (
+                            <span className="block text-slate-500">
+                              {Number(auc.entryFees[0].amount).toLocaleString()}{" "}
+                              {auc.entryFees[0].currency}
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 text-slate-500">
                           {auc.startAt
@@ -754,7 +784,17 @@ export function ProviderDashboardClient({
                             : "N/A"}
                         </td>
                         <td className="py-3 text-right">
-                          {auc.status === "SCHEDULED" && auc.bids?.length === 0 && (
+                          {auc.status === "PENDING_APPROVAL" && auc.listing?.status === "APPROVED" && (auc.entryFees?.[0]?.status === "UNPAID" || auc.entryFees?.[0]?.status === "PENDING") && (
+                            <button
+                              onClick={() => {
+                                setShowPaymentDialog(true);
+                              }}
+                              className="rounded-lg bg-emerald-600 px-3 py-1.5 font-semibold text-white hover:bg-emerald-700 mr-2 transition shadow-lg shadow-emerald-500/30"
+                            >
+                              Pay Entry Fee
+                            </button>
+                          )}
+                          {(auc.status === "PENDING_APPROVAL" || auc.status === "SCHEDULED") && auc.bids?.length === 0 && (
                             <button
                               onClick={() => {
                                 startTransition(async () => {
@@ -909,61 +949,74 @@ export function ProviderDashboardClient({
                   const formData = new FormData(e.currentTarget);
                   startTransition(async () => {
                     const res = await submitSellerKycAction(formData);
-                    if (res.success) setKycMsg({ success: res.message });
-                    else setKycMsg({ error: res.error });
+                    if (res.success) {
+                      setKycMsg({ success: res.message });
+                      setSuccessDialogData({
+                        title: "KYC Submitted Successfully",
+                        message: "Your identity verification has been submitted for review. An administrator will review your documents within 1-2 business days.",
+                        nextStep: "Wait for admin approval",
+                        icon: "success",
+                      });
+                      setShowSuccessDialog(true);
+                    } else {
+                      setKycMsg({ error: res.error });
+                    }
                   });
                 }}
                 className="space-y-4 text-xs"
               >
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    National ID / Passport Number *
-                  </label>
-                  <input
-                    name="nationalIdNumber"
-                    defaultValue={sellerProfile?.nationalIdNumber || ""}
-                    required
-                    placeholder="e.g. ETH-NAT-890241"
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                  />
-                </div>
+                <AnimatedInput
+                  label="National ID / Passport Number"
+                  name="nationalIdNumber"
+                  value={kycForm.nationalIdNumber}
+                  onChange={(v) => setKycForm({ ...kycForm, nationalIdNumber: v })}
+                  required
+                  placeholder="e.g. ETH-NAT-890241"
+                  minLength={4}
+                  maxLength={50}
+                  validate={(v) => {
+                    if (!/^[A-Z0-9-]+$/.test(v)) {
+                      return { valid: false, message: "Use uppercase letters, numbers, and hyphens only" };
+                    }
+                    return { valid: true };
+                  }}
+                />
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Business / Entity Legal Name (Optional)
-                  </label>
-                  <input
-                    name="businessName"
-                    defaultValue={sellerProfile?.businessName || ""}
-                    placeholder="e.g. Prime Estate Developers LLC"
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                  />
-                </div>
+                <AnimatedInput
+                  label="Business / Entity Legal Name (Optional)"
+                  name="businessName"
+                  value={kycForm.businessName}
+                  onChange={(v) => setKycForm({ ...kycForm, businessName: v })}
+                  placeholder="e.g. Prime Estate Developers LLC"
+                  maxLength={200}
+                />
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Tax Identification Number (TIN)
-                  </label>
-                  <input
-                    name="taxId"
-                    defaultValue={sellerProfile?.taxId || ""}
-                    placeholder="e.g. TIN-00984128"
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                  />
-                </div>
+                <AnimatedInput
+                  label="Tax Identification Number (TIN)"
+                  name="taxId"
+                  value={kycForm.taxId}
+                  onChange={(v) => setKycForm({ ...kycForm, taxId: v })}
+                  placeholder="e.g. TAX-987654321"
+                  minLength={5}
+                  maxLength={30}
+                  validate={(v) => {
+                    if (v && !/^[A-Z0-9-]+$/.test(v)) {
+                      return { valid: false, message: "Use uppercase letters, numbers, and hyphens only" };
+                    }
+                    return { valid: true };
+                  }}
+                />
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Physical Operating Address *
-                  </label>
-                  <input
-                    name="address"
-                    defaultValue={sellerProfile?.address || ""}
-                    required
-                    placeholder="e.g. Kazanchis Financial District, Addis Ababa"
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                  />
-                </div>
+                <AnimatedInput
+                  label="Physical Address"
+                  name="address"
+                  value={kycForm.address}
+                  onChange={(v) => setKycForm({ ...kycForm, address: v })}
+                  placeholder="Street, City, Region"
+                  required
+                  minLength={10}
+                  maxLength={500}
+                />
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
@@ -1033,357 +1086,54 @@ export function ProviderDashboardClient({
         </main>
       </div>
 
-      {/* ─────────────────── MODAL: ADD AUCTION ITEM ─────────────────── */}
-      {showListingModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl space-y-5 animate-in fade-in">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2 font-bold text-blue-600">
-                <PackagePlus size={20} />
-                <span>Add New Auction Item (Listing)</span>
-              </div>
-              <button
-                onClick={() => setShowListingModal(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {listingMsg && (
-              <div
-                className={`rounded-xl p-3 text-xs ${
-                  listingMsg.error
-                    ? "bg-rose-50 text-rose-700"
-                    : "bg-emerald-50 text-emerald-700"
-                }`}
-              >
-                {listingMsg.error || listingMsg.success}
-              </div>
-            )}
-
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const formData = new FormData(e.currentTarget);
-                startTransition(async () => {
-                  const res = await createListingAction(formData);
-                  if (res.success) {
-                    setListingMsg({ success: res.message });
-                    setTimeout(() => {
-                      setShowListingModal(false);
-                      setListingMsg(null);
-                    }, 1800);
-                  } else {
-                    setListingMsg({ error: res.error });
-                  }
-                });
-              }}
-              className="space-y-4 text-xs"
-            >
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Category *
-                </label>
-                <select
-                  name="categoryId"
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                >
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.slug})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Listing Title *
-                </label>
-                <input
-                  name="title"
-                  required
-                  placeholder="e.g. Modern Family House, Toyota Land Cruiser..."
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    City *
-                  </label>
-                  <input
-                    name="city"
-                    required
-                    placeholder="e.g. Addis Ababa"
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Region / Subcity
-                  </label>
-                  <input
-                    name="region"
-                    placeholder="e.g. Bole"
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Physical Address
-                </label>
-                <input
-                  name="address"
-                  placeholder="Street / Plot details"
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Reference / Parcel / VIN Number
-                </label>
-                <input
-                  name="referenceNumber"
-                  placeholder="e.g. ETH-HOM-2026-001"
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Detailed Description *
-                </label>
-                <textarea
-                  name="description"
-                  rows={3}
-                  required
-                  placeholder="Describe the asset, dimensions, legal conditions, construction..."
-                  className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Key Features / Specifications (Comma separated)
-                </label>
-                <input
-                  name="features"
-                  placeholder="3 Beds, 2 Baths, 250 m², Backup Generator, Garden"
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Image URLs (One per line)
-                </label>
-                <textarea
-                  name="imageUrls"
-                  rows={2}
-                  placeholder="https://images.unsplash.com/photo-..."
-                  className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Ownership Document Link (Title Deed / Libre)
-                </label>
-                <input
-                  name="docUrl"
-                  placeholder="https://..."
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowListingModal(false)}
-                  className="flex-1 rounded-xl border border-slate-200 py-3 font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="flex-1 rounded-xl bg-blue-600 py-3 font-bold text-white shadow hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {isPending ? "Creating..." : "Save Auction Item"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {(showListingModal || showAuctionModal) && (
+        <ListingWizard
+          categories={categories}
+          listings={listings}
+          startStep={showAuctionModal ? 2 : 1}
+          initialListingId={selectedListingForAuction?.id ?? null}
+          onClose={() => {
+            setShowListingModal(false);
+            setShowAuctionModal(false);
+            setSelectedListingForAuction(null);
+          }}
+        />
       )}
 
-      {/* ─────────────────── MODAL: SCHEDULE AUCTION ─────────────────── */}
-      {showAuctionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl space-y-5 animate-in fade-in">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2 font-bold text-blue-600">
-                <Gavel size={20} />
-                <span>Create & Schedule Auction</span>
-              </div>
-              <button
-                onClick={() => setShowAuctionModal(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {auctionMsg && (
-              <div
-                className={`rounded-xl p-3 text-xs ${
-                  auctionMsg.error
-                    ? "bg-rose-50 text-rose-700"
-                    : "bg-emerald-50 text-emerald-700"
-                }`}
-              >
-                {auctionMsg.error || auctionMsg.success}
-              </div>
-            )}
-
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const formData = new FormData(e.currentTarget);
-                startTransition(async () => {
-                  const res = await createAuctionAction(formData);
-                  if (res.success) {
-                    setAuctionMsg({ success: res.message });
-                    setTimeout(() => {
-                      setShowAuctionModal(false);
-                      setAuctionMsg(null);
-                    }, 1800);
-                  } else {
-                    setAuctionMsg({ error: res.error });
-                  }
-                });
-              }}
-              className="space-y-4 text-xs"
-            >
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Select Item to Auction *
-                </label>
-                <select
-                  name="listingId"
-                  defaultValue={selectedListingForAuction?.id}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                >
-                  {listings.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.title} ({l.city})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Starting Price ($ USD) *
-                  </label>
-                  <input
-                    type="number"
-                    name="startingPrice"
-                    required
-                    placeholder="e.g. 50000"
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Min Bid Increment ($ USD) *
-                  </label>
-                  <input
-                    type="number"
-                    name="minBidIncrement"
-                    required
-                    placeholder="e.g. 1000"
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Confidential Reserve Price ($ USD, Optional)
-                </label>
-                <input
-                  type="number"
-                  name="reservePrice"
-                  placeholder="Minimum price you agree to sell for"
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Start Date & Time *
-                  </label>
-                  <input
-                    type="datetime-local"
-                    name="startAt"
-                    required
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Closing Date & Time *
-                  </label>
-                  <input
-                    type="datetime-local"
-                    name="endAt"
-                    required
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Auction Closing Terms & Earnest Money Deposit Rules
-                </label>
-                <textarea
-                  name="terms"
-                  rows={2}
-                  placeholder="e.g. 10% earnest money deposit required within 72 hours of auction closing..."
-                  className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAuctionModal(false)}
-                  className="flex-1 rounded-xl border border-slate-200 py-3 font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="flex-1 rounded-xl bg-blue-600 py-3 font-bold text-white shadow hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {isPending ? "Scheduling..." : "Launch Auction"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {/* Payment Method Dialog */}
+      {showPaymentDialog && (
+        <PaymentMethodDialog
+          isOpen={showPaymentDialog}
+          onClose={() => setShowPaymentDialog(false)}
+          onMethodSelect={(method) => {
+            // Handle payment method selection
+            console.log("Selected payment method:", method);
+            setSuccessDialogData({
+              title: "Payment Initiated",
+              message: `You selected ${method.toUpperCase()} payment. Please complete the payment process.`,
+              nextStep: "Wait for payment confirmation",
+              icon: "info",
+            });
+            setShowSuccessDialog(true);
+          }}
+          amount={5000}
+          currency="ETB"
+        />
       )}
+
+      {/* Success Dialog */}
+      {showSuccessDialog && successDialogData && (
+        <WorkflowSuccessDialog
+          isOpen={showSuccessDialog}
+          onClose={() => setShowSuccessDialog(false)}
+          title={successDialogData.title}
+          message={successDialogData.message}
+          nextStep={successDialogData.nextStep}
+          icon={successDialogData.icon}
+        />
+      )}
+
+
     </div>
   );
 }
