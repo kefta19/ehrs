@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { ETHomeLogo } from "./ethome-brand";
 import { LogoutButton } from "./logout-button";
+import { ThemeToggle } from "./theme-toggle";
 import {
   verifySellerKycAction,
   reviewListingAction,
@@ -133,6 +134,7 @@ type AdminListing = {
       status: string;
       amount: number | string;
       currency: string;
+      ratePercent?: number | string | null;
       method?: string | null;
       txRef?: string | null;
       bankReference?: string | null;
@@ -298,7 +300,7 @@ export function AdminDashboardClient({
   });
 
   return (
-    <div className="flex min-h-screen bg-[#f8fafc] text-slate-800">
+    <div className="flex min-h-screen bg-background text-slate-800 dark:text-slate-100 transition-colors">
       {/* ─────────────────── LEFT SIDEBAR ─────────────────── */}
       <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-[#132238] bg-[#0A192F] text-slate-300">
         <div className="flex h-16 items-center px-6 border-b border-[#132644]">
@@ -502,12 +504,12 @@ export function AdminDashboardClient({
       {/* ─────────────────── MAIN VIEWPORT ─────────────────── */}
       <div className="flex flex-1 flex-col pl-64">
         {/* Top Navbar */}
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-8 backdrop-blur-sm">
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#0c1220]/95 px-8 backdrop-blur-sm transition-colors">
           <div className="flex items-center gap-3">
-            <span className="rounded-md bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">
+            <span className="rounded-md bg-blue-100 dark:bg-blue-950/60 px-2.5 py-1 text-xs font-bold text-blue-700 dark:text-blue-300">
               Admin Portal
             </span>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
               {activeTab === "dashboard" &&
                 "Platform Operations & Intelligence"}
               {activeTab === "users" && "User Directory & Access Control"}
@@ -524,15 +526,18 @@ export function AdminDashboardClient({
             </h1>
           </div>
 
-          <div className="flex items-center gap-3 border-l border-slate-200 pl-4">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 font-bold text-white text-sm">
-              AD
-            </div>
-            <div className="text-left text-xs">
-              <div className="font-bold text-slate-900 leading-tight">
-                {user.name}
+          <div className="flex items-center gap-4">
+            <ThemeToggle />
+            <div className="flex items-center gap-3 border-l border-slate-200 dark:border-slate-700 pl-4">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 font-bold text-white text-sm">
+                AD
               </div>
-              <div className="text-slate-500">System Administrator</div>
+              <div className="text-left text-xs">
+                <div className="font-bold text-slate-900 dark:text-white leading-tight">
+                  {user.name}
+                </div>
+                <div className="text-slate-500 dark:text-slate-400">System Administrator</div>
+              </div>
             </div>
           </div>
         </header>

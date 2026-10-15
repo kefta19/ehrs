@@ -98,7 +98,7 @@ export function AnimatedInput({
 
   return (
     <div className="relative">
-      <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
         {label}
         {required && <span className="text-rose-500 ml-1">*</span>}
       </label>
@@ -111,16 +111,16 @@ export function AnimatedInput({
           onBlur={handleBlur}
           disabled={disabled}
           placeholder={placeholder}
-          className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-all duration-300 placeholder:text-slate-400 ${
+          className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-all duration-300 placeholder:text-slate-400 dark:placeholder:text-slate-500 ${
             disabled
-              ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-              : "bg-white text-slate-900"
+              ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed"
+              : "bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
           } ${
             touched && isValid === false
-              ? "border-rose-300 focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
+              ? "border-rose-300 dark:border-rose-600 focus:border-rose-500 focus:ring-2 focus:ring-rose-100 dark:focus:ring-rose-950"
               : touched && isValid === true
-                ? "border-emerald-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                : "border-slate-200 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                ? "border-emerald-300 dark:border-emerald-600 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-950"
+                : "border-slate-200 dark:border-slate-700 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900"
           }`}
         />
 

@@ -92,7 +92,7 @@ export function AuthForm({ mode = "login", redirectUrl }: { mode?: Mode; redirec
   }
 
   const inputClass =
-    "mt-1.5 w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100 placeholder:text-slate-400";
+    "mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm text-slate-900 dark:text-white outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 placeholder:text-slate-400 dark:placeholder:text-slate-500";
 
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const phonePattern = /^\+?[1-9]\d{1,14}$/;
@@ -101,21 +101,21 @@ export function AuthForm({ mode = "login", redirectUrl }: { mode?: Mode; redirec
     <div className="space-y-6">
       <form
         onSubmit={onSubmit}
-        className="space-y-6 rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white to-blue-50/30 p-8 shadow-xl"
+        className="space-y-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-950 p-8 shadow-xl text-slate-800 dark:text-slate-100 transition-colors"
       >
         {mode === "register" && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white font-bold text-sm">1</div>
-                <span className="text-sm font-semibold text-slate-700">Account Setup</span>
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Account Setup</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-slate-500 font-bold text-sm">2</div>
-                <span className="text-sm font-semibold text-slate-400">KYC Verification</span>
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-bold text-sm">2</div>
+                <span className="text-sm font-semibold text-slate-400 dark:text-slate-500">KYC Verification</span>
               </div>
             </div>
-            <div className="h-1 w-full bg-slate-200 rounded-full overflow-hidden">
+            <div className="h-1 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
               <div className="h-full w-1/2 bg-blue-600 rounded-full transition-all duration-500"></div>
             </div>
           </div>
@@ -125,12 +125,12 @@ export function AuthForm({ mode = "login", redirectUrl }: { mode?: Mode; redirec
           <div className="flex justify-center mb-3">
             <ETHomeLogo size="md" href="/" />
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
             {mode === "login"
               ? `Sign in to ${companyName}`
               : "Create your account"}
           </h2>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             {mode === "login"
               ? "Access your live auctions, bid progression, and escrow payments."
               : "Register as a buyer to bid or a seller to list property auctions."}
@@ -272,8 +272,8 @@ export function AuthForm({ mode = "login", redirectUrl }: { mode?: Mode; redirec
 
       {/* Quick Demo Access Pills for 3 Roles */}
       {mode === "login" && (
-        <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 text-xs space-y-3">
-          <span className="font-bold text-slate-700 block text-center text-[11px] uppercase tracking-wider">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 p-5 text-xs space-y-3">
+          <span className="font-bold text-slate-700 dark:text-slate-300 block text-center text-[11px] uppercase tracking-wider">
             Quick One-Click Demo Role Logins
           </span>
 
@@ -283,17 +283,17 @@ export function AuthForm({ mode = "login", redirectUrl }: { mode?: Mode; redirec
               onClick={() =>
                 handleLoginWith("buyer@propertyauction.et", "Buyer@1234")
               }
-              className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-2.5 text-left hover:border-blue-400 hover:shadow-sm transition"
+              className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-left hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition"
             >
               <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
                   <User size={14} />
                 </div>
                 <div>
-                  <strong className="block text-slate-800 text-[11px]">
+                  <strong className="block text-slate-800 dark:text-slate-200 text-[11px]">
                     Buyer
                   </strong>
-                  <span className="text-[10px] text-slate-400">Getachew</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500">Getachew</span>
                 </div>
               </div>
               <ArrowRight size={12} className="text-slate-400" />
@@ -304,17 +304,17 @@ export function AuthForm({ mode = "login", redirectUrl }: { mode?: Mode; redirec
               onClick={() =>
                 handleLoginWith("seller@propertyauction.et", "Seller@1234")
               }
-              className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-2.5 text-left hover:border-blue-400 hover:shadow-sm transition"
+              className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-left hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition"
             >
               <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
                   <Building2 size={14} />
                 </div>
                 <div>
-                  <strong className="block text-slate-800 text-[11px]">
+                  <strong className="block text-slate-800 dark:text-slate-200 text-[11px]">
                     Seller
                   </strong>
-                  <span className="text-[10px] text-slate-400">Dawit</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500">Dawit</span>
                 </div>
               </div>
               <ArrowRight size={12} className="text-slate-400" />
@@ -325,17 +325,17 @@ export function AuthForm({ mode = "login", redirectUrl }: { mode?: Mode; redirec
               onClick={() =>
                 handleLoginWith("admin@propertyauction.et", "Admin@1234")
               }
-              className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-2.5 text-left hover:border-blue-400 hover:shadow-sm transition"
+              className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-left hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition"
             >
               <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400">
                   <Shield size={14} />
                 </div>
                 <div>
-                  <strong className="block text-slate-800 text-[11px]">
+                  <strong className="block text-slate-800 dark:text-slate-200 text-[11px]">
                     Admin
                   </strong>
-                  <span className="text-[10px] text-slate-400">Executive</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500">Executive</span>
                 </div>
               </div>
               <ArrowRight size={12} className="text-slate-400" />

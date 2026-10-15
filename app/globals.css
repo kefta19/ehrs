@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, [data-theme="midnight"], [data-theme="midnight"] *, .dark, .dark *));
+
 :root {
   /* Defaults; the tenant's values are set inline on <html> by layout.tsx */
   --primary-color: #2563eb;
@@ -31,16 +33,32 @@
   --font-mono: var(--font-geist-mono);
 }
 
-html[data-theme="dark"] {
-  --foreground: #f1f5f9;
+html[data-theme="dark"],
+html.dark:not(.theme-midnight) {
+  --background: #090d16 !important;
+  --foreground: #f1f5f9 !important;
+  color-scheme: dark;
 }
 
-html[data-theme="midnight"] {
-  --foreground: #e2e8f0;
+html[data-theme="midnight"],
+html.theme-midnight {
+  --background: #070d1e !important;
+  --foreground: #e2e8f0 !important;
+  color-scheme: dark;
 }
 
-html[data-theme="warm"] {
-  --foreground: #433b32;
+html[data-theme="warm"],
+html.theme-warm {
+  --background: #fbf8f2 !important;
+  --foreground: #382e25 !important;
+  color-scheme: light;
+}
+
+html[data-theme="light"],
+html.theme-light {
+  --background: var(--background-color, #f8fafc) !important;
+  --foreground: var(--text-color, #1e293b) !important;
+  color-scheme: light;
 }
 
 html {
@@ -51,6 +69,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 * {

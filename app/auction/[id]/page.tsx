@@ -49,10 +49,10 @@ export default async function AuctionDetailPage({
 
   if (!auction) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-background text-foreground transition-colors">
         <div className="text-center">
-          <h1 className="text-2xl font-bold">Auction Not Found</h1>
-          <p className="text-slate-600">This auction does not exist.</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Auction Not Found</h1>
+          <p className="text-slate-600 dark:text-slate-400">This auction does not exist.</p>
         </div>
       </div>
     );
@@ -61,10 +61,10 @@ export default async function AuctionDetailPage({
   // Only show approved auctions to public
   if (auction.listing.status !== "APPROVED") {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-background text-foreground transition-colors">
         <div className="text-center">
-          <h1 className="text-2xl font-bold">Auction Not Available</h1>
-          <p className="text-slate-600">This auction is not yet approved for public viewing.</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Auction Not Available</h1>
+          <p className="text-slate-600 dark:text-slate-400">This auction is not yet approved for public viewing.</p>
         </div>
       </div>
     );

@@ -52,7 +52,22 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         // fallback
       }
     }, 0);
-    return () => window.clearTimeout(timeoutId);
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === THEME_STORAGE_KEY && e.newValue) {
+        const val = e.newValue as Theme;
+        if (["light", "dark", "midnight", "warm"].includes(val)) {
+          setThemeState(val);
+          applyThemeClass(val);
+        }
+      }
+    };
+    window.addEventListener("storage", onStorage);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   function setTheme(newTheme: Theme) {

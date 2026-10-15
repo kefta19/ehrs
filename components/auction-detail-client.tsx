@@ -130,7 +130,7 @@ export function AuctionDetailClient({
   const minRequired = currentBid > 0 ? currentBid + minBidIncrement : startingPrice;
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background text-foreground transition-colors">
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
@@ -139,16 +139,16 @@ export function AuctionDetailClient({
           }`}>
             {auction.status}
           </span>
-          <h1 className="mt-4 text-4xl font-bold">{auction.listing.title}</h1>
-          <p className="mt-2 text-lg text-slate-600">{auction.listing.description}</p>
+          <h1 className="mt-4 text-4xl font-bold text-slate-900 dark:text-white">{auction.listing.title}</h1>
+          <p className="mt-2 text-lg text-slate-600 dark:text-slate-300">{auction.listing.description}</p>
         </div>
 
         <div className="grid gap-8 lg:grid-cols-3">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Images */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-bold mb-4">Photos</h2>
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow p-6 text-slate-800 dark:text-slate-100">
+              <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">Photos</h2>
               {auction.listing.images.length > 0 ? (
                 <div className="grid grid-cols-2 gap-4">
                   {auction.listing.images.map((image: any) => (
