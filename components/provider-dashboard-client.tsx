@@ -72,6 +72,7 @@ type Listing = {
   city?: string;
   region?: string;
   status?: string;
+  rejectionReason?: string | null;
   referenceNumber?: string;
   category?: ListingCategory;
   images?: ListingImage[];
@@ -199,6 +200,9 @@ export function ProviderDashboardClient({
   );
 
   const kycStatus = sellerProfile?.status || "NOT_SUBMITTED";
+  const approvedListings = listings.filter(
+    (listing) => listing.status === "APPROVED",
+  );
 
   return (
     <div className="flex min-h-screen bg-[#f8fafc] dark:bg-[#080d1a] text-slate-800 dark:text-slate-100 transition-colors">
@@ -648,7 +652,9 @@ export function ProviderDashboardClient({
                           className="h-full w-full object-cover"
                         />
                         <span className="absolute top-3 left-3 rounded-md bg-slate-900/80 px-2 py-0.5 text-xs font-semibold text-white backdrop-blur-sm">
-                          {l.status}
+                          {l.status === "PENDING_REVIEW"
+                            ? "Awaiting admin review"
+                            : l.status}
                         </span>
                       </div>
 
@@ -665,6 +671,11 @@ export function ProviderDashboardClient({
                         <div className="flex items-center gap-1 text-[11px] text-slate-400">
                           <MapPin size={12} /> {l.city}, {l.region}
                         </div>
+                        {l.status === "REJECTED" && l.rejectionReason && (
+                          <p className="text-xs text-rose-600">
+                            {l.rejectionReason}
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -672,15 +683,23 @@ export function ProviderDashboardClient({
                       <span className="text-slate-500 font-mono text-[11px]">
                         Ref: {l.referenceNumber || "ETH-LST"}
                       </span>
-                      <button
-                        onClick={() => {
-                          setSelectedListingForAuction(l);
-                          setShowAuctionModal(true);
-                        }}
-                        className="rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-700"
-                      >
-                        Create Auction &rarr;
-                      </button>
+                      {l.status === "APPROVED" ? (
+                        <button
+                          onClick={() => {
+                            setSelectedListingForAuction(l);
+                            setShowAuctionModal(true);
+                          }}
+                          className="rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-700"
+                        >
+                          Create Auction &rarr;
+                        </button>
+                      ) : (
+                        <span className="text-[11px] font-semibold text-slate-500">
+                          {l.status === "PENDING_REVIEW"
+                            ? "Awaiting admin review"
+                            : l.status}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1193,13 +1212,32 @@ export function ProviderDashboardClient({
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Ownership Document Link (Title Deed / Libre)
+                  Ownership Document Link (Title Deed / Libre) *
                 </label>
                 <input
                   name="docUrl"
+                  required
                   placeholder="https://..."
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
                 />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Ownership Document Type *
+                </label>
+                <select
+                  name="docType"
+                  required
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
+                >
+                  <option value="TITLE_DEED">Title Deed</option>
+                  <option value="OWNERSHIP_CARD">
+                    Vehicle Libre / Ownership Card
+                  </option>
+                  <option value="LEASE_CERTIFICATE">Lease Certificate</option>
+                  <option value="OTHER">Other ownership proof</option>
+                </select>
               </div>
 
               <div className="flex items-center gap-3 pt-2">
@@ -1275,17 +1313,30 @@ export function ProviderDashboardClient({
                 <label className="block font-semibold text-slate-700 mb-1">
                   Select Item to Auction *
                 </label>
-                <select
-                  name="listingId"
-                  defaultValue={selectedListingForAuction?.id}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                >
-                  {listings.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.title} ({l.city})
-                    </option>
-                  ))}
-                </select>
+                {approvedListings.length > 0 ? (
+                  <select
+                    name="listingId"
+                    defaultValue={
+                      approvedListings.some(
+                        (listing) =>
+                          listing.id === selectedListingForAuction?.id,
+                      )
+                        ? selectedListingForAuction?.id
+                        : approvedListings[0].id
+                    }
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
+                  >
+                    {approvedListings.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.title} ({l.city})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-700">
+                    No approved listings are available to schedule for auction.
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1374,7 +1425,7 @@ export function ProviderDashboardClient({
                 </button>
                 <button
                   type="submit"
-                  disabled={isPending}
+                  disabled={isPending || approvedListings.length === 0}
                   className="flex-1 rounded-xl bg-blue-600 py-3 font-bold text-white shadow hover:bg-blue-700 disabled:opacity-50"
                 >
                   {isPending ? "Scheduling..." : "Launch Auction"}

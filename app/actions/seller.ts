@@ -64,6 +64,9 @@ export async function submitSellerKycAction(formData: FormData) {
 export async function createListingAction(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Unauthorized" };
+  if (user.role !== "SELLER" && user.role !== "ADMIN") {
+    return { success: false, error: "Only sellers can create listings." };
+  }
 
   const categoryId = formData.get("categoryId") as string;
   const title = formData.get("title") as string;
@@ -76,7 +79,7 @@ export async function createListingAction(formData: FormData) {
   const featuresRaw = (formData.get("features") as string) || "";
   const imageUrlsRaw = (formData.get("imageUrls") as string) || "";
   const docTitle = (formData.get("docTitle") as string) || "Ownership / Legal Deed Certificate";
-  const docUrl = (formData.get("docUrl") as string) || "";
+  const docUrl = ((formData.get("docUrl") as string) || "").trim();
   const docType = (formData.get("docType") as string) || "TITLE_DEED";
 
   // Dynamic attributes based on category
@@ -88,6 +91,12 @@ export async function createListingAction(formData: FormData) {
 
   if (!title || !description || !city || !categoryId) {
     return { success: false, error: "Please fill in all required fields (Category, Title, City, Description)." };
+  }
+  if (!docUrl) {
+    return {
+      success: false,
+      error: "An ownership document link (title deed / libre) is required.",
+    };
   }
 
   const features = featuresRaw
@@ -113,24 +122,24 @@ export async function createListingAction(formData: FormData) {
       condition,
       features,
       attributes,
-      status: "APPROVED", // Auto-approved for verified demo or set to PENDING_REVIEW
+      status: "PENDING_REVIEW",
       images: {
         create: images.length > 0
           ? images.map((url, idx) => ({ url, isPrimary: idx === 0, displayOrder: idx + 1 }))
           : [{ url: "https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1200&q=80", isPrimary: true, displayOrder: 1 }],
       },
       documents: {
-        create: docUrl
-          ? [{ title: docTitle, fileUrl: docUrl, documentType: docType, isVerified: true }]
-          : [{ title: docTitle, fileUrl: "/docs/ownership.pdf", documentType: docType, isVerified: true }],
+        create: [
+          { title: docTitle, fileUrl: docUrl, documentType: docType, isVerified: false },
+        ],
       },
     },
   });
 
   await notifyAdmins({
-    type: "LISTING_CREATED",
-    title: "New Auction Item Created",
-    body: `${user.name} created a new listing: "${title}".`,
+    type: "LISTING_SUBMITTED",
+    title: "Listing Awaiting Review",
+    body: `${user.name} submitted "${title}" for review.`,
     link: `/admin?tab=listings`,
   });
 
@@ -145,7 +154,10 @@ export async function createListingAction(formData: FormData) {
   revalidatePath("/seller");
   revalidatePath("/provider");
   revalidatePath("/");
-  return { success: true, message: `Listing "${title}" created successfully! You can now create an auction for it.` };
+  return {
+    success: true,
+    message: `Listing "${title}" submitted for admin review. You can schedule an auction once it is approved.`,
+  };
 }
 
 export async function createAuctionAction(formData: FormData) {
@@ -178,6 +190,23 @@ export async function createAuctionAction(formData: FormData) {
 
   if (!listing || listing.sellerId !== user.id) {
     return { success: false, error: "Listing not found or you do not have permission to auction it." };
+  }
+
+  if (listing.status !== "APPROVED") {
+    return {
+      success: false,
+      error: "This listing has not been approved by an admin yet.",
+    };
+  }
+
+  const sellerProfile = await prisma.sellerProfile.findUnique({
+    where: { userId: user.id },
+  });
+  if (sellerProfile?.status !== "APPROVED") {
+    return {
+      success: false,
+      error: "Your seller KYC must be approved before you can create auctions.",
+    };
   }
 
   const now = new Date();
@@ -258,4 +287,3 @@ export async function cancelAuctionAction(auctionId: string) {
   revalidatePath("/provider");
   return { success: true, message: "Auction cancelled successfully." };
 }
-

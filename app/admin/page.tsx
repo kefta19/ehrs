@@ -46,9 +46,9 @@ export default async function AdminPage() {
     }),
     prisma.listing.findMany({
       include: {
-        seller: true,
+        seller: { include: { sellerProfile: true } },
         category: true,
-        images: true,
+        images: { orderBy: { displayOrder: "asc" } },
         documents: true,
       },
       orderBy: { createdAt: "desc" },
