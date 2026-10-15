@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notify";
 import { logAudit } from "@/lib/security";
+import { LISTING_REVIEW_CHECKS } from "@/lib/listing-review";
 
 export async function verifySellerKycAction(formData: FormData) {
   const user = await getCurrentUser();
@@ -72,24 +73,89 @@ export async function reviewListingAction(formData: FormData) {
     return { success: false, error: "Unauthorized" };
 
   const listingId = formData.get("listingId") as string;
-  const status = formData.get("status") as "APPROVED" | "REJECTED";
+  const status = formData.get("status");
   const rejectionReason = (formData.get("rejectionReason") as string) || "";
 
   const listing = await prisma.listing.findUnique({
     where: { id: listingId },
-    include: { seller: true },
+    include: {
+      documents: true,
+      seller: { include: { sellerProfile: true } },
+    },
   });
 
   if (!listing) return { success: false, error: "Listing not found." };
 
-  await prisma.listing.update({
-    where: { id: listingId },
-    data: {
-      status,
-      reviewedById: user.id,
-      rejectionReason: status === "REJECTED" ? rejectionReason : null,
-    },
-  });
+  if (listing.status !== "PENDING_REVIEW") {
+    return {
+      success: false,
+      error: "Only listings awaiting review can be approved or rejected.",
+    };
+  }
+
+  if (status !== "APPROVED" && status !== "REJECTED") {
+    return { success: false, error: "Invalid listing review status." };
+  }
+
+  const trimmedRejectionReason = rejectionReason.trim();
+  if (status === "REJECTED" && !trimmedRejectionReason) {
+    return { success: false, error: "A rejection reason is required." };
+  }
+
+  const checks = formData.getAll("checks");
+
+  if (status === "APPROVED") {
+    if (listing.seller.sellerProfile?.status !== "APPROVED") {
+      return {
+        success: false,
+        error:
+          "The owner's seller KYC (national ID) must be approved before this listing can be approved.",
+      };
+    }
+
+    if (listing.documents.length === 0) {
+      return {
+        success: false,
+        error: "No ownership document is attached to this listing.",
+      };
+    }
+
+    if (
+      !LISTING_REVIEW_CHECKS.every(({ key }) =>
+        checks.includes(key),
+      )
+    ) {
+      return {
+        success: false,
+        error: "Complete every verification check before approving.",
+      };
+    }
+
+    await prisma.$transaction(async (transaction) => {
+      await transaction.listing.update({
+        where: { id: listingId },
+        data: {
+          status,
+          reviewedById: user.id,
+          rejectionReason: null,
+        },
+      });
+
+      await transaction.listingDocument.updateMany({
+        where: { listingId },
+        data: { isVerified: true },
+      });
+    });
+  } else {
+    await prisma.listing.update({
+      where: { id: listingId },
+      data: {
+        status,
+        reviewedById: user.id,
+        rejectionReason: trimmedRejectionReason,
+      },
+    });
+  }
 
   await logAudit({
     actorId: user.id,
@@ -97,7 +163,14 @@ export async function reviewListingAction(formData: FormData) {
     module: "LISTINGS",
     entityType: "Listing",
     entityId: listingId,
-    newValue: { status, rejectionReason },
+    newValue:
+      status === "APPROVED"
+        ? {
+            status,
+            rejectionReason: null,
+            checks: LISTING_REVIEW_CHECKS.map(({ key }) => key),
+          }
+        : { status, rejectionReason: trimmedRejectionReason },
   });
 
   await notify(listing.sellerId, {
@@ -106,7 +179,7 @@ export async function reviewListingAction(formData: FormData) {
     body:
       status === "APPROVED"
         ? `Your listing "${listing.title}" was approved by administrator. You can now schedule an auction for it.`
-        : `Your listing "${listing.title}" was rejected. Reason: ${rejectionReason || "Please verify documentation and resubmit."}`,
+        : `Your listing "${listing.title}" was rejected. Reason: ${trimmedRejectionReason || "Please verify documentation and resubmit."}`,
     link: `/seller`,
   });
 

@@ -39,6 +39,10 @@ import {
   manageCategoryAction,
   updateSystemSettingsAction,
 } from "@/app/actions/admin";
+import {
+  LISTING_REVIEW_CHECKS,
+  type ListingReviewCheckKey,
+} from "@/lib/listing-review";
 
 export type AdminUser = {
   id: string;
@@ -64,11 +68,39 @@ type AdminListing = {
   title: string;
   description: string;
   status: string;
+  condition?: string | null;
+  address?: string | null;
+  region?: string | null;
+  country?: string | null;
+  features?: string[];
+  attributes?: Record<string, unknown> | null;
+  createdAt: string;
+  rejectionReason?: string | null;
   category: { name: string };
-  seller: AdminUser;
-  referenceNumber: string;
+  seller: AdminUser & {
+    phone?: string | null;
+    emailVerifiedAt?: string | null;
+    sellerProfile: {
+      status: string;
+      nationalIdNumber: string;
+      businessName?: string | null;
+      taxId?: string | null;
+      address?: string | null;
+      idDocumentUrl?: string | null;
+      reviewNote?: string | null;
+      reviewedAt?: string | null;
+    } | null;
+  };
+  referenceNumber?: string | null;
   city: string;
-  images?: Array<{ url?: string }>;
+  images?: Array<{ id?: string; url?: string; displayOrder?: number }>;
+  documents: Array<{
+    id: string;
+    title: string;
+    documentType: string;
+    fileUrl: string;
+    isVerified: boolean;
+  }>;
 };
 
 type AdminAuction = {
@@ -190,8 +222,12 @@ export function AdminDashboardClient({
   const [kycNote, setKycNote] = useState("");
 
   // Listing Review Modal
-  const [reviewingListing, setReviewingListing] = useState<AdminListing | null>(null);
+  const [reviewingListingId, setReviewingListingId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [listingChecks, setListingChecks] = useState<ListingReviewCheckKey[]>([]);
+  const [listingFilter, setListingFilter] = useState<
+    "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "ALL"
+  >("PENDING_REVIEW");
 
   // Payment Verification Modal
   const [verifyingPayment, setVerifyingPayment] = useState<AdminPayment | null>(null);
@@ -215,6 +251,48 @@ export function AdminDashboardClient({
     const matchRole = userRoleFilter === "ALL" || u.role === userRoleFilter;
     return matchSearch && matchRole;
   });
+
+  const pendingReviewListings = pendingListings.filter(
+    (listing) => listing.status === "PENDING_REVIEW",
+  );
+  const listingCounts = {
+    PENDING_REVIEW: pendingReviewListings.length,
+    APPROVED: pendingListings.filter((listing) => listing.status === "APPROVED")
+      .length,
+    REJECTED: pendingListings.filter((listing) => listing.status === "REJECTED")
+      .length,
+    ALL: pendingListings.length,
+  };
+  const filteredListings =
+    listingFilter === "ALL"
+      ? pendingListings
+      : pendingListings.filter((listing) => listing.status === listingFilter);
+
+  const reviewingListing = reviewingListingId
+    ? pendingListings.find((listing) => listing.id === reviewingListingId) ?? null
+    : null;
+
+  const openListingReview = (listing: AdminListing) => {
+    setReviewingListingId(listing.id);
+    setRejectionReason("");
+    setListingChecks([]);
+  };
+
+  const ownerKycApproved =
+    reviewingListing?.seller.sellerProfile?.status === "APPROVED";
+  const missingApprovalRequirements = reviewingListing
+    ? [
+        ...(!ownerKycApproved
+          ? ["The owner's seller KYC (national ID) must be approved."]
+          : []),
+        ...(reviewingListing.documents.length === 0
+          ? ["Attach an ownership document."]
+          : []),
+        ...LISTING_REVIEW_CHECKS.filter(
+          ({ key }) => !listingChecks.includes(key),
+        ).map(({ label }) => `Complete: ${label}`),
+      ]
+    : [];
 
   return (
     <div className="flex min-h-screen bg-[#f8fafc] text-slate-800">
@@ -286,9 +364,9 @@ export function AdminDashboardClient({
                 <PackageCheck size={16} />
                 <span>Approve Listings</span>
               </div>
-              {pendingListings.length > 0 && (
+              {pendingReviewListings.length > 0 && (
                 <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-bold text-blue-300">
-                  {pendingListings.length}
+                  {pendingReviewListings.length}
                 </span>
               )}
             </button>
@@ -581,7 +659,7 @@ export function AdminDashboardClient({
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="font-bold text-slate-900 text-sm">
-                      Item Listings Queue ({pendingListings.length})
+                      Item Listings Queue ({pendingReviewListings.length})
                     </h3>
                     <button
                       onClick={() => setActiveTab("listings")}
@@ -591,13 +669,13 @@ export function AdminDashboardClient({
                     </button>
                   </div>
 
-                  {pendingListings.length === 0 ? (
+                  {pendingReviewListings.length === 0 ? (
                     <div className="rounded-xl bg-slate-50 p-6 text-center text-xs text-slate-400">
                       No pending item listings awaiting administrative approval.
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {pendingListings.slice(0, 3).map((l) => (
+                      {pendingReviewListings.slice(0, 3).map((l) => (
                         <div
                           key={l.id}
                           className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-slate-200 text-xs"
@@ -611,7 +689,7 @@ export function AdminDashboardClient({
                             </span>
                           </div>
                           <button
-                            onClick={() => setReviewingListing(l)}
+                            onClick={() => openListingReview(l)}
                             className="rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-700"
                           >
                             Inspect
@@ -825,8 +903,31 @@ export function AdminDashboardClient({
                 </p>
               </div>
 
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    ["PENDING_REVIEW", "Pending review"],
+                    ["APPROVED", "Approved"],
+                    ["REJECTED", "Rejected"],
+                    ["ALL", "All"],
+                  ] as const
+                ).map(([status, label]) => (
+                  <button
+                    key={status}
+                    onClick={() => setListingFilter(status)}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      listingFilter === status
+                        ? "border-blue-600 bg-blue-600 text-white"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {label} ({listingCounts[status]})
+                  </button>
+                ))}
+              </div>
+
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {pendingListings.map((l) => (
+                {filteredListings.map((l) => (
                   <div
                     key={l.id}
                     className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm flex flex-col justify-between"
@@ -844,24 +945,53 @@ export function AdminDashboardClient({
                         <h4 className="font-bold text-slate-900 text-sm">{l.title}</h4>
                         <p className="text-slate-500 line-clamp-2">{l.description}</p>
                         <div className="text-slate-400">
-                          Seller: <strong>{l.seller.name}</strong> • Ref: {l.referenceNumber}
+                          Seller: <strong>{l.seller.name}</strong> • Ref: {l.referenceNumber || "Not provided"}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              l.seller.sellerProfile?.status === "APPROVED"
+                                ? "bg-emerald-50 text-emerald-700"
+                                : l.seller.sellerProfile?.status === "REJECTED"
+                                  ? "bg-rose-50 text-rose-700"
+                                  : "bg-amber-50 text-amber-700"
+                            }`}
+                          >
+                            Owner KYC: {l.seller.sellerProfile?.status || "NOT_SUBMITTED"}
+                          </span>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                            {l.documents.length} document{l.documents.length === 1 ? "" : "s"}
+                          </span>
                         </div>
                       </div>
                     </div>
 
                     <div className="p-4 pt-0 border-t border-slate-100 mt-3 flex items-center justify-between text-xs">
-                      <span className="rounded bg-amber-50 px-2 py-0.5 font-bold text-amber-700">
+                      <span
+                        className={`rounded px-2 py-0.5 font-bold ${
+                          l.status === "APPROVED"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : l.status === "REJECTED"
+                              ? "bg-rose-50 text-rose-700"
+                              : "bg-amber-50 text-amber-700"
+                        }`}
+                      >
                         {l.status}
                       </span>
                       <button
-                        onClick={() => setReviewingListing(l)}
+                        onClick={() => openListingReview(l)}
                         className="rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-700"
                       >
-                        Inspect & Approve
+                        {l.status === "PENDING_REVIEW" ? "Inspect & Approve" : "View details"}
                       </button>
                     </div>
                   </div>
                 ))}
+                {filteredListings.length === 0 && (
+                  <p className="text-xs text-slate-400">
+                    No listings in this status.
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -1431,69 +1561,446 @@ export function AdminDashboardClient({
       {/* ─────────────────── MODAL: REVIEW LISTING ─────────────────── */}
       {reviewingListing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-5 animate-in fade-in">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <span className="font-bold text-blue-600">Review Auction Listing</span>
-              <button onClick={() => setReviewingListing(null)}>
+          <div className="max-h-[90vh] w-full max-w-4xl space-y-6 overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white pb-3">
+              <div>
+                <span className="font-bold text-blue-600">Listing Review</span>
+                <h2 className="mt-1 text-lg font-bold text-slate-900">
+                  {reviewingListing.title}
+                </h2>
+              </div>
+              <button
+                onClick={() => setReviewingListingId(null)}
+                aria-label="Close listing review"
+              >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="space-y-2 text-xs">
-              <h4 className="font-bold text-slate-900 text-sm">
-                {reviewingListing.title}
-              </h4>
-              <p className="text-slate-600">{reviewingListing.description}</p>
-              <div>
-                Seller: <strong>{reviewingListing.seller.name}</strong> • City: {reviewingListing.city}
+            <section className="space-y-3">
+              <h3 className="font-bold text-slate-900">1. Property details</h3>
+              <div className="grid grid-cols-1 gap-3 rounded-2xl bg-slate-50 p-4 text-xs sm:grid-cols-2">
+                <div>
+                  <span className="block text-slate-400">Category</span>
+                  <strong>{reviewingListing.category.name}</strong>
+                </div>
+                <div>
+                  <span className="block text-slate-400">Status</span>
+                  <strong>{reviewingListing.status}</strong>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="block text-slate-400">Description</span>
+                  <p className="whitespace-pre-wrap text-slate-700">
+                    {reviewingListing.description}
+                  </p>
+                </div>
+                <div>
+                  <span className="block text-slate-400">Condition</span>
+                  <strong>{reviewingListing.condition || "Not specified"}</strong>
+                </div>
+                <div>
+                  <span className="block text-slate-400">Reference number</span>
+                  <strong>
+                    {reviewingListing.referenceNumber || "Not provided"}
+                  </strong>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="block text-slate-400">Address / location</span>
+                  <strong>
+                    {[
+                      reviewingListing.address,
+                      reviewingListing.city,
+                      reviewingListing.region,
+                      reviewingListing.country,
+                    ]
+                      .filter(Boolean)
+                      .join(", ") || "Not provided"}
+                  </strong>
+                </div>
+                <div>
+                  <span className="block text-slate-400">Created</span>
+                  <strong>
+                    {new Date(reviewingListing.createdAt).toLocaleString()}
+                  </strong>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="block text-slate-400">Features</span>
+                  {reviewingListing.features?.length ? (
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {reviewingListing.features.map((feature) => (
+                        <span
+                          key={feature}
+                          className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-700"
+                        >
+                          {feature}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-slate-500">None listed</span>
+                  )}
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="block text-slate-400">
+                    Additional attributes
+                  </span>
+                  {Object.entries(reviewingListing.attributes || {}).length >
+                  0 ? (
+                    <dl className="mt-1 divide-y divide-slate-200">
+                      {Object.entries(reviewingListing.attributes || {}).map(
+                        ([key, value]) => (
+                          <div
+                            key={key}
+                            className="flex justify-between gap-4 py-1.5"
+                          >
+                            <dt className="font-medium text-slate-600">{key}</dt>
+                            <dd className="text-right text-slate-800">
+                              {typeof value === "string"
+                                ? value
+                                : JSON.stringify(value) ?? String(value)}
+                            </dd>
+                          </div>
+                        ),
+                      )}
+                    </dl>
+                  ) : (
+                    <span className="text-slate-500">None listed</span>
+                  )}
+                </div>
               </div>
-            </div>
+            </section>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Rejection Reason (if rejecting)
-              </label>
-              <input
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
-                placeholder="Reason for rejection..."
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none focus:border-blue-600"
-              />
-            </div>
+            <section className="space-y-3">
+              <h3 className="font-bold text-slate-900">2. Photos</h3>
+              {reviewingListing.images?.length ? (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {reviewingListing.images.map((image, index) => (
+                    <img
+                      key={image.id || image.url || index}
+                      src={image.url}
+                      alt={`${reviewingListing.title} photo ${index + 1}`}
+                      className="aspect-[4/3] w-full rounded-xl bg-slate-100 object-cover"
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-xl bg-slate-50 p-4 text-xs text-slate-500">
+                  No photos uploaded.
+                </p>
+              )}
+            </section>
 
-            <div className="flex items-center gap-3 pt-2 text-xs">
-              <button
-                onClick={() => {
-                  const formData = new FormData();
-                  formData.append("listingId", reviewingListing.id);
-                  formData.append("status", "REJECTED");
-                  formData.append("rejectionReason", rejectionReason);
-                  startTransition(async () => {
-                    const res = await reviewListingAction(formData);
-                    setActionMsg(res);
-                    setReviewingListing(null);
-                  });
-                }}
-                className="flex-1 rounded-xl border border-rose-200 py-2.5 font-bold text-rose-600 hover:bg-rose-50"
-              >
-                Reject
-              </button>
-              <button
-                onClick={() => {
-                  const formData = new FormData();
-                  formData.append("listingId", reviewingListing.id);
-                  formData.append("status", "APPROVED");
-                  startTransition(async () => {
-                    const res = await reviewListingAction(formData);
-                    setActionMsg(res);
-                    setReviewingListing(null);
-                  });
-                }}
-                className="flex-1 rounded-xl bg-blue-600 py-2.5 font-bold text-white hover:bg-blue-700"
-              >
-                Approve Listing
-              </button>
-            </div>
+            <section className="space-y-3">
+              <h3 className="font-bold text-slate-900">
+                3. Ownership documents
+              </h3>
+              {reviewingListing.documents.length > 0 ? (
+                <div className="space-y-2">
+                  {reviewingListing.documents.map((document) => (
+                    <div
+                      key={document.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 text-xs"
+                    >
+                      <div>
+                        <strong className="block text-slate-900">
+                          {document.title}
+                        </strong>
+                        <span className="text-slate-500">
+                          {document.documentType.replace(/_/g, " ")}
+                        </span>{" "}
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            document.isVerified
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-amber-50 text-amber-700"
+                          }`}
+                        >
+                          {document.isVerified ? "Verified" : "Not verified"}
+                        </span>
+                      </div>
+                      <a
+                        href={document.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline"
+                      >
+                        Open document <ExternalLink size={13} />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700">
+                  No ownership document is attached to this listing.
+                </p>
+              )}
+            </section>
+
+            <section className="space-y-3">
+              <h3 className="font-bold text-slate-900">4. Owner (seller)</h3>
+              <div className="grid grid-cols-1 gap-3 rounded-2xl bg-slate-50 p-4 text-xs sm:grid-cols-2">
+                <div>
+                  <span className="block text-slate-400">Name</span>
+                  <strong>{reviewingListing.seller.name}</strong>
+                </div>
+                <div>
+                  <span className="block text-slate-400">Email</span>
+                  <strong>{reviewingListing.seller.email}</strong>
+                </div>
+                <div>
+                  <span className="block text-slate-400">Phone</span>
+                  <strong>{reviewingListing.seller.phone || "Not provided"}</strong>
+                </div>
+                <div>
+                  <span className="block text-slate-400">Account status</span>
+                  <strong>{reviewingListing.seller.status}</strong>
+                </div>
+                <div>
+                  <span className="block text-slate-400">Email verified</span>
+                  <strong>
+                    {reviewingListing.seller.emailVerifiedAt ? "Yes" : "No"}
+                  </strong>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <h4 className="mb-2 font-bold text-slate-800">Seller KYC</h4>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div>
+                      <span className="block text-slate-400">KYC status</span>
+                      <span
+                        className={`inline-block rounded-full px-2 py-0.5 font-bold ${
+                          reviewingListing.seller.sellerProfile?.status ===
+                          "APPROVED"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : reviewingListing.seller.sellerProfile?.status ===
+                                "REJECTED"
+                              ? "bg-rose-50 text-rose-700"
+                              : "bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        {reviewingListing.seller.sellerProfile?.status ||
+                          "NOT_SUBMITTED"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-slate-400">
+                        National ID number
+                      </span>
+                      <strong>
+                        {reviewingListing.seller.sellerProfile?.nationalIdNumber ||
+                          "Not provided"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="block text-slate-400">Business name</span>
+                      <strong>
+                        {reviewingListing.seller.sellerProfile?.businessName ||
+                          "Not provided"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="block text-slate-400">Tax ID</span>
+                      <strong>
+                        {reviewingListing.seller.sellerProfile?.taxId ||
+                          "Not provided"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="block text-slate-400">KYC address</span>
+                      <strong>
+                        {reviewingListing.seller.sellerProfile?.address ||
+                          "Not provided"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="block text-slate-400">Reviewed at</span>
+                      <strong>
+                        {reviewingListing.seller.sellerProfile?.reviewedAt
+                          ? new Date(
+                              reviewingListing.seller.sellerProfile.reviewedAt,
+                            ).toLocaleString()
+                          : "Not reviewed"}
+                      </strong>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <span className="block text-slate-400">Review note</span>
+                      <p className="text-slate-700">
+                        {reviewingListing.seller.sellerProfile?.reviewNote ||
+                          "No review note"}
+                      </p>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <span className="block text-slate-400">ID document</span>
+                      {reviewingListing.seller.sellerProfile?.idDocumentUrl ? (
+                        /\.(png|jpe?g|webp|gif)(\?|$)/i.test(
+                          reviewingListing.seller.sellerProfile.idDocumentUrl,
+                        ) ||
+                        reviewingListing.seller.sellerProfile.idDocumentUrl.includes(
+                          "images.unsplash.com",
+                        ) ? (
+                          <img
+                            src={
+                              reviewingListing.seller.sellerProfile.idDocumentUrl
+                            }
+                            alt={`${reviewingListing.seller.name} ID document`}
+                            className="mt-2 max-h-64 max-w-full rounded-xl border border-slate-200 object-contain"
+                          />
+                        ) : (
+                          <a
+                            href={
+                              reviewingListing.seller.sellerProfile.idDocumentUrl
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline"
+                          >
+                            Open ID document <ExternalLink size={13} />
+                          </a>
+                        )
+                      ) : (
+                        <p className="text-slate-500">Not uploaded</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {!ownerKycApproved && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+                  <span>
+                    Seller KYC must be approved before this listing can be
+                    approved.
+                  </span>
+                  <button
+                    onClick={() => {
+                      setReviewingListingId(null);
+                      setActiveTab("kyc");
+                    }}
+                    className="rounded-lg bg-rose-600 px-3 py-1.5 font-semibold text-white hover:bg-rose-700"
+                  >
+                    Review seller KYC
+                  </button>
+                </div>
+              )}
+            </section>
+
+            {reviewingListing.status === "PENDING_REVIEW" ? (
+              <>
+                <section className="space-y-3">
+                  <h3 className="font-bold text-slate-900">
+                    5. Verification checklist
+                  </h3>
+                  <div className="space-y-2">
+                    {LISTING_REVIEW_CHECKS.map(({ key, label }) => (
+                      <label
+                        key={key}
+                        className="flex items-start gap-2 rounded-xl border border-slate-200 p-3 text-xs text-slate-700"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={listingChecks.includes(key)}
+                          onChange={(event) =>
+                            setListingChecks((current) =>
+                              event.target.checked
+                                ? [...current, key]
+                                : current.filter((check) => check !== key),
+                            )
+                          }
+                          className="mt-0.5 accent-blue-600"
+                        />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="space-y-3 border-t border-slate-100 pt-5">
+                  <h3 className="font-bold text-slate-900">6. Actions</h3>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">
+                      Rejection reason
+                    </label>
+                    <textarea
+                      value={rejectionReason}
+                      onChange={(event) =>
+                        setRejectionReason(event.target.value)
+                      }
+                      rows={2}
+                      placeholder="Explain what needs to be corrected..."
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none focus:border-blue-600"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <button
+                      onClick={() => {
+                        const formData = new FormData();
+                        formData.append("listingId", reviewingListing.id);
+                        formData.append("status", "REJECTED");
+                        formData.append(
+                          "rejectionReason",
+                          rejectionReason.trim(),
+                        );
+                        startTransition(async () => {
+                          const res = await reviewListingAction(formData);
+                          setActionMsg(res);
+                          setReviewingListingId(null);
+                        });
+                      }}
+                      disabled={!rejectionReason.trim() || isPending}
+                      className="rounded-xl border border-rose-200 py-2.5 font-bold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Reject listing
+                    </button>
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => {
+                          const formData = new FormData();
+                          formData.append("listingId", reviewingListing.id);
+                          formData.append("status", "APPROVED");
+                          listingChecks.forEach((key) =>
+                            formData.append("checks", key),
+                          );
+                          startTransition(async () => {
+                            const res = await reviewListingAction(formData);
+                            setActionMsg(res);
+                            setReviewingListingId(null);
+                          });
+                        }}
+                        disabled={
+                          !ownerKycApproved ||
+                          reviewingListing.documents.length === 0 ||
+                          LISTING_REVIEW_CHECKS.some(
+                            ({ key }) => !listingChecks.includes(key),
+                          ) ||
+                          isPending
+                        }
+                        className="w-full rounded-xl bg-blue-600 py-2.5 font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Approve listing
+                      </button>
+                      {missingApprovalRequirements.length > 0 && (
+                        <ul className="space-y-1 text-[11px] text-rose-600">
+                          {missingApprovalRequirements.map((requirement) => (
+                            <li key={requirement}>• {requirement}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              </>
+            ) : (
+              <section className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs">
+                <h3 className="font-bold text-slate-900">
+                  Listing review status: {reviewingListing.status}
+                </h3>
+                {reviewingListing.rejectionReason && (
+                  <p className="text-rose-700">
+                    <strong>Rejection reason:</strong>{" "}
+                    {reviewingListing.rejectionReason}
+                  </p>
+                )}
+              </section>
+            )}
           </div>
         </div>
       )}
