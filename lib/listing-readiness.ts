@@ -42,7 +42,11 @@ export function buildChecklist(
       ok: imageCount >= MIN_LISTING_IMAGES,
       detail: `${imageCount} uploaded`,
     },
-    { key: "video", label: "Video of the item", ok: !!listing.videoUrl },
+    {
+      key: "video",
+      label: "Social-media video post link",
+      ok: !!listing.videoUrl,
+    },
     {
       key: "nationalId",
       label: "National ID number",

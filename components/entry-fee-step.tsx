@@ -10,6 +10,7 @@ export type AdminFee = {
   amount: number | string;
   ratePercent: number | string;
   bankReference?: string | null;
+  transactionUrl?: string | null;
 } | null;
 
 /** Shown inside the review card. Payment state is informational: it never approves anything. */
@@ -72,6 +73,19 @@ export function EntryFeeAdmin({ fee }: { fee: AdminFee }) {
         <div className="flex justify-between">
           <span className="text-slate-500">Bank reference</span>
           <strong className="font-mono">{fee.bankReference}</strong>
+        </div>
+      )}
+      {fee.transactionUrl && (
+        <div className="flex justify-between gap-3">
+          <span className="text-slate-500">Transaction link</span>
+          <a
+            href={fee.transactionUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="font-semibold text-blue-700 underline"
+          >
+            Open transaction details
+          </a>
         </div>
       )}
       {fee.status !== "CONFIRMED" && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Compass,
@@ -23,6 +24,7 @@ import {
   HelpCircle,
   Check,
   Menu,
+  Trash2,
 } from "lucide-react";
 import { ETHomeLogo } from "./ethome-brand";
 import { LogoutButton } from "./logout-button";
@@ -34,8 +36,10 @@ import {
   submitComplaintTicketAction,
   updateBuyerProfileAction,
   markNotificationReadAction,
+  deleteNotificationAction,
 } from "@/app/actions/buyer";
-import { auctionPhase } from "@/lib/auction-eligibility";
+import { checkEntranceFeeStatusAction } from "@/app/actions/payment";
+import { AccountManagement } from "@/components/account-management";
 
 type DashboardUser = {
   id: string;
@@ -82,7 +86,7 @@ type DashboardAuction = {
   startingPrice: number | string;
   currentHighestBid?: number | string | null;
   minBidIncrement: number | string;
-  entryFeeStatus: string;
+  entryFeeStatus?: string;
   highestBidderId?: string | null;
   listing: DashboardListing;
   terms?: string;
@@ -142,6 +146,9 @@ type WonAuctionResult = {
 
 export function CustomerDashboardClient({
   user,
+  isGoogleOnlyAccount,
+  initialTab,
+  paidEntranceFeeAuctionIds = [],
   auctions,
   myBids,
   wonAuctions,
@@ -152,6 +159,9 @@ export function CustomerDashboardClient({
   categories,
 }: {
   user: DashboardUser;
+  isGoogleOnlyAccount: boolean;
+  initialTab?: string;
+  paidEntranceFeeAuctionIds?: string[];
   auctions: DashboardAuction[];
   myBids: DashboardBid[];
   wonAuctions: WonAuctionResult[];
@@ -161,6 +171,7 @@ export function CustomerDashboardClient({
   notifications: DashboardNotification[];
   categories: DashboardCategory[];
 }) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<
     | "dashboard"
     | "browse"
@@ -170,8 +181,26 @@ export function CustomerDashboardClient({
     | "payments"
     | "tickets"
     | "profile"
+    | "account"
     | "notifications"
-  >("dashboard");
+  >(() => {
+    const validTabs = [
+      "dashboard",
+      "browse",
+      "bids",
+      "won",
+      "watchlist",
+      "payments",
+      "tickets",
+      "profile",
+      "account",
+      "notifications",
+    ] as const;
+    if (initialTab && (validTabs as readonly string[]).includes(initialTab)) {
+      return initialTab as (typeof validTabs)[number];
+    }
+    return "dashboard";
+  });
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const selectTab = (tab: typeof activeTab) => {
@@ -187,9 +216,11 @@ export function CustomerDashboardClient({
   const [selectedLocation, setSelectedLocation] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
 
+  // Entrance Fee & Bidding Access State
+  const paidFeeAuctionIds = new Set(paidEntranceFeeAuctionIds);
+
   // Modals
   const [biddingAuction, setBiddingAuction] = useState<DashboardAuction | null>(null);
-  const [detailAuction, setDetailAuction] = useState<DashboardAuction | null>(null);
   const [bidAmount, setBidAmount] = useState<string>("");
   const [bidMsg, setBidMsg] = useState<{ error?: string; success?: string } | null>(null);
 
@@ -208,6 +239,16 @@ export function CustomerDashboardClient({
   const [watchedIds, setWatchedIds] = useState<Set<string>>(
     new Set(watchlist.map((w) => w.auctionId))
   );
+
+  // Handle Bid Now click - check entrance fee before navigation
+  const handleBidNowClick = async (auctionId: string) => {
+    const result = await checkEntranceFeeStatusAction(auctionId);
+    if (result.success && result.redirectUrl) {
+      router.push(result.redirectUrl);
+    } else {
+      router.push(`/auction/${auctionId}`);
+    }
+  };
 
   useEffect(() => {
     const timerId = window.setInterval(() => {
@@ -268,8 +309,8 @@ export function CustomerDashboardClient({
     });
   };
 
-  // Open Bid Dialog
-  const handleOpenBid = (auction: DashboardAuction) => {
+  // Open Bid Dialog Directly
+  const openBidDialog = (auction: DashboardAuction) => {
     setBiddingAuction(auction);
     const curr = Number(auction.currentHighestBid);
     const minInc = Number(auction.minBidIncrement);
@@ -277,6 +318,17 @@ export function CustomerDashboardClient({
     const minBid = curr > 0 ? curr + minInc : startP;
     setBidAmount(minBid.toString());
     setBidMsg(null);
+  };
+
+  // Check entrance fee payment before allowing to increase or place bid
+  const handleOpenBid = (auction: DashboardAuction) => {
+    const isPaid = paidFeeAuctionIds.has(auction.id);
+    if (!isPaid) {
+      router.push(`/payment/entry-fee?auctionId=${auction.id}`);
+      return;
+    }
+
+    openBidDialog(auction);
   };
 
   // Submit Bid
@@ -343,42 +395,42 @@ export function CustomerDashboardClient({
         </div>
 
         {/* Navigation Items */}
-        <div className="flex flex-1 flex-col justify-between overflow-y-auto px-4 py-6">
-          <nav className="space-y-1">
+        <div className="flex flex-1 flex-col justify-between overflow-y-auto px-4 py-4">
+          <nav className="space-y-0.5 text-xs">
             <button
               onClick={() => selectTab("dashboard")}
-              className={`flex w-full items-center gap-3.5 rounded-xl px-4 py-2.5 text-sm font-medium transition-all ${
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "dashboard"
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-500/30"
+                  ? "bg-blue-600 text-white shadow-sm"
                   : "text-slate-400 hover:bg-[#12233f] hover:text-white"
               }`}
             >
-              <LayoutDashboard size={18} />
+              <LayoutDashboard size={16} />
               <span>Dashboard</span>
             </button>
 
             <button
               onClick={() => selectTab("browse")}
-              className={`flex w-full items-center gap-3.5 rounded-xl px-4 py-2.5 text-sm font-medium transition-all ${
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "browse"
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-500/30"
+                  ? "bg-blue-600 text-white shadow-sm"
                   : "text-slate-400 hover:bg-[#12233f] hover:text-white"
               }`}
             >
-              <Compass size={18} />
+              <Compass size={16} />
               <span>Browse Properties</span>
             </button>
 
             <button
               onClick={() => selectTab("bids")}
-              className={`flex w-full items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium transition-all ${
+              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "bids"
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-500/30"
+                  ? "bg-blue-600 text-white shadow-sm"
                   : "text-slate-400 hover:bg-[#12233f] hover:text-white"
               }`}
             >
               <div className="flex items-center gap-3.5">
-                <Gavel size={18} />
+                <Gavel size={16} />
                 <span>My Bids</span>
               </div>
               {myBids.length > 0 && (
@@ -390,14 +442,14 @@ export function CustomerDashboardClient({
 
             <button
               onClick={() => selectTab("won")}
-              className={`flex w-full items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium transition-all ${
+              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "won"
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-500/30"
+                  ? "bg-blue-600 text-white shadow-sm"
                   : "text-slate-400 hover:bg-[#12233f] hover:text-white"
               }`}
             >
               <div className="flex items-center gap-3.5">
-                <Award size={18} />
+                <Award size={16} />
                 <span>Won Auctions</span>
               </div>
               {wonAuctions.length > 0 && (
@@ -409,14 +461,14 @@ export function CustomerDashboardClient({
 
             <button
               onClick={() => selectTab("watchlist")}
-              className={`flex w-full items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium transition-all ${
+              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "watchlist"
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-500/30"
+                  ? "bg-blue-600 text-white shadow-sm"
                   : "text-slate-400 hover:bg-[#12233f] hover:text-white"
               }`}
             >
               <div className="flex items-center gap-3.5">
-                <Bookmark size={18} />
+                <Bookmark size={16} />
                 <span>Watchlist</span>
               </div>
               {watchedIds.size > 0 && (
@@ -428,14 +480,14 @@ export function CustomerDashboardClient({
 
             <button
               onClick={() => selectTab("notifications")}
-              className={`flex w-full items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium transition-all ${
+              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "notifications"
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-500/30"
+                  ? "bg-blue-600 text-white shadow-sm"
                   : "text-slate-400 hover:bg-[#12233f] hover:text-white"
               }`}
             >
               <div className="flex items-center gap-3.5">
-                <Bell size={18} />
+                <Bell size={16} />
                 <span>Notifications</span>
               </div>
               {unreadNotifsCount > 0 && (
@@ -447,44 +499,55 @@ export function CustomerDashboardClient({
 
             <button
               onClick={() => selectTab("payments")}
-              className={`flex w-full items-center gap-3.5 rounded-xl px-4 py-2.5 text-sm font-medium transition-all ${
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "payments"
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-500/30"
+                  ? "bg-blue-600 text-white shadow-sm"
                   : "text-slate-400 hover:bg-[#12233f] hover:text-white"
               }`}
             >
-              <CreditCard size={18} />
+              <CreditCard size={16} />
               <span>Payment History</span>
             </button>
 
             <button
               onClick={() => selectTab("tickets")}
-              className={`flex w-full items-center gap-3.5 rounded-xl px-4 py-2.5 text-sm font-medium transition-all ${
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "tickets"
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-500/30"
+                  ? "bg-blue-600 text-white shadow-sm"
                   : "text-slate-400 hover:bg-[#12233f] hover:text-white"
               }`}
             >
-              <MessageSquareWarning size={18} />
+              <MessageSquareWarning size={16} />
               <span>Complaints & Support</span>
             </button>
 
             <button
               onClick={() => selectTab("profile")}
-              className={`flex w-full items-center gap-3.5 rounded-xl px-4 py-2.5 text-sm font-medium transition-all ${
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "profile"
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-500/30"
+                  ? "bg-blue-600 text-white shadow-sm"
                   : "text-slate-400 hover:bg-[#12233f] hover:text-white"
               }`}
             >
-              <User size={18} />
-              <span>Profile</span>
+              <User size={16} />
+              <span>Preferences</span>
+            </button>
+            <button
+              onClick={() => selectTab("account")}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                activeTab === "account"
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+              }`}
+            >
+              <User size={16} />
+              <span>Manage Account</span>
             </button>
           </nav>
 
           {/* Bottom actions */}
           <div className="border-t border-[#132644] pt-4">
-            <LogoutButton className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors" />
+            <LogoutButton className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors" />
           </div>
         </div>
       </aside>
@@ -510,7 +573,8 @@ export function CustomerDashboardClient({
               {activeTab === "watchlist" && "Saved Watchlist"}
               {activeTab === "payments" && "Payment Records & Invoices"}
               {activeTab === "tickets" && "Support & Complaints Desk"}
-              {activeTab === "profile" && "Account Profile"}
+              {activeTab === "profile" && "Buyer Preferences"}
+              {activeTab === "account" && "Manage Account"}
               {activeTab === "notifications" && "Notification Center"}
             </h1>
           </div>
@@ -764,12 +828,12 @@ export function CustomerDashboardClient({
                             {formatTimeLeft(auc.endAt)}
                           </span>
                         </div>
-                        <a
-                          href={`/auction/${auc.id}`}
+                        <button
+                          onClick={() => handleBidNowClick(auc.id)}
                           className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
                         >
                           Bid Now
-                        </a>
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -832,150 +896,12 @@ export function CustomerDashboardClient({
                             $ {Number(auc.startingPrice).toLocaleString()}
                           </span>
                         </div>
-                        <a
-                          href={`/auction/${auc.id}`}
+                        <button
+                          onClick={() => handleBidNowClick(auc.id)}
                           className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
                         >
                           View
-                        </a>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Approved Listings Section */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-slate-900">
-                      All Approved Listings
-                    </h3>
-                    <span className="flex items-center gap-1.5 rounded-md bg-blue-600 px-2.5 py-1 text-xs font-bold text-white shadow">
-                      <Check size={12} />
-                      Verified
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => setActiveTab("browse")}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-700"
-                  >
-                    View All
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {auctions.filter(a => a.listing.status === "APPROVED").slice(0, 6).map((auc) => (
-                    <div
-                      key={auc.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-slate-100 p-3 hover:border-slate-200 transition-colors"
-                    >
-                      <div className="flex items-center gap-3.5">
-                        <img
-                          src={
-                            auc.listing.images?.[0]?.url ||
-                            "https://images.unsplash.com/photo-1594502184342-2e12f877aa73?auto=format&fit=crop&w=300&q=80"
-                          }
-                          alt={auc.listing.title}
-                          className="h-14 w-20 rounded-lg object-cover"
-                        />
-                        <div>
-                          <h4 className="font-semibold text-slate-900 text-sm">
-                            {auc.listing.title}
-                          </h4>
-                          <p className="text-xs text-slate-500">
-                            {auc.listing.category.name} • {auc.listing.city}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-6 text-xs">
-                        <div>
-                          <span className="text-slate-400 block">Status</span>
-                          <span className="font-medium text-blue-600">
-                            {auc.status === "ACTIVE" ? "Live" : auc.status === "SCHEDULED" ? "Scheduled" : auc.status}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block">Starting from</span>
-                          <span className="font-bold text-slate-900">
-                            $ {Number(auc.startingPrice).toLocaleString()}
-                          </span>
-                        </div>
-                        <a
-                          href={`/auction/${auc.id}`}
-                          className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-                        >
-                          View
-                        </a>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Upcoming Auctions Section (Matching Screenshot) */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-base font-bold text-slate-900">
-                    Upcoming Auctions
-                  </h3>
-                  <button
-                    onClick={() => {
-                      setSelectedStatus("SCHEDULED");
-                      setActiveTab("browse");
-                    }}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-700"
-                  >
-                    View All
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {upcomingAuctions.slice(0, 3).map((auc) => (
-                    <div
-                      key={auc.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-slate-100 p-3 hover:border-slate-200 transition-colors"
-                    >
-                      <div className="flex items-center gap-3.5">
-                        <img
-                          src={
-                            auc.listing.images?.[0]?.url ||
-                            "https://images.unsplash.com/photo-1594502184342-2e12f877aa73?auto=format&fit=crop&w=300&q=80"
-                          }
-                          alt={auc.listing.title}
-                          className="h-14 w-20 rounded-lg object-cover"
-                        />
-                        <div>
-                          <h4 className="font-semibold text-slate-900 text-sm">
-                            {auc.listing.title}
-                          </h4>
-                          <p className="text-xs text-slate-500">
-                            {auc.listing.category.name} • {auc.listing.city}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-6 text-xs">
-                        <div>
-                          <span className="text-slate-400 block">Starts in</span>
-                          <span className="font-medium text-slate-700 flex items-center gap-1">
-                            <Clock size={12} className="text-blue-500" />
-                            {formatTimeLeft(auc.startAt)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block">Starting from</span>
-                          <span className="font-bold text-slate-900">
-                            $ {Number(auc.startingPrice).toLocaleString()}
-                          </span>
-                        </div>
-                        <a
-                          href={`/auction/${auc.id}`}
-                          className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-                        >
-                          View
-                        </a>
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -1234,26 +1160,26 @@ export function CustomerDashboardClient({
           {activeTab === "browse" && (
             <div className="space-y-6">
               {/* Filter & Search Bar */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
                 <div className="flex flex-col md:flex-row items-center gap-3">
                   <div className="relative flex-1 w-full">
                     <Search
                       size={18}
-                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
                     />
                     <input
                       type="text"
                       placeholder="Search by title, location (Addis Ababa, Bole, Mekelle...)"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40"
                     />
                   </div>
 
                   <select
                     value={selectedCategory}
                     onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="w-full md:w-48 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
+                    className="w-full md:w-48 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
                   >
                     <option value="ALL">All Categories</option>
                     {categories.map((c) => (
@@ -1266,7 +1192,7 @@ export function CustomerDashboardClient({
                   <select
                     value={selectedStatus}
                     onChange={(e) => setSelectedStatus(e.target.value)}
-                    className="w-full md:w-40 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
+                    className="w-full md:w-40 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
                   >
                     <option value="ALL">All Status</option>
                     <option value="ACTIVE">Live Auctions</option>
@@ -1282,7 +1208,7 @@ export function CustomerDashboardClient({
                     className={`rounded-full px-3.5 py-1.5 font-medium transition-colors ${
                       selectedCategory === "ALL"
                         ? "bg-blue-600 text-white"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                     }`}
                   >
                     All Items
@@ -1294,7 +1220,7 @@ export function CustomerDashboardClient({
                       className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-medium transition-colors ${
                         selectedCategory === c.slug
                           ? "bg-blue-600 text-white"
-                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
                       }`}
                     >
                       <span>{c.icon}</span>
@@ -1304,153 +1230,169 @@ export function CustomerDashboardClient({
                 </div>
               </div>
 
-              {/* Auction Grid (Matching Screenshot Featured Cards) */}
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {filteredAuctions.map((auc) => {
-                  const phase = auctionPhase(
-                    {
-                      auctionStatus: auc.status,
-                      listingStatus: auc.listing.status,
-                      entryFeeStatus: auc.entryFeeStatus,
-                      startAt: new Date(auc.startAt),
-                      endAt: new Date(auc.endAt),
-                    },
-                    new Date(),
-                  );
-                  const isLive = phase === "LIVE";
-                  const isUpcoming = phase === "UPCOMING";
-                  const currentBid = Number(auc.currentHighestBid || auc.startingPrice);
-                  const isWatched = watchedIds.has(auc.id);
-
-                  return (
-                    <div
-                      key={auc.id}
-                      className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:shadow-md"
+              {/* Auction Grid / Empty State */}
+              {filteredAuctions.length === 0 ? (
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-12 text-center shadow-sm">
+                  <Compass size={40} className="mx-auto text-slate-400 dark:text-slate-600 mb-3" />
+                  <h4 className="text-base font-semibold text-slate-900 dark:text-white">
+                    No auctions found
+                  </h4>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                    {searchQuery || selectedCategory !== "ALL" || selectedStatus !== "ALL"
+                      ? "No live or upcoming auctions match your filters. Try clearing search filters."
+                      : "There are currently no active or upcoming auctions available."}
+                  </p>
+                  {(searchQuery || selectedCategory !== "ALL" || selectedStatus !== "ALL") && (
+                    <button
+                      onClick={() => {
+                        setSearchQuery("");
+                        setSelectedCategory("ALL");
+                        setSelectedStatus("ALL");
+                      }}
+                      className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-blue-700 transition-colors"
                     >
-                      <div>
-                        {/* Image + Badges */}
-                        <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
-                          <img
-                            src={
-                              auc.listing.images?.[0]?.url ||
-                              "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=800&q=80"
-                            }
-                            alt={auc.listing.title}
-                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                          <div className="absolute left-3 top-3 flex items-center gap-2">
-                            {isLive ? (
-                              <span className="flex items-center gap-1.5 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white shadow">
-                                <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
-                                Live Auction
-                              </span>
-                            ) : isUpcoming ? (
-                              <span className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-bold text-white shadow">
-                                Upcoming
-                              </span>
-                            ) : (
-                              <span className="rounded-md bg-slate-800 px-2.5 py-1 text-xs font-bold text-white shadow">
-                                {auc.status}
-                              </span>
-                            )}
-                          </div>
+                      Clear Filters
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {filteredAuctions.map((auc) => {
+                    const isLive = auc.status === "ACTIVE";
+                    const isUpcoming = auc.status === "SCHEDULED" || (!isLive && new Date(auc.startAt) > new Date());
+                    const currentBid = Number(auc.currentHighestBid || auc.startingPrice);
+                    const isWatched = watchedIds.has(auc.id);
 
-                          {/* Watchlist Bookmark Button */}
-                          <button
-                            onClick={() => handleToggleWatchlist(auc.id)}
-                            className="absolute right-3 top-3 rounded-full bg-white/90 p-2 text-slate-700 shadow backdrop-blur-sm hover:text-rose-600 transition-colors"
-                          >
-                            <Bookmark
-                              size={16}
-                              className={
-                                isWatched ? "fill-rose-500 text-rose-500" : ""
+                    return (
+                      <div
+                        key={auc.id}
+                        className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-all hover:shadow-md"
+                      >
+                        <div>
+                          {/* Image + Badges */}
+                          <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+                            <img
+                              src={
+                                auc.listing.images?.[0]?.url ||
+                                "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=800&q=80"
                               }
+                              alt={auc.listing.title}
+                              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                             />
-                          </button>
-                        </div>
-
-                        {/* Card Details */}
-                        <div className="p-5">
-                          <div className="text-xs font-medium text-blue-600">
-                            {auc.listing.category.name}
-                          </div>
-                          <h3 className="mt-1 font-bold text-slate-900 text-base leading-snug line-clamp-1">
-                            {auc.listing.title}
-                          </h3>
-
-                          <div className="mt-2 flex items-center gap-1 text-xs text-slate-500">
-                            <MapPin size={13} className="text-slate-400" />
-                            <span>
-                              {auc.listing.city}
-                              {auc.listing.region ? `, ${auc.listing.region}` : ""}
-                            </span>
-                          </div>
-
-                          {/* Features Pills */}
-                          {auc.listing.features && auc.listing.features.length > 0 && (
-                            <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-slate-600">
-                              {auc.listing.features.slice(0, 3).map((f: string, i: number) => (
-                                <span
-                                  key={i}
-                                  className="rounded-md bg-slate-100 px-2 py-0.5"
-                                >
-                                  {f}
+                            <div className="absolute left-3 top-3 flex items-center gap-2">
+                              {isLive ? (
+                                <span className="flex items-center gap-1.5 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white shadow">
+                                  <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+                                  Live Auction
                                 </span>
-                              ))}
+                              ) : isUpcoming ? (
+                                <span className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-bold text-white shadow">
+                                  Upcoming
+                                </span>
+                              ) : (
+                                <span className="rounded-md bg-slate-800 px-2.5 py-1 text-xs font-bold text-white shadow">
+                                  {auc.status}
+                                </span>
+                              )}
                             </div>
-                          )}
 
-                          {/* Price Area */}
-                          <div className="mt-4 pt-3 border-t border-slate-100 flex items-end justify-between">
-                            <div>
-                              <span className="text-[11px] text-slate-400 block">
-                                {isLive ? "Current Bid" : "Starting Price"}
-                              </span>
-                              <span className="text-lg font-bold text-slate-900">
-                                $ {currentBid.toLocaleString()}
+                            {/* Watchlist Bookmark Button */}
+                            <button
+                              onClick={() => handleToggleWatchlist(auc.id)}
+                              className="absolute right-3 top-3 rounded-full bg-white/90 dark:bg-slate-900/90 p-2 text-slate-700 dark:text-slate-300 shadow backdrop-blur-sm hover:text-rose-600 transition-colors"
+                            >
+                              <Bookmark
+                                size={16}
+                                className={
+                                  isWatched ? "fill-rose-500 text-rose-500" : ""
+                                }
+                              />
+                            </button>
+                          </div>
+
+                          {/* Card Details */}
+                          <div className="p-5">
+                            <div className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                              {auc.listing.category.name}
+                            </div>
+                            <h3 className="mt-1 font-bold text-slate-900 dark:text-white text-base leading-snug line-clamp-1">
+                              {auc.listing.title}
+                            </h3>
+
+                            <div className="mt-2 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                              <MapPin size={13} className="text-slate-400 dark:text-slate-500" />
+                              <span>
+                                {auc.listing.city}
+                                {auc.listing.region ? `, ${auc.listing.region}` : ""}
                               </span>
                             </div>
-                            <div className="text-right text-xs text-slate-500">
-                              <span className="block text-[10px] text-slate-400">
-                                {isLive ? "Ends in" : "Starts in"}
-                              </span>
-                              <span className="font-semibold text-slate-700 flex items-center gap-1">
-                                <Clock size={12} className="text-blue-500" />
-                                {formatTimeLeft(isLive ? auc.endAt : auc.startAt)}
-                              </span>
+
+                            {/* Features Pills */}
+                            {auc.listing.features && auc.listing.features.length > 0 && (
+                              <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+                                {auc.listing.features.slice(0, 3).map((f: string, i: number) => (
+                                  <span
+                                    key={i}
+                                    className="rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5"
+                                  >
+                                    {f}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Price Area */}
+                            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-end justify-between">
+                              <div>
+                                <span className="text-[11px] text-slate-400 dark:text-slate-500 block">
+                                  {isLive ? "Current Bid" : "Starting Price"}
+                                </span>
+                                <span className="text-lg font-bold text-slate-900 dark:text-white">
+                                  $ {currentBid.toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="text-right text-xs text-slate-500 dark:text-slate-400">
+                                <span className="block text-[10px] text-slate-400 dark:text-slate-500">
+                                  {isLive ? "Ends in" : "Starts in"}
+                                </span>
+                                <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                                  <Clock size={12} className="text-blue-500" />
+                                  {formatTimeLeft(isLive ? auc.endAt : auc.startAt)}
+                                </span>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Card Action Buttons */}
-                      <div className="px-5 pb-5 pt-0 grid grid-cols-2 gap-2">
-                        <a
-                          href={`/auction/${auc.id}`}
-                          className="rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-center"
-                        >
-                          View Details
-                        </a>
-                        {isLive ? (
+                        {/* Card Action Buttons */}
+                        <div className="px-5 pb-5 pt-0 grid grid-cols-2 gap-2">
                           <button
-                            onClick={() => handleOpenBid(auc)}
-                            className="rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-semibold text-white shadow hover:bg-blue-700 transition-colors"
+                            onClick={() => handleBidNowClick(auc.id)}
+                            className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-center"
                           >
-                            Place Bid
+                            View Auction
                           </button>
-                        ) : (
-                          <a
-                            href={`/auction/${auc.id}`}
-                            className="rounded-xl bg-slate-100 px-3 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors text-center"
-                          >
-                            Set Reminder
-                          </a>
-                        )}
+                          {isLive ? (
+                            <button
+                              onClick={() => handleOpenBid(auc)}
+                              className="rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-semibold text-white shadow hover:bg-blue-700 transition-colors"
+                            >
+                              Place Bid
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleBidNowClick(auc.id)}
+                              className="rounded-xl bg-slate-100 dark:bg-slate-800 px-3 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-center"
+                            >
+                              Set Reminder
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -1824,15 +1766,25 @@ export function CustomerDashboardClient({
             </div>
           )}
 
-          {/* ══════════════════ TAB 8: PROFILE ══════════════════ */}
+          {activeTab === "account" && (
+            <AccountManagement
+              name={user.name}
+              email={user.email}
+              phone={user.phone}
+              avatarUrl={user.avatarUrl}
+              isGoogleOnly={isGoogleOnlyAccount}
+            />
+          )}
+
+          {/* ══════════════════ TAB 8: BUYER PREFERENCES ══════════════════ */}
           {activeTab === "profile" && (
             <div className="max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
-                  Customer Profile & Preferences
+                  Buyer Preferences
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Manage your buyer account details, verified locations, and contact info.
+                  Set the address and location you prefer for auction searches.
                 </p>
               </div>
 
@@ -1862,44 +1814,11 @@ export function CustomerDashboardClient({
               >
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Full Name
-                  </label>
-                  <input
-                    name="name"
-                    defaultValue={user.name}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 outline-none focus:border-blue-600 text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Email Address (Read-only)
-                  </label>
-                  <input
-                    disabled
-                    value={user.email}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-slate-500 text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Phone Number
-                  </label>
-                  <input
-                    name="phone"
-                    defaultValue={user.phone || "+251 91 122 3344"}
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 outline-none focus:border-blue-600 text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
                     Primary Address
                   </label>
                   <input
                     name="address"
-                    defaultValue={user.buyerProfile?.address || "Bole Subcity, Addis Ababa"}
+                    defaultValue={user.buyerProfile?.address || ""}
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
@@ -1910,7 +1829,7 @@ export function CustomerDashboardClient({
                   </label>
                   <input
                     name="preferredLocation"
-                    defaultValue={user.buyerProfile?.preferredLocation || "Addis Ababa, Bole"}
+                    defaultValue={user.buyerProfile?.preferredLocation || ""}
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 outline-none focus:border-blue-600 text-sm"
                   />
                 </div>
@@ -1961,18 +1880,36 @@ export function CustomerDashboardClient({
                       </div>
                     </div>
 
+                    <div className="ml-4 flex shrink-0 flex-col items-end gap-2">
                     {!n.readAt && (
                       <button
+                        type="button"
+                        disabled={isPending}
                         onClick={() => {
-                          startTransition(() => {
-                            markNotificationReadAction(n.id);
+                          startTransition(async () => {
+                            await markNotificationReadAction(n.id);
                           });
                         }}
-                        className="rounded-lg bg-blue-600 px-3 py-1 font-semibold text-white text-[11px] hover:bg-blue-700"
+                        className="rounded-lg bg-blue-600 px-3 py-1 font-semibold text-white text-[11px] hover:bg-blue-700 disabled:opacity-50"
                       >
                         Mark Read
                       </button>
                     )}
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => {
+                        if (!window.confirm("Delete this notification? This will not delete the inquiry or other users’ copies.")) return;
+                        startTransition(async () => {
+                          await deleteNotificationAction(n.id);
+                        });
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-3 py-1 font-semibold text-rose-700 text-[11px] hover:bg-rose-50 disabled:opacity-50"
+                      aria-label={`Delete notification: ${n.title}`}
+                    >
+                      <Trash2 size={12} /> Delete
+                    </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -2078,125 +2015,6 @@ export function CustomerDashboardClient({
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* ─────────────────── MODAL: AUCTION DETAILS ─────────────────── */}
-      {detailAuction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
-                {detailAuction.listing.category.name}
-              </span>
-              <button
-                onClick={() => setDetailAuction(null)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="aspect-[16/9] w-full overflow-hidden rounded-2xl bg-slate-100">
-              <img
-                src={
-                  detailAuction.listing.images?.[0]?.url ||
-                  "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80"
-                }
-                alt={detailAuction.listing.title}
-                className="h-full w-full object-cover"
-              />
-            </div>
-
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">
-                {detailAuction.listing.title}
-              </h2>
-              <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
-                <MapPin size={14} className="text-slate-400" />
-                <span>
-                  {detailAuction.listing.address || detailAuction.listing.city},{" "}
-                  {detailAuction.listing.region}
-                </span>
-                <span>•</span>
-                <span>Ref: {detailAuction.listing.referenceNumber || "ETH-VERIFIED"}</span>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              {detailAuction.listing.description}
-            </p>
-
-            {/* Features */}
-            {detailAuction.listing.features && (
-              <div>
-                <h4 className="text-xs font-bold text-slate-800 mb-2">
-                  Features & Specifications
-                </h4>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  {detailAuction.listing.features.map((f: string, i: number) => (
-                    <span
-                      key={i}
-                      className="rounded-lg bg-slate-100 px-3 py-1 text-slate-700 font-medium"
-                    >
-                      {f}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Auction Terms */}
-            {detailAuction.terms && (
-              <div className="rounded-xl bg-blue-50/70 p-4 text-xs text-slate-700">
-                <strong className="block text-blue-900 mb-1">
-                  Auction Closing & Escrow Terms:
-                </strong>
-                {detailAuction.terms}
-              </div>
-            )}
-
-            <div className="flex items-center justify-between border-t border-slate-100 pt-4">
-              <div>
-                <span className="text-[11px] text-slate-400 block">
-                  Current Bid
-                </span>
-                <span className="text-xl font-bold text-slate-900">
-                  $ {Number(detailAuction.currentHighestBid || detailAuction.startingPrice).toLocaleString()}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setDetailAuction(null)}
-                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Close
-                </button>
-                {auctionPhase(
-                  {
-                    auctionStatus: detailAuction.status,
-                    listingStatus: detailAuction.listing.status,
-                    entryFeeStatus: detailAuction.entryFeeStatus,
-                    startAt: new Date(detailAuction.startAt),
-                    endAt: new Date(detailAuction.endAt),
-                  },
-                  new Date(),
-                ) === "LIVE" && (
-                  <button
-                    onClick={() => {
-                      const a = detailAuction;
-                      setDetailAuction(null);
-                      handleOpenBid(a);
-                    }}
-                    className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow hover:bg-blue-700"
-                  >
-                    Bid on this Item
-                  </button>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       )}

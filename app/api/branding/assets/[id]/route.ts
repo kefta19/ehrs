@@ -15,7 +15,7 @@ export async function GET(
     select: { data: true, mimeType: true },
   });
   if (!asset) return new Response("Not found", { status: 404 });
-  return new Response(asset.data, {
+  return new Response(Buffer.from(asset.data), {
     headers: {
       "Content-Type": asset.mimeType,
       "X-Content-Type-Options": "nosniff",

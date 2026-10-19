@@ -23,14 +23,21 @@ export function POST(
     const rule = UPLOAD_RULES[kind as UploadKind];
 
     const user = await requireAuth();
-    if (!can(user, "listing:create"))
+    const isAvatarUpload = kind === "avatar";
+    if (!isAvatarUpload && !can(user, "listing:create"))
       throw new HttpError(403, "Only sellers can upload listing media");
 
-    if (!rateLimit(`listing-upload:${user.id}`, 60, 10 * 60_000))
-      throw new HttpError(429, "Too many uploads. Please wait a few minutes.");
+    if (
+      !rateLimit(
+        `${isAvatarUpload ? "avatar" : "listing"}-upload:${user.id}`,
+        isAvatarUpload ? 10 : 60,
+        isAvatarUpload ? 60 * 60_000 : 10 * 60_000,
+      )
+    )
+      throw new HttpError(429, "Too many uploads. Please wait before trying again.");
 
     const pending = await prisma.mediaFile.count({
-      where: { ownerId: user.id },
+      where: { ownerId: user.id, attachedAt: null },
     });
     if (pending >= MAX_UNATTACHED_PER_USER)
       throw new HttpError(
@@ -56,13 +63,9 @@ export function POST(
       );
 
     const buf = Buffer.from(await file.arrayBuffer());
-    console.log(`File buffer size: ${buf.length}`);
     const mime = sniffMime(buf);
-    console.log(`Detected MIME type: ${mime}`);
     const ext = mime ? rule.types[mime] : undefined;
-    console.log(`Extension: ${ext}, rule types:`, rule.types);
     if (!mime || !ext) {
-      console.error(`Unsupported file type. MIME: ${mime}, File type: ${file.type}`);
       throw new HttpError(
         415,
         `Unsupported file type. Allowed: ${Object.values(rule.types).join(", ")}`,
@@ -80,10 +83,58 @@ export function POST(
           storageKey: storageKey,
         },
       });
+      const url = `/api/media/${media.id}`;
+      if (isAvatarUpload) {
+        try {
+          await prisma.$transaction([
+            prisma.mediaFile.update({
+              where: { id: media.id },
+              data: { attachedAt: new Date() },
+            }),
+            prisma.user.update({
+              where: { id: user.id },
+              data: { avatarUrl: url },
+            }),
+          ]);
+        } catch (err) {
+          await prisma.mediaFile.delete({ where: { id: media.id } });
+          await deleteFile(storageKey);
+          console.error("Failed to attach uploaded profile photo:", err);
+          throw new HttpError(500, "Failed to update profile photo. Please try again.");
+        }
+
+        const previousUrl = user.avatarUrl;
+        const previousId = previousUrl?.match(/^\/api\/media\/([^/?#]+)$/)?.[1];
+        if (previousId && previousId !== media.id) {
+          try {
+            const previousMedia = await prisma.mediaFile.findFirst({
+              where: { id: previousId, ownerId: user.id, kind: "IMAGE" },
+              select: { id: true, storageKey: true },
+            });
+            const referencedByListing = previousUrl
+              ? await prisma.listing.findFirst({
+                  where: {
+                    OR: [
+                      { videoUrl: previousUrl },
+                      { images: { some: { url: previousUrl } } },
+                    ],
+                  },
+                  select: { id: true },
+                })
+              : null;
+            if (previousMedia && !referencedByListing) {
+              await prisma.mediaFile.delete({ where: { id: previousMedia.id } });
+              await deleteFile(previousMedia.storageKey);
+            }
+          } catch (error) {
+            console.error("Failed to clean up the previous profile photo:", error);
+          }
+        }
+      }
       return NextResponse.json({
         success: true,
         id: media.id,
-        url: `/api/media/${media.id}`,
+        url,
         kind: media.kind,
       });
     } catch (err) {

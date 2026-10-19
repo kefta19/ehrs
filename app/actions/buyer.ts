@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notify, notifyAdmins } from "@/lib/notify";
+import { notifyAuctionParticipant } from "@/lib/auction-notifications";
 import { logAudit } from "@/lib/security";
 import {
   bidSchema,
@@ -67,8 +68,24 @@ export async function placeBidAction(formData: FormData) {
     },
   });
 
-  if (!buyerEntryFee || buyerEntryFee.status !== "CONFIRMED") {
-    return { success: false, error: "You must pay the entrance fee before placing a bid." };
+  const buyerReg = await prisma.buyerBidRegistration.findUnique({
+    where: {
+      auctionId_buyerId: {
+        auctionId: auctionId,
+        buyerId: user.id,
+      },
+    },
+  });
+
+  const isFeePaid =
+    (buyerEntryFee && buyerEntryFee.status === "CONFIRMED") ||
+    (buyerReg && (buyerReg.status === "PAID" || buyerReg.status === "WAIVED"));
+
+  if (!isFeePaid) {
+    return {
+      success: false,
+      error: "You must pay the service entrance fee before placing or increasing a bid on this listing.",
+    };
   }
 
   const currentBid = Number(auction.currentHighestBid);
@@ -114,15 +131,31 @@ export async function placeBidAction(formData: FormData) {
     }),
   ]);
 
-  // Outbid notification to previous highest bidder
-  if (previousHighestBidderId && previousHighestBidderId !== user.id) {
-    await notify(previousHighestBidderId, {
-      type: "OUTBID",
-      title: "You were outbid!",
-      body: `Another bidder placed a bid of $${amount.toLocaleString()} on "${auction.listing.title}". Place a higher bid now to stay in the lead!`,
-      link: `/buyer?tab=bids`,
-    });
-  }
+  const participants = await prisma.bid.findMany({
+    where: { auctionId: auction.id },
+    select: { bidderId: true },
+    distinct: ["bidderId"],
+  });
+  await Promise.all(
+    participants.map(({ bidderId }) =>
+      notifyAuctionParticipant(bidderId, {
+        type: "AUCTION_BID_UPDATE",
+        title:
+          bidderId === previousHighestBidderId && bidderId !== user.id
+            ? "You were outbid"
+            : bidderId === user.id
+              ? "Your bid was recorded"
+              : "New bid placed",
+        body:
+          bidderId === previousHighestBidderId && bidderId !== user.id
+            ? `A new bid of $${amount.toLocaleString()} was placed on "${auction.listing.title}". You are no longer the highest bidder.`
+            : bidderId === user.id
+              ? `Your bid of $${amount.toLocaleString()} on "${auction.listing.title}" was recorded.`
+              : `A new bid of $${amount.toLocaleString()} was placed on "${auction.listing.title}".`,
+        link: `/auction/${auction.id}`,
+      }),
+    ),
+  );
 
   // Notification to Seller
   await notify(auction.sellerId, {
@@ -147,6 +180,7 @@ export async function placeBidAction(formData: FormData) {
   revalidatePath("/seller");
   revalidatePath("/provider");
   revalidatePath("/");
+  revalidatePath(`/auction/${auction.id}`);
 
   return {
     success: true,
@@ -256,6 +290,120 @@ export async function submitPaymentAction(formData: FormData) {
     success: true,
     message:
       "Payment proof submitted successfully. Platform admin will verify your deposit shortly.",
+  };
+}
+
+export async function submitAuctionInquiryAction(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "BUYER") {
+    return { success: false, error: "Sign in with a buyer account to contact the seller." };
+  }
+
+  const auctionId = formData.get("auctionId");
+  const messageValue = formData.get("message");
+  const message =
+    typeof messageValue === "string" ? messageValue.trim() : "";
+
+  if (typeof auctionId !== "string" || !auctionId) {
+    return { success: false, error: "This auction could not be identified." };
+  }
+  if (message.length < 10 || message.length > 2000) {
+    return {
+      success: false,
+      error: "Your message must be between 10 and 2,000 characters.",
+    };
+  }
+
+  const auction = await prisma.auction.findUnique({
+    where: { id: auctionId },
+    select: {
+      id: true,
+      sellerId: true,
+      status: true,
+      listing: { select: { title: true, status: true } },
+    },
+  });
+
+  if (!auction || auction.listing.status !== "APPROVED") {
+    return { success: false, error: "This listing is not available." };
+  }
+  if (auction.sellerId === user.id) {
+    return { success: false, error: "You cannot contact yourself about your own listing." };
+  }
+  if (!["ACTIVE", "SCHEDULED", "CLOSED", "COMPLETED"].includes(auction.status)) {
+    return { success: false, error: "This auction is not accepting inquiries." };
+  }
+
+  const [registration, entryFee] = await Promise.all([
+    prisma.buyerBidRegistration.findUnique({
+      where: { auctionId_buyerId: { auctionId, buyerId: user.id } },
+      select: { status: true },
+    }),
+    prisma.buyerAuctionEntryFee.findUnique({
+      where: { auctionId_buyerId: { auctionId, buyerId: user.id } },
+      select: { status: true },
+    }),
+  ]);
+  const hasPaidEntranceFee =
+    registration?.status === "PAID" ||
+    registration?.status === "WAIVED" ||
+    entryFee?.status === "CONFIRMED";
+
+  if (!hasPaidEntranceFee) {
+    return {
+      success: false,
+      error: "Complete the auction entrance-fee requirement before contacting the seller.",
+    };
+  }
+
+  let number: string | undefined;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const count = await prisma.ticket.count();
+    const candidate = `TK-${(10000 + count + attempt + 1).toString()}`;
+    const existing = await prisma.ticket.findUnique({
+      where: { number: candidate },
+      select: { id: true },
+    });
+    if (!existing) {
+      number = candidate;
+      break;
+    }
+  }
+
+  if (!number) {
+    throw new Error("Unable to generate a unique inquiry number.");
+  }
+
+  const subject = `Auction inquiry: ${auction.listing.title}`.slice(0, 200);
+  const ticket = await prisma.ticket.create({
+    data: {
+      number,
+      type: TicketType.SUPPORT,
+      subject,
+      description: `Buyer: ${user.name} <${user.email}>\n\n${message}`,
+      priority: TicketPriority.NORMAL,
+      status: "OPEN",
+      createdById: user.id,
+      againstUserId: auction.sellerId,
+      auctionId: auction.id,
+    },
+    select: { id: true, number: true },
+  });
+
+  await notify(auction.sellerId, {
+    type: "AUCTION_INQUIRY",
+    title: "New buyer inquiry",
+    body: `${user.name} (${user.email}) asked about "${auction.listing.title}": ${message}`,
+    link: `/seller?tab=notifications&inquiryId=${encodeURIComponent(ticket.id)}`,
+  });
+
+  revalidatePath("/buyer");
+  revalidatePath("/customer");
+  revalidatePath("/seller");
+
+  return {
+    success: true,
+    message: `Inquiry ${ticket.number} sent to the seller.`,
   };
 }
 
@@ -375,6 +523,27 @@ export async function markNotificationReadAction(notificationId: string) {
 
   revalidatePath("/buyer");
   revalidatePath("/customer");
+  revalidatePath("/seller");
+  revalidatePath("/provider");
+  return { success: true };
+}
+
+export async function deleteNotificationAction(notificationId: string) {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+  if (!notificationId) {
+    return { success: false, error: "Notification ID is required." };
+  }
+
+  await prisma.notification.deleteMany({
+    where: { id: notificationId, userId: user.id },
+  });
+
+  revalidatePath("/buyer");
+  revalidatePath("/customer");
+  revalidatePath("/seller");
+  revalidatePath("/provider");
+  revalidatePath("/admin");
   return { success: true };
 }
 

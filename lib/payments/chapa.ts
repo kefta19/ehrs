@@ -18,7 +18,7 @@ export async function initializeChapa(p: {
   name: string;
   txRef: string;
 }): Promise<{ checkoutUrl: string }> {
-  const [first, ...rest] = p.name.trim().split(/\s+/);
+  const first = p.name.trim().split(/\s+/)[0];
   const res = await fetch(`${BASE}/transaction/initialize`, {
     method: "POST",
     headers: headers(),

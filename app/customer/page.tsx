@@ -4,15 +4,23 @@ import { roleHome } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { CustomerDashboardClient } from "@/components/customer-dashboard-client";
 import { syncAuctionStatuses } from "@/lib/auction-lifecycle";
+import { isGoogleOnlyAccount } from "@/lib/account";
 
 export const dynamic = "force-dynamic";
 
-export default async function CustomerPage() {
+export default async function CustomerPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tab?: string }>;
+} = {}) {
   await syncAuctionStatuses();
 
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role !== "BUYER" && user.role !== "ADMIN") redirect(roleHome(user.role));
+
+  const resolvedParams = searchParams ? await searchParams : {};
+  const initialTab = resolvedParams?.tab || "dashboard";
 
   // cspell:disable
   const [
@@ -31,36 +39,26 @@ export default async function CustomerPage() {
         status: { in: ["ACTIVE", "SCHEDULED"] },
         listing: {
           status: "APPROVED",
-          ...(user.tenantId ? { tenantId: user.tenantId } : {}),
+          ...(user.tenantId
+            ? {
+                OR: [{ tenantId: user.tenantId }, { tenantId: null }],
+              }
+            : {}),
         },
       },
       include: {
         listing: {
-          include: {
+          select: {
+            id: true,
+            title: true,
+            city: true,
+            region: true,
+            features: true,
             images: { orderBy: { displayOrder: "asc" } },
-            documents: true,
-            category: true,
-            seller: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                phone: true,
-                sellerProfile: {
-                  select: {
-                    businessName: true,
-                    address: true,
-                    status: true,
-                  },
-                },
-              },
+            category: {
+              select: { id: true, name: true, slug: true, icon: true },
             },
           },
-        },
-        highestBidder: true,
-        bids: {
-          orderBy: { createdAt: "desc" },
-          take: 5,
         },
       },
       orderBy: { createdAt: "desc" },
@@ -71,9 +69,14 @@ export default async function CustomerPage() {
         auction: {
           include: {
             listing: {
-              include: {
-                category: true,
+              select: {
+                id: true,
+                title: true,
+                city: true,
                 images: true,
+                category: {
+                  select: { id: true, name: true, slug: true, icon: true },
+                },
               },
             },
           },
@@ -87,9 +90,14 @@ export default async function CustomerPage() {
         auction: {
           include: {
             listing: {
-              include: {
-                category: true,
+              select: {
+                id: true,
+                title: true,
+                city: true,
                 images: true,
+                category: {
+                  select: { id: true, name: true, slug: true, icon: true },
+                },
               },
             },
           },
@@ -104,9 +112,14 @@ export default async function CustomerPage() {
         auction: {
           include: {
             listing: {
-              include: {
-                category: true,
+              select: {
+                id: true,
+                title: true,
+                city: true,
                 images: true,
+                category: {
+                  select: { id: true, name: true, slug: true, icon: true },
+                },
               },
             },
           },
@@ -121,7 +134,7 @@ export default async function CustomerPage() {
           include: {
             auction: {
               include: {
-                listing: true,
+                listing: { select: { id: true, title: true } },
               },
             },
           },
@@ -147,39 +160,57 @@ export default async function CustomerPage() {
       include: { buyerProfile: true },
     }),
   ]);
+  const googleOnlyAccount = await isGoogleOnlyAccount(user.id);
   // cspell:enable
 
-  // Fetch buyer's bid registrations for all visible auctions
+  // Fetch buyer's bid registrations & entry fees for all visible auctions
   const auctionIds = auctions.map((a) => a.id);
-  const bidRegistrations = auctionIds.length
-    ? await prisma.buyerBidRegistration.findMany({
-        where: { auctionId: { in: auctionIds }, buyerId: user.id },
-        select: { auctionId: true, status: true, feeAmount: true, id: true },
-      })
-    : [];
+  const [bidRegistrations, buyerEntryFees] = auctionIds.length
+    ? await Promise.all([
+        prisma.buyerBidRegistration.findMany({
+          where: { auctionId: { in: auctionIds }, buyerId: user.id },
+          select: { auctionId: true, status: true },
+        }),
+        prisma.buyerAuctionEntryFee.findMany({
+          where: { auctionId: { in: auctionIds }, buyerId: user.id },
+          select: { auctionId: true, status: true, amount: true, id: true, txRef: true, method: true },
+        }),
+      ])
+    : [[], []];
 
-  const dashboardUser = userProfile
-    ? {
-        ...user,
-        ...userProfile,
-        phone: userProfile.phone ?? user.phone ?? undefined,
-        buyerProfile: userProfile.buyerProfile
-          ? {
-              address: userProfile.buyerProfile.address ?? undefined,
-              preferredLocation:
-                userProfile.buyerProfile.preferredLocation ?? undefined,
-            }
-          : undefined,
-      }
-    : {
-        ...user,
-        phone: user.phone ?? undefined,
-      };
+  const paidEntranceFeeAuctionIds = Array.from(
+    new Set([
+      ...bidRegistrations
+        .filter((r) => r.status === "PAID" || r.status === "WAIVED")
+        .map((r) => r.auctionId),
+      ...buyerEntryFees
+        .filter((f) => f.status === "CONFIRMED")
+        .map((f) => f.auctionId),
+    ])
+  );
+
+  const dashboardUser = {
+    id: user.id,
+    name: userProfile?.name ?? user.name,
+    email: userProfile?.email ?? user.email,
+    phone: userProfile?.phone ?? user.phone ?? undefined,
+    avatarUrl: userProfile?.avatarUrl ?? user.avatarUrl,
+    buyerProfile: userProfile?.buyerProfile
+      ? {
+          address: userProfile.buyerProfile.address ?? undefined,
+          preferredLocation:
+            userProfile.buyerProfile.preferredLocation ?? undefined,
+        }
+      : undefined,
+  };
 
   return (
     // cspell:disable
     <CustomerDashboardClient
       user={dashboardUser}
+      isGoogleOnlyAccount={googleOnlyAccount}
+      initialTab={initialTab}
+      paidEntranceFeeAuctionIds={paidEntranceFeeAuctionIds}
       auctions={JSON.parse(JSON.stringify(auctions))}
       myBids={JSON.parse(JSON.stringify(myBids))}
       wonAuctions={JSON.parse(JSON.stringify(wonAuctions))}

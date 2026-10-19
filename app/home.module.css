@@ -1,0 +1,70 @@
+.heroBackground {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.heroTrack {
+  display: flex;
+  width: max-content;
+  height: 100%;
+  will-change: transform;
+  animation: hero-live-auction-scroll 110s linear infinite;
+}
+
+.heroSlide {
+  overflow: hidden;
+  flex: 0 0 100vw;
+  height: 100%;
+}
+
+.heroImage {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.78;
+  animation: hero-image-drift 28s ease-in-out infinite alternate;
+}
+
+.heroScrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to right,
+    rgb(10 25 47 / 86%),
+    rgb(10 25 47 / 65%) 48%,
+    rgb(10 25 47 / 18%)
+  );
+}
+
+@keyframes hero-live-auction-scroll {
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes hero-image-drift {
+  from {
+    transform: scale(1);
+  }
+
+  to {
+    transform: scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heroTrack {
+    animation: none;
+    width: 100%;
+  }
+
+  .heroSlide:not(:first-child) {
+    display: none;
+  }
+
+  .heroImage {
+    animation: none;
+  }
+}

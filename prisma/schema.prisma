@@ -89,6 +89,7 @@ enum TicketPriority {
 
 enum TokenType {
   EMAIL_VERIFY
+  EMAIL_CHANGE
   PASSWORD_RESET
 }
 
@@ -110,6 +111,7 @@ model User {
   name             String
   email            String     @unique
   passwordHash     String
+  googleOnly       Boolean    @default(false)
   phone            String?
   avatarUrl        String?
   role             UserRole   @default(BUYER)
@@ -126,30 +128,30 @@ model User {
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
-  sessions         Session[]
-  tokens           VerificationToken[]
-  sellerProfile    SellerProfile?
-  buyerProfile     BuyerProfile?
-  listings         Listing[]           @relation("SellerListings")
-  sellerAuctions   Auction[]           @relation("SellerAuctions")
-  bids             Bid[]               @relation("UserBids")
-  highestBids      Auction[]           @relation("HighestBidderAuctions")
-  wonAuctions      AuctionResult[]     @relation("WinningBidderResults")
-  watchlist        WatchlistItem[]
-  payments         Payment[]           @relation("UserPayments")
-  ticketsCreated   Ticket[]            @relation("TicketCreator")
-  ticketsAgainst   Ticket[]            @relation("TicketTarget")
-  ticketsAssigned  Ticket[]            @relation("TicketAssignee")
-  ticketMessages   TicketMessage[]
-  notifications    Notification[]
-  auditLogs        AuditLog[]
-    entryFeesPaid          AuctionEntryFee[]   @relation("EntryFeePayer")
-    mediaFiles             MediaFile[]
+  sessions               Session[]
+  tokens                 VerificationToken[]
+  sellerProfile          SellerProfile?
+  buyerProfile           BuyerProfile?
+  listings               Listing[]               @relation("SellerListings")
+  sellerAuctions         Auction[]               @relation("SellerAuctions")
+  bids                   Bid[]                   @relation("UserBids")
+  highestBids            Auction[]               @relation("HighestBidderAuctions")
+  wonAuctions            AuctionResult[]         @relation("WinningBidderResults")
+  watchlist              WatchlistItem[]
+  payments               Payment[]               @relation("UserPayments")
+  ticketsCreated         Ticket[]                @relation("TicketCreator")
+  ticketsAgainst         Ticket[]                @relation("TicketTarget")
+  ticketsAssigned        Ticket[]                @relation("TicketAssignee")
+  ticketMessages         TicketMessage[]
+  notifications          Notification[]
+  auditLogs              AuditLog[]
+  entryFeesPaid          AuctionEntryFee[]       @relation("EntryFeePayer")
+  mediaFiles             MediaFile[]
   biometricCredentials   BiometricCredential[]
   biometricVerifications BiometricVerification[]
   webauthnChallenges     WebAuthnChallenge[]
-  buyerRegistrations     BuyerBidRegistration[] @relation("BuyerRegistrations")
-  buyerEntryFees         BuyerAuctionEntryFee[] @relation("BuyerEntryFees")
+  buyerRegistrations     BuyerBidRegistration[]  @relation("BuyerRegistrations")
+  buyerEntryFees         BuyerAuctionEntryFee[]  @relation("BuyerEntryFees")
 
   @@index([role, status])
   @@index([tenantId])
@@ -175,6 +177,7 @@ model VerificationToken {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   type      TokenType
   tokenHash String    @unique
+  pendingEmail String?
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
@@ -225,34 +228,34 @@ model Category {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  listings    Listing[]
+  listings Listing[]
 
   @@index([isActive, sortOrder])
 }
 
 model Listing {
-  id              String           @id @default(cuid())
-  sellerId        String
-  seller          User             @relation("SellerListings", fields: [sellerId], references: [id], onDelete: Restrict)
-  categoryId      String
-  category        Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  title           String
-  description     String
-  condition       ListingCondition @default(NOT_APPLICABLE)
-  address         String?
-  city            String
-  region          String
-  country         String           @default("ET")
-  postalCode      String?
-  referenceNumber String?          @unique // parcel no., VIN, serial no. etc.
-  features        String[]
-  attributes      Json?            // category-specific fields (see lib/categories.ts)
-  status          ListingStatus    @default(DRAFT)
-  reviewedById    String?
-  rejectionReason String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-    videoUrl                String?
+  id                      String                 @id @default(cuid())
+  sellerId                String
+  seller                  User                   @relation("SellerListings", fields: [sellerId], references: [id], onDelete: Restrict)
+  categoryId              String
+  category                Category               @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  title                   String
+  description             String
+  condition               ListingCondition       @default(NOT_APPLICABLE)
+  address                 String?
+  city                    String
+  region                  String
+  country                 String                 @default("ET")
+  postalCode              String?
+  referenceNumber         String?                @unique // parcel no., VIN, serial no. etc.
+  features                String[]
+  attributes              Json? // category-specific fields (see lib/categories.ts)
+  status                  ListingStatus          @default(DRAFT)
+  reviewedById            String?
+  rejectionReason         String?
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  videoUrl                String?
   ownerNationalId         String?
   idDocumentMediaId       String?
   biometricVerificationId String?                @unique
@@ -260,17 +263,17 @@ model Listing {
   submittedAt             DateTime?
   reviewedAt              DateTime?
 
-  images          ListingImage[]
-  documents       ListingDocument[]
-  auctions        Auction[]
-    tenantId        String?
-  entryFeeStatus    EntryFeeStatus @default(UNPAID)
-  entryFees         AuctionEntryFee[]
+  images         ListingImage[]
+  documents      ListingDocument[]
+  auctions       Auction[]
+  tenantId       String?
+  entryFeeStatus EntryFeeStatus    @default(UNPAID)
+  entryFees      AuctionEntryFee[]
 
   @@index([sellerId, status])
   @@index([categoryId, status])
   @@index([city, status])
-    @@index([tenantId, status])
+  @@index([tenantId, status])
 }
 
 model ListingImage {
@@ -290,7 +293,7 @@ model ListingDocument {
   listingId    String
   listing      Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
   title        String
-  documentType String   // e.g. TITLE_DEED, OWNERSHIP_CARD, INSPECTION_REPORT, INVOICE
+  documentType String // e.g. TITLE_DEED, OWNERSHIP_CARD, INSPECTION_REPORT, INVOICE
   fileUrl      String
   isVerified   Boolean  @default(false)
   createdAt    DateTime @default(now())
@@ -319,12 +322,12 @@ model Auction {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  bids              Bid[]
-  buyerEntryFees    BuyerAuctionEntryFee[]
-  entryFees         AuctionEntryFee[]
-  result            AuctionResult?
-  tickets           Ticket[]
-  watchers          WatchlistItem[]
+  bids               Bid[]
+  buyerEntryFees     BuyerAuctionEntryFee[]
+  entryFees          AuctionEntryFee[]
+  result             AuctionResult?
+  tickets            Ticket[]
+  watchers           WatchlistItem[]
   buyerRegistrations BuyerBidRegistration[]
 
   @@index([status, startAt, endAt])
@@ -333,17 +336,62 @@ model Auction {
 }
 
 model Bid {
-  id        String   @id @default(cuid())
-  auctionId String
-  auction   Auction  @relation(fields: [auctionId], references: [id], onDelete: Restrict)
-  bidderId  String
-  bidder    User     @relation("UserBids", fields: [bidderId], references: [id], onDelete: Restrict)
-  amount    Decimal  @db.Decimal(14, 2)
-  ipAddress String?
-  createdAt DateTime @default(now())
+  id           String    @id @default(cuid())
+  auctionId    String
+  auction      Auction   @relation(fields: [auctionId], references: [id], onDelete: Restrict)
+  bidderId     String
+  bidder       User      @relation("UserBids", fields: [bidderId], references: [id], onDelete: Restrict)
+  amount       Decimal   @db.Decimal(14, 2)
+  ipAddress    String?
+  status       BidStatus @default(PENDING)
+  approvedById String?
+  approvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  payment BidPayment?
 
   @@index([auctionId, amount(sort: Desc)])
   @@index([bidderId])
+  @@index([status])
+}
+
+enum BidStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model BidPayment {
+  id               String           @id @default(cuid())
+  bidId            String           @unique
+  bid              Bid              @relation(fields: [bidId], references: [id], onDelete: Cascade)
+  amount           Decimal          @db.Decimal(14, 2)
+  currency         String           @default("ETB")
+  method           BidPaymentMethod @default(BANK_TRANSFER)
+  status           BidPaymentStatus @default(PENDING)
+  transactionRef   String?          @unique
+  receiptUrl       String?
+  bankReferenceUrl String?
+  verifiedById     String?
+  verifiedAt       DateTime?
+  rejectionReason  String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([bidId, status])
+}
+
+enum BidPaymentMethod {
+  TELEBIRR
+  CHAPA
+  BANK_TRANSFER
+}
+
+enum BidPaymentStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
 }
 
 // Buyer entrance fee to participate in an auction
@@ -394,9 +442,11 @@ model AuctionResult {
   depositDue         Decimal  @db.Decimal(14, 2)
   settlementDeadline DateTime
   isSettled          Boolean  @default(false)
+  reminder24hSentAt  DateTime?
+  deadlineSentAt     DateTime?
   createdAt          DateTime @default(now())
 
-  payments           Payment[]
+  payments Payment[]
 
   @@index([winningBidderId, isSettled])
 }
@@ -446,7 +496,7 @@ model Ticket {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  messages      TicketMessage[]
+  messages TicketMessage[]
 
   @@index([status, type])
   @@index([createdById])
@@ -484,8 +534,8 @@ model AuditLog {
   id            String   @id @default(cuid())
   actorId       String?
   actor         User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
-  action        String   // SELLER_APPROVED, LISTING_CREATED, BID_PLACED, AUCTION_COMPLETED
-  module        String   // USERS, KYC, LISTINGS, AUCTIONS, BIDS, PAYMENTS, SETTINGS
+  action        String // SELLER_APPROVED, LISTING_CREATED, BID_PLACED, AUCTION_COMPLETED
+  module        String // USERS, KYC, LISTINGS, AUCTIONS, BIDS, PAYMENTS, SETTINGS
   entityType    String?
   entityId      String?
   previousValue Json?
@@ -504,6 +554,7 @@ model SystemSetting {
   updatedById String?
   updatedAt   DateTime @updatedAt
 }
+
 enum BrandingAssetKind {
   LOGO
   FAVICON
@@ -511,9 +562,9 @@ enum BrandingAssetKind {
 
 model Tenant {
   id        String   @id @default(cuid())
-  slug      String   @unique          // subdomain key, e.g. "acme" for acme.example.com
+  slug      String   @unique // subdomain key, e.g. "acme" for acme.example.com
   name      String
-  domain    String?  @unique          // verified custom domain, e.g. "auctions.acme.com"
+  domain    String?  @unique // verified custom domain, e.g. "auctions.acme.com"
   isDefault Boolean  @default(false)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -551,12 +602,15 @@ model BrandingAsset {
 
   @@index([tenantId, kind])
 }
+
 enum MediaKind {
   IMAGE
   VIDEO
   ID_DOCUMENT
   OWNERSHIP_DOCUMENT
+  PAYMENT_PROOF
 }
+
 model MediaFile {
   id         String    @id @default(cuid())
   ownerId    String
@@ -573,15 +627,15 @@ model MediaFile {
 }
 
 model BiometricCredential {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  credentialId  String   @unique
-  publicKey     Bytes
-  counter       Int      @default(0)
-  transports    String[]
-  lastUsedAt    DateTime?
-  createdAt     DateTime @default(now())
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId String    @unique
+  publicKey    Bytes
+  counter      Int       @default(0)
+  transports   String[]
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
 
   verifications BiometricVerification[]
 
@@ -598,7 +652,7 @@ model BiometricVerification {
   consumedAt   DateTime?
   createdAt    DateTime            @default(now())
 
-  listing      Listing?
+  listing Listing?
 
   @@index([userId, createdAt])
 }
@@ -614,6 +668,7 @@ model WebAuthnChallenge {
 
   @@index([userId])
 }
+
 enum EntryFeeStatus {
   UNPAID
   PENDING
@@ -647,6 +702,8 @@ model AuctionEntryFee {
   txRef         String          @unique
   providerRef   String?
   bankReference String?         @unique
+  transactionUrl      String?
+  paymentProofMediaId String?
   verifiedById  String?
   confirmedAt   DateTime?
   failureReason String?
@@ -677,19 +734,21 @@ enum BuyerRegistrationStatus {
 }
 
 model BuyerBidRegistration {
-  id         String                  @id @default(cuid())
-  auctionId  String
-  auction    Auction                 @relation(fields: [auctionId], references: [id], onDelete: Restrict)
-  buyerId    String
-  buyer      User                    @relation("BuyerRegistrations", fields: [buyerId], references: [id], onDelete: Restrict)
-  status     BuyerRegistrationStatus @default(PENDING)
-  feeAmount  Decimal                 @default(0) @db.Decimal(14, 2)
-  currency   String                  @default("ETB")
-  txRef      String?                 @unique
-  paidAt     DateTime?
-  note       String?
-  createdAt  DateTime                @default(now())
-  updatedAt  DateTime                @updatedAt
+  id              String                  @id @default(cuid())
+  auctionId       String
+  auction         Auction                 @relation(fields: [auctionId], references: [id], onDelete: Restrict)
+  buyerId         String
+  buyer           User                    @relation("BuyerRegistrations", fields: [buyerId], references: [id], onDelete: Restrict)
+  status          BuyerRegistrationStatus @default(PENDING)
+  feeAmount       Decimal                 @default(0) @db.Decimal(14, 2)
+  currency        String                  @default("ETB")
+  paymentMethod   String?
+  paymentProofUrl String?
+  txRef           String?                 @unique
+  paidAt          DateTime?
+  note            String?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
 
   @@unique([auctionId, buyerId])
   @@index([auctionId, status])

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MIN_LISTING_IMAGES } from "@/lib/listing-readiness";
+import { isSocialVideoPostUrl } from "@/lib/social-video-url";
 
 const money = z.coerce
   .number()
@@ -34,7 +35,13 @@ export const createListingSchema = z.object({
     .array(z.string().min(1))
     .min(MIN_LISTING_IMAGES, `Upload at least ${MIN_LISTING_IMAGES} photos`)
     .max(12, "At most 12 photos"),
-  videoId: z.string().min(1, "Upload a video of the item"),
+  videoUrl: z
+    .string()
+    .trim()
+    .refine(
+      isSocialVideoPostUrl,
+      "Enter a valid video post URL from YouTube, TikTok, Instagram, Facebook, or X.",
+    ),
   nationalIdNumber: z
     .string()
     .trim()
@@ -72,7 +79,14 @@ export const listingDraftSchema = z.object({
   ownerNationalId: z.string().trim().min(4).max(60).optional(),
   idDocumentMediaId: z.string().optional(),
   ownershipDocumentMediaId: z.string().optional(),
-  videoUrl: z.string().url().optional(),
+  videoUrl: z
+    .string()
+    .trim()
+    .refine(
+      isSocialVideoPostUrl,
+      "Enter a valid video post URL from YouTube, TikTok, Instagram, Facebook, or X.",
+    )
+    .optional(),
   biometricVerificationId: z.string().optional(),
 });
 

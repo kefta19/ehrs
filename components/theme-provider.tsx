@@ -1,6 +1,12 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useState,
+} from "react";
 
 export type Theme = "light" | "dark" | "midnight" | "warm";
 
@@ -14,6 +20,11 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_STORAGE_KEY = "ethome_theme_preference";
+const THEMES: Theme[] = ["light", "dark", "midnight", "warm"];
+
+function isTheme(value: string | null): value is Theme {
+  return THEMES.includes(value as Theme);
+}
 
 function applyThemeClass(t: Theme) {
   const root = document.documentElement;
@@ -35,37 +46,36 @@ function applyThemeClass(t: Theme) {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("light");
 
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      try {
-        const stored = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
-        if (stored && ["light", "dark", "midnight", "warm"].includes(stored)) {
-          setThemeState(stored);
-          applyThemeClass(stored);
-        } else {
-          const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-          const initial = prefersDark ? "dark" : "light";
-          setThemeState(initial);
-          applyThemeClass(initial);
-        }
-      } catch {
-        // fallback
-      }
-    }, 0);
+  useLayoutEffect(() => {
+    let initialTheme: Theme;
+    try {
+      const stored = localStorage.getItem(THEME_STORAGE_KEY);
+      initialTheme = isTheme(stored)
+        ? stored
+        : window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
+    } catch {
+      initialTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    }
+    // Keep the saved theme and toggle state in sync before the first paint.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setThemeState(initialTheme);
+    applyThemeClass(initialTheme);
+  }, []);
 
+  useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key === THEME_STORAGE_KEY && e.newValue) {
-        const val = e.newValue as Theme;
-        if (["light", "dark", "midnight", "warm"].includes(val)) {
-          setThemeState(val);
-          applyThemeClass(val);
-        }
+      if (e.key === THEME_STORAGE_KEY && isTheme(e.newValue)) {
+        setThemeState(e.newValue);
+        applyThemeClass(e.newValue);
       }
     };
     window.addEventListener("storage", onStorage);
 
     return () => {
-      window.clearTimeout(timeoutId);
       window.removeEventListener("storage", onStorage);
     };
   }, []);

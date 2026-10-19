@@ -32,6 +32,40 @@ npm run migrate:dev
 
 This command uses a clean baseline in `prisma/dev-migrations` and does not use `DIRECT_URL` or `DATABASE_URL`. Do not point `DEV_DATABASE_URL` at a production database. If your database provider does not allow Prisma to create a shadow database, configure `SHADOW_DATABASE_URL` to a separate disposable database.
 
+## Google sign-in
+
+To enable Google login and registration:
+
+1. Create a Google OAuth 2.0 **Web application** client in Google Cloud Console.
+2. Add `http://localhost:3000/api/auth/google/callback` as an authorized redirect URI for local development. Add the matching HTTPS callback URL for each deployed environment.
+3. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` in the server environment. `.env.example` shows the local redirect URI format.
+
+The Google button appears on both login and registration pages. New registrations use the Buyer or Seller role selected on the registration form; Google login for an existing email keeps its existing role. Google-authenticated sellers still need to complete the platform's seller verification process.
+
+## Account management
+
+Buyers, sellers, and administrators can manage their name, phone number, and profile photo from the **Manage Account** dashboard section. Password-based accounts can change their password after confirming the current password. Email changes require the current password and a one-time verification link; the login email is not updated until that link is confirmed. Configure `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and `NEXT_PUBLIC_APP_URL` to enable verification emails. Google-only accounts should manage their email and password in Google Account settings.
+
+Apply the account-management database migration before deploying the feature:
+
+```bash
+npx prisma migrate deploy
+```
+
+## Auction bid and payment notifications
+
+Every accepted bid is stored in auction history. The auction page shows the full bid history while replacing other bidders' names with anonymous labels. Each participant receives an in-app update when a new bid is accepted; email and SMS are also sent when their providers are configured. The winner receives a congratulations notice when the auction closes, then in-app deposit reminders 24 hours before and at the 72-hour payment deadline.
+
+External delivery uses Resend for email and Twilio for SMS. Configure these server-side environment variables (see `.env.example`):
+
+- `RESEND_API_KEY`, `RESEND_FROM_EMAIL`
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`
+- `NEXT_PUBLIC_APP_URL` for links in email messages
+
+Verify the sending domain/address in Resend and configure an SMS-capable Twilio number. Buyer phone numbers must use E.164 format (for example, `+251...`) for Twilio delivery. Missing provider configuration leaves in-app notifications working and is logged by the server; failed delivery responses are also logged. Keep all provider credentials private and out of source control.
+
+Deposit reminders are processed by `/api/cron/auctions`, which is scheduled every minute in `vercel.json`. The database migration adds per-auction-result reminder markers to prevent duplicate reminders. Deploy the migration before enabling this feature in production.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

@@ -132,12 +132,6 @@ export async function createAuctionDraftAction(
     where: { id: d.listingId },
     include: { images: true, auctions: true },
   });
-  if (!listing?.tenantId) {
-    await prisma.listing.updateMany({
-      where: { id: d.listingId, sellerId: user.id, tenantId: null },
-      data: { tenantId },
-    });
-  }
   // owner and tenant come from the session, never from the form
   if (
     !listing ||
@@ -152,7 +146,13 @@ export async function createAuctionDraftAction(
       where: { id: listing.id, sellerId: user.id, tenantId: null },
       data: { tenantId },
     });
-    if (claimed.count !== 1)
+    if (
+      claimed.count !== 1 &&
+      !(await prisma.listing.findFirst({
+        where: { id: listing.id, sellerId: user.id, tenantId },
+        select: { id: true },
+      }))
+    )
       return fail("Listing organization changed. Refresh and try again.");
   }
   // Check if listing has ownership or legal documents in the documents table
@@ -204,16 +204,11 @@ export async function createAuctionDraftAction(
               status: "DRAFT",
             },
           });
-      if (!listing.tenantId)
-        await tx.listing.update({
-          where: { id: listing.id },
-          data: { tenantId: user.tenantId },
-        });
       const fee = await ensureEntryFeeSnapshot(
         tx,
         {
           id: auction.id,
-          tenantId: user.tenantId!,
+          tenantId,
           listingId: listing.id,
           startingPrice: auction.startingPrice,
         },
@@ -340,6 +335,23 @@ export async function submitBankTransferAction(
     const { user, fee } = await ownerFee(str(formData, "feeId"));
     if (fee.status === "CONFIRMED")
       return fail("This entry fee is already confirmed.");
+    const transactionUrl = z
+      .string()
+      .trim()
+      .url("Enter a valid transaction link.")
+      .max(2048, "The transaction link is too long.")
+      .refine((value) => {
+        try {
+          return new URL(value).protocol === "https:";
+        } catch {
+          return false;
+        }
+      }, {
+        message: "Use a secure HTTPS transaction link.",
+      })
+      .safeParse(str(formData, "transactionUrl"));
+    if (!transactionUrl.success)
+      return fail(transactionUrl.error.issues[0].message);
 
     const submitted = await prisma.$transaction(async (tx) => {
       const moved = await tx.auctionEntryFee.updateMany({
@@ -351,11 +363,12 @@ export async function submitBankTransferAction(
           method: "BANK_TRANSFER",
           status: "PENDING",
           bankReference: ref.data,
+          transactionUrl: transactionUrl.data,
         },
       });
       if (moved.count !== 1)
         throw new EntryFeeError(
-          "A bank reference was already submitted for this fee.",
+          "A bank reference was already submitted for this fee. Refresh and try again.",
         );
       await tx.listing.update({
         where: { id: fee.listingId },
@@ -369,7 +382,7 @@ export async function submitBankTransferAction(
       module: "PAYMENTS",
       entityType: "AuctionEntryFee",
       entityId: fee.id,
-      newValue: { reference: ref.data },
+      newValue: { reference: ref.data, transactionUrlSubmitted: true },
     });
     await notifyAdmins({
       type: "ENTRY_FEE_SUBMITTED",

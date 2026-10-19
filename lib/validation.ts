@@ -1,10 +1,20 @@
 import { z } from "zod";
 import { isHexColor } from "./branding-shared";
 
+const isValidUrlOrPath = (val: string) => {
+  if (val.startsWith("/") || val.startsWith("data:")) return true;
+  try {
+    new URL(val);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const brandingSchema = z.object({
   companyName: z.string().min(1, "Company name is required").max(200),
-  logoUrl: z.string().url().nullable().optional(),
-  faviconUrl: z.string().url().nullable().optional(),
+  logoUrl: z.string().refine(isValidUrlOrPath, "Invalid URL or path").nullable().optional(),
+  faviconUrl: z.string().refine(isValidUrlOrPath, "Invalid URL or path").nullable().optional(),
   primaryColor: z.string().refine(isHexColor, "Must be a valid hex color (e.g., #2563EB)"),
   secondaryColor: z.string().refine(isHexColor, "Must be a valid hex color (e.g., #0F172A)"),
   backgroundColor: z.string().refine(isHexColor, "Must be a valid hex color (e.g., #F8FAFC)"),

@@ -3,8 +3,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { roleHome } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { HomeHeader } from "@/components/home-header";
+import { HomeAuctionImageCarousel } from "@/components/home-auction-image-carousel";
 import { ETHomeLogo } from "@/components/ethome-brand";
 import { syncAuctionStatuses } from "@/lib/auction-lifecycle";
+import styles from "./home.module.css";
 import {
   Search,
   ShieldCheck,
@@ -24,7 +26,6 @@ import {
   Building2,
   Factory,
   Package,
-  Check,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +35,7 @@ export default async function HomePage() {
 
   const user = await getCurrentUser();
 
-  const [categories, featuredAuctions, approvedListings] = await Promise.all([
+  const [categories, featuredAuctions] = await Promise.all([
     prisma.category.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: "asc" },
@@ -46,41 +47,46 @@ export default async function HomePage() {
       where: {
         status: "ACTIVE",
       },
-      include: {
+      select: {
+        id: true,
+        status: true,
+        startAt: true,
+        endAt: true,
+        startingPrice: true,
+        currentHighestBid: true,
         listing: {
-          include: {
+          select: {
+            title: true,
+            city: true,
+            region: true,
+            features: true,
             images: { orderBy: { displayOrder: "asc" } },
-            category: true,
           },
         },
       },
       orderBy: { createdAt: "desc" },
       take: 8,
     }),
-    prisma.auction.findMany({
-      where: {
-        listing: { status: "APPROVED" },
-      },
-      include: {
-        listing: {
-          include: {
-            images: { orderBy: { displayOrder: "asc" } },
-            category: true,
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 6,
-    }),
   ]);
+  const heroImages = featuredAuctions.flatMap((auction) =>
+    auction.listing.images.map((image) => ({
+      id: image.id,
+      url: image.url,
+    })),
+  );
 
   const categoryImages: Record<string, string> = {
-    homes: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=400&q=80",
-    "cars-vehicles": "https://images.unsplash.com/photo-1594502184342-2e12f877aa73?auto=format&fit=crop&w=400&q=80",
+    homes:
+      "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=400&q=80",
+    "cars-vehicles":
+      "https://images.unsplash.com/photo-1594502184342-2e12f877aa73?auto=format&fit=crop&w=400&q=80",
     land: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=400&q=80",
-    commercial: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=400&q=80",
-    industrial: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=400&q=80",
-    "other-assets": "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=400&q=80",
+    commercial:
+      "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=400&q=80",
+    industrial:
+      "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=400&q=80",
+    "other-assets":
+      "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=400&q=80",
   };
 
   const formatTimeLeft = (date: Date) => {
@@ -98,18 +104,31 @@ export default async function HomePage() {
   return (
     <div className="min-h-screen bg-background text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
       {/* ─────────────────── TOP HEADER / NAVBAR (Responsive + Theme Toggle) ─────────────────── */}
-      <HomeHeader user={user} dashboardHref={user ? roleHome(user.role) : undefined} />
+      <HomeHeader
+        user={user}
+        dashboardHref={user ? roleHome(user.role) : undefined}
+      />
 
       {/* ─────────────────── HERO SECTION (Matching Screenshot) ─────────────────── */}
       <section className="relative overflow-hidden bg-[#0A192F] text-white py-16 lg:py-24">
-        {/* Background Image Overlay with gradient */}
-        <div className="absolute inset-0 z-0">
-          <img
-            src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=2000&q=80"
-            alt="Luxury Architecture"
-            className="h-full w-full object-cover object-center opacity-30 mix-blend-overlay"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#0A192F] via-[#0A192F]/90 to-transparent" />
+        <div aria-hidden="true" className={styles.heroBackground}>
+          {heroImages.length > 0 && (
+            <div className={styles.heroTrack}>
+              {[...heroImages, ...heroImages].map((image, index) => (
+                <div className={styles.heroSlide} key={`${image.id}-${index}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={image.url}
+                    alt=""
+                    className={styles.heroImage}
+                    loading={index === 0 ? "eager" : "lazy"}
+                    decoding="async"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          <div className={styles.heroScrim} />
         </div>
 
         <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -122,13 +141,17 @@ export default async function HomePage() {
               What You <span className="text-blue-400">Need</span>
             </h1>
             <p className="text-base sm:text-lg text-slate-300 font-normal leading-relaxed">
-              Discover homes, cars, land, commercial properties, and other assets through secure online auctions.
+              Discover homes, cars, land, commercial properties, and other
+              assets through secure online auctions.
             </p>
 
             {/* Hero Search Box (Matching Screenshot) */}
             <div className="rounded-2xl bg-white p-2.5 shadow-2xl flex flex-col md:flex-row items-center gap-2 text-slate-800">
               <div className="relative flex-1 w-full flex items-center">
-                <Search size={18} className="absolute left-3.5 text-slate-400" />
+                <Search
+                  size={18}
+                  className="absolute left-3.5 text-slate-400"
+                />
                 <input
                   type="text"
                   placeholder="Search for property, car, land, etc..."
@@ -172,8 +195,12 @@ export default async function HomePage() {
                   <ShieldCheck size={18} />
                 </div>
                 <div>
-                  <strong className="block text-white font-semibold">Secure Bidding</strong>
-                  <span className="text-slate-400 text-[11px]">Your transactions are safe</span>
+                  <strong className="block text-white font-semibold">
+                    Secure Bidding
+                  </strong>
+                  <span className="text-slate-400 text-[11px]">
+                    Your transactions are safe
+                  </span>
                 </div>
               </div>
 
@@ -182,8 +209,12 @@ export default async function HomePage() {
                   <CheckCircle2 size={18} />
                 </div>
                 <div>
-                  <strong className="block text-white font-semibold">Transparent Process</strong>
-                  <span className="text-slate-400 text-[11px]">Fair and open auctions</span>
+                  <strong className="block text-white font-semibold">
+                    Transparent Process
+                  </strong>
+                  <span className="text-slate-400 text-[11px]">
+                    Fair and open auctions
+                  </span>
                 </div>
               </div>
 
@@ -192,8 +223,12 @@ export default async function HomePage() {
                   <Clock size={18} />
                 </div>
                 <div>
-                  <strong className="block text-white font-semibold">Real-Time Updates</strong>
-                  <span className="text-slate-400 text-[11px]">Stay informed always</span>
+                  <strong className="block text-white font-semibold">
+                    Real-Time Updates
+                  </strong>
+                  <span className="text-slate-400 text-[11px]">
+                    Stay informed always
+                  </span>
                 </div>
               </div>
 
@@ -202,8 +237,12 @@ export default async function HomePage() {
                   <Headphones size={18} />
                 </div>
                 <div>
-                  <strong className="block text-white font-semibold">Dedicated Support</strong>
-                  <span className="text-slate-400 text-[11px]">We&apos;re here to help</span>
+                  <strong className="block text-white font-semibold">
+                    Dedicated Support
+                  </strong>
+                  <span className="text-slate-400 text-[11px]">
+                    We&apos;re here to help
+                  </span>
                 </div>
               </div>
             </div>
@@ -245,7 +284,9 @@ export default async function HomePage() {
                       className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
                     />
                   </div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-sm">{c.name}</h3>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                    {c.name}
+                  </h3>
                   <span className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
                     {c._count?.listings || 0} Auctions
                   </span>
@@ -265,7 +306,8 @@ export default async function HomePage() {
                 Featured Auctions
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Hand-picked high-value properties and verified machinery available right now.
+                Hand-picked high-value properties and verified machinery
+                available right now.
               </p>
             </div>
 
@@ -281,10 +323,11 @@ export default async function HomePage() {
 
           {/* Cards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {featuredAuctions.map((auc) => {
+            {featuredAuctions.map((auc, index) => {
               const isLive = auc.status === "ACTIVE";
-              const isUpcoming = auc.status === "SCHEDULED";
-              const currentBid = Number(auc.currentHighestBid || auc.startingPrice);
+              const currentBid = Number(
+                auc.currentHighestBid || auc.startingPrice,
+              );
 
               return (
                 <div
@@ -294,13 +337,16 @@ export default async function HomePage() {
                   <div>
                     {/* Thumbnail + Badge */}
                     <div className="relative aspect-[16/11] w-full overflow-hidden bg-slate-100 dark:bg-slate-800">
-                      <img
-                        src={
-                          auc.listing.images?.[0]?.url ||
-                          "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=600&q=80"
+                      <HomeAuctionImageCarousel
+                        images={
+                          auc.listing.images.length > 0
+                            ? auc.listing.images.map((image) => image.url)
+                            : [
+                                "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=600&q=80",
+                              ]
                         }
-                        alt={auc.listing.title}
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        title={auc.listing.title}
+                        startDelayMs={index * 350}
                       />
                       <div className="absolute top-3 left-3">
                         {isLive ? (
@@ -330,11 +376,12 @@ export default async function HomePage() {
                         </span>
                       </div>
 
-                      {auc.listing.features && auc.listing.features.length > 0 && (
-                        <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 pt-1">
-                          {auc.listing.features.slice(0, 3).join(" • ")}
-                        </div>
-                      )}
+                      {auc.listing.features &&
+                        auc.listing.features.length > 0 && (
+                          <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 pt-1">
+                            {auc.listing.features.slice(0, 3).join(" • ")}
+                          </div>
+                        )}
 
                       <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-end justify-between">
                         <div>
@@ -390,121 +437,6 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ─────────────────── APPROVED LISTINGS ─────────────────── */}
-      <section className="py-16 bg-slate-50 dark:bg-[#0c1220] transition-colors">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-8">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-                Approved Listings
-              </h2>
-              <span className="flex items-center gap-1.5 rounded-md bg-blue-600 px-2.5 py-1 text-xs font-bold text-white shadow">
-                <Check size={12} />
-                Verified
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Link
-                href="/buyer?tab=browse"
-                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 flex items-center gap-1"
-              >
-                View All <ChevronRight size={14} />
-              </Link>
-            </div>
-          </div>
-
-          {/* Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {approvedListings.map((auc) => {
-              const isLive = auc.status === "ACTIVE";
-              const isUpcoming = auc.status === "SCHEDULED";
-              const currentBid = Number(auc.currentHighestBid || auc.startingPrice);
-
-              return (
-                <div
-                  key={auc.id}
-                  className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs hover:shadow-md transition-all"
-                >
-                  <div>
-                    {/* Thumbnail + Badge */}
-                    <div className="relative aspect-[16/11] w-full overflow-hidden bg-slate-100 dark:bg-slate-800">
-                      <img
-                        src={
-                          auc.listing.images?.[0]?.url ||
-                          "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=600&q=80"
-                        }
-                        alt={auc.listing.title}
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                      />
-                      <div className="absolute top-3 left-3">
-                        {isLive ? (
-                          <span className="flex items-center gap-1.5 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white shadow">
-                            <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
-                            Live
-                          </span>
-                        ) : isUpcoming ? (
-                          <span className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-bold text-white shadow">
-                            Scheduled
-                          </span>
-                        ) : (
-                          <span className="rounded-md bg-slate-600 px-2.5 py-1 text-xs font-bold text-white shadow">
-                            {auc.status}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Card Content */}
-                    <div className="p-4 space-y-2">
-                      <h3 className="font-bold text-slate-900 dark:text-white text-sm line-clamp-1">
-                        {auc.listing.title}
-                      </h3>
-
-                      <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
-                        <MapPin size={12} className="text-slate-400" />
-                        <span>
-                          {auc.listing.city}
-                          {auc.listing.region ? `, ${auc.listing.region}` : ""}
-                        </span>
-                      </div>
-
-                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-end justify-between">
-                        <div>
-                          <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
-                            Starting Price
-                          </span>
-                          <span className="text-base font-bold text-slate-900 dark:text-white">
-                            $ {Number(auc.startingPrice).toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="text-right text-[11px] text-slate-500 dark:text-slate-400">
-                          <span className="block text-[10px] text-slate-400 dark:text-slate-500">
-                            Status
-                          </span>
-                          <span className="font-semibold text-blue-600 dark:text-blue-400">
-                            {isLive ? "Live" : isUpcoming ? "Scheduled" : auc.status}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-4 pt-0">
-                    <Link
-                      href={`/auction/${auc.id}`}
-                      className="flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow hover:bg-blue-700 transition-colors"
-                    >
-                      View Details
-                    </Link>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
       {/* ─────────────────── CTA BANNER (Matching Screenshot) ─────────────────── */}
       <section className="py-12 bg-slate-50 dark:bg-[#0c1220] transition-colors">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -522,7 +454,8 @@ export default async function HomePage() {
                 Ready to Get Started?
               </h2>
               <p className="text-sm text-slate-300 leading-relaxed">
-                Join thousands of buyers and sellers in a trusted online auction marketplace.
+                Join thousands of buyers and sellers in a trusted online auction
+                marketplace.
               </p>
 
               <div className="flex items-center gap-3">
@@ -543,15 +476,21 @@ export default async function HomePage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-800 text-xs">
                 <div>
                   <strong className="block text-white">Verified Sellers</strong>
-                  <span className="text-slate-400 text-[11px]">Trusted and authentic</span>
+                  <span className="text-slate-400 text-[11px]">
+                    Trusted and authentic
+                  </span>
                 </div>
                 <div>
                   <strong className="block text-white">Secure Payments</strong>
-                  <span className="text-slate-400 text-[11px]">Multiple payment options</span>
+                  <span className="text-slate-400 text-[11px]">
+                    Multiple payment options
+                  </span>
                 </div>
                 <div>
                   <strong className="block text-white">Full Support</strong>
-                  <span className="text-slate-400 text-[11px]">We&apos;re here to help</span>
+                  <span className="text-slate-400 text-[11px]">
+                    We&apos;re here to help
+                  </span>
                 </div>
               </div>
             </div>
@@ -560,44 +499,124 @@ export default async function HomePage() {
       </section>
 
       {/* ─────────────────── FOOTER (Matching Screenshot) ─────────────────── */}
-      <footer id="contact" className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-[#060c18] py-12 text-xs text-slate-500 dark:text-slate-400 transition-colors">
+      <footer
+        id="contact"
+        className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-[#060c18] py-12 text-xs text-slate-500 dark:text-slate-400 transition-colors"
+      >
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 pb-12 border-b border-slate-100 dark:border-slate-800">
             {/* Col 1: Brand */}
             <div className="space-y-3">
               <ETHomeLogo size="sm" href="/" />
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                The premier transparent real estate and asset auction marketplace in Ethiopia and East Africa.
+                The premier transparent real estate and asset auction
+                marketplace in Ethiopia and East Africa.
               </p>
             </div>
 
             {/* Col 2: Quick Links */}
             <div className="space-y-2">
-              <h4 className="font-bold text-slate-900 dark:text-white text-sm">Quick Links</h4>
+              <h4 className="font-bold text-slate-900 dark:text-white text-sm">
+                Quick Links
+              </h4>
               <ul className="space-y-1.5">
-                <li><Link href="/" className="hover:text-blue-600 dark:hover:text-blue-400">Home</Link></li>
-                <li><Link href="/buyer?tab=browse" className="hover:text-blue-600 dark:hover:text-blue-400">Browse</Link></li>
-                <li><Link href="/buyer?tab=browse" className="hover:text-blue-600 dark:hover:text-blue-400">Auctions</Link></li>
-                <li><Link href="/login" className="hover:text-blue-600 dark:hover:text-blue-400">About Us</Link></li>
-                <li><Link href="/customer" className="hover:text-blue-600 dark:hover:text-blue-400">Contact</Link></li>
+                <li>
+                  <Link
+                    href="/"
+                    className="hover:text-blue-600 dark:hover:text-blue-400"
+                  >
+                    Home
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/buyer?tab=browse"
+                    className="hover:text-blue-600 dark:hover:text-blue-400"
+                  >
+                    Browse
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/buyer?tab=browse"
+                    className="hover:text-blue-600 dark:hover:text-blue-400"
+                  >
+                    Auctions
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/about"
+                    className="hover:text-blue-600 dark:hover:text-blue-400"
+                  >
+                    About Us
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/about#contact"
+                    className="hover:text-blue-600 dark:hover:text-blue-400"
+                  >
+                    Contact
+                  </Link>
+                </li>
               </ul>
             </div>
 
             {/* Col 3: Categories */}
             <div className="space-y-2">
-              <h4 className="font-bold text-slate-900 dark:text-white text-sm">Categories</h4>
+              <h4 className="font-bold text-slate-900 dark:text-white text-sm">
+                Categories
+              </h4>
               <ul className="space-y-1.5">
-                <li><Link href="/buyer?tab=browse&category=homes" className="hover:text-blue-600 dark:hover:text-blue-400">Homes</Link></li>
-                <li><Link href="/buyer?tab=browse&category=cars-vehicles" className="hover:text-blue-600 dark:hover:text-blue-400">Cars & Vehicles</Link></li>
-                <li><Link href="/buyer?tab=browse&category=land" className="hover:text-blue-600 dark:hover:text-blue-400">Land</Link></li>
-                <li><Link href="/buyer?tab=browse&category=commercial" className="hover:text-blue-600 dark:hover:text-blue-400">Commercial</Link></li>
-                <li><Link href="/buyer?tab=browse&category=industrial" className="hover:text-blue-600 dark:hover:text-blue-400">Industrial</Link></li>
+                <li>
+                  <Link
+                    href="/buyer?tab=browse&category=homes"
+                    className="hover:text-blue-600 dark:hover:text-blue-400"
+                  >
+                    Homes
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/buyer?tab=browse&category=cars-vehicles"
+                    className="hover:text-blue-600 dark:hover:text-blue-400"
+                  >
+                    Cars & Vehicles
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/buyer?tab=browse&category=land"
+                    className="hover:text-blue-600 dark:hover:text-blue-400"
+                  >
+                    Land
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/buyer?tab=browse&category=commercial"
+                    className="hover:text-blue-600 dark:hover:text-blue-400"
+                  >
+                    Commercial
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/buyer?tab=browse&category=industrial"
+                    className="hover:text-blue-600 dark:hover:text-blue-400"
+                  >
+                    Industrial
+                  </Link>
+                </li>
               </ul>
             </div>
 
             {/* Col 4: Contact Us */}
             <div className="space-y-2">
-              <h4 className="font-bold text-slate-900 dark:text-white text-sm">Contact Us</h4>
+              <h4 className="font-bold text-slate-900 dark:text-white text-sm">
+                Contact Us
+              </h4>
               <ul className="space-y-2 text-slate-600 dark:text-slate-300">
                 <li className="flex items-center gap-2">
                   <Phone size={14} className="text-blue-600" /> +251 11 123 4567
@@ -606,7 +625,8 @@ export default async function HomePage() {
                   <Mail size={14} className="text-blue-600" /> info@ethome.com
                 </li>
                 <li className="flex items-center gap-2">
-                  <MapPin size={14} className="text-blue-600" /> Addis Ababa, Ethiopia
+                  <MapPin size={14} className="text-blue-600" /> Addis Ababa,
+                  Ethiopia
                 </li>
               </ul>
             </div>
@@ -615,8 +635,18 @@ export default async function HomePage() {
           <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-400 dark:text-slate-500">
             <div>&copy; 2026 ETHome. All rights reserved.</div>
             <div className="flex items-center gap-6">
-              <Link href="#" className="hover:text-slate-600 dark:hover:text-slate-300">Privacy Policy</Link>
-              <Link href="#" className="hover:text-slate-600 dark:hover:text-slate-300">Terms & Conditions</Link>
+              <Link
+                href="#"
+                className="hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                Privacy Policy
+              </Link>
+              <Link
+                href="#"
+                className="hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                Terms & Conditions
+              </Link>
             </div>
           </div>
         </div>

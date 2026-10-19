@@ -9,8 +9,7 @@ import { loginSchema } from "@/lib/validation";
 
 export async function POST(request: NextRequest) {
   try {
-    // Run bootstrap asynchronously without blocking
-    ensureBootstrap().catch((e) => console.error("Bootstrap error:", e));
+    await ensureBootstrap();
 
     const body = await request.json();
     const parsed = loginSchema.safeParse(body);

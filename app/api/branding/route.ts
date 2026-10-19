@@ -5,6 +5,7 @@ import { requireAuth } from "@/lib/auth";
 import {
   getRequestBranding,
   resetBranding,
+  resolveRequestTenantId,
   updateBranding,
 } from "@/lib/branding";
 import { handle, HttpError } from "@/lib/http";
@@ -21,6 +22,10 @@ export function GET() {
 export function PUT(request: NextRequest) {
   return handle(async () => {
     const user = await requireAuth();
+    if (!user.tenantId) {
+      const defId = await resolveRequestTenantId();
+      if (defId) (user as unknown as { tenantId?: string | null }).tenantId = defId;
+    }
     const body = await request.json().catch(() => {
       throw new HttpError(400, "Invalid JSON body");
     });
@@ -33,6 +38,10 @@ export function PUT(request: NextRequest) {
 export function DELETE() {
   return handle(async () => {
     const user = await requireAuth();
+    if (!user.tenantId) {
+      const defId = await resolveRequestTenantId();
+      if (defId) (user as unknown as { tenantId?: string | null }).tenantId = defId;
+    }
     const branding = await resetBranding(user);
     revalidatePath("/", "layout");
     return NextResponse.json({ success: true, branding });

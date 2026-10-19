@@ -7,6 +7,7 @@ import { bidEligibility } from "@/lib/auction-eligibility";
 import { crossTenant } from "@/lib/tenant";
 import { rateLimit, logAudit } from "@/lib/security";
 import { notify } from "@/lib/notify";
+import { notifyAuctionParticipant } from "@/lib/auction-notifications";
 
 class BidError extends Error {}
 
@@ -60,7 +61,6 @@ export async function placeBid(input: {
         });
         if (
           !a ||
-          a.listing.tenantId !== user.tenantId ||
           crossTenant(user.tenantId, a.listing.tenantId)
         )
           throw new BidError("Auction not found.");
@@ -112,13 +112,31 @@ export async function placeBid(input: {
       { maxWait: 5_000, timeout: 10_000 },
     );
 
-    if (r.previousBidder && r.previousBidder !== user.id)
-      await notify(r.previousBidder, {
-        type: "OUTBID",
-        title: "You were outbid!",
-        body: `Another bidder placed ${etb(amount)} on "${r.title}".`,
-        link: "/buyer?tab=bids",
-      });
+    const participants = await prisma.bid.findMany({
+      where: { auctionId },
+      select: { bidderId: true },
+      distinct: ["bidderId"],
+    });
+    await Promise.all(
+      participants.map(({ bidderId }) =>
+        notifyAuctionParticipant(bidderId, {
+          type: "AUCTION_BID_UPDATE",
+          title:
+            bidderId === r.previousBidder && bidderId !== user.id
+              ? "You were outbid"
+              : bidderId === user.id
+                ? "Your bid was recorded"
+                : "New bid placed",
+          body:
+            bidderId === r.previousBidder && bidderId !== user.id
+              ? `A new bid of ${etb(amount)} was placed on "${r.title}". You are no longer the highest bidder.`
+              : bidderId === user.id
+                ? `Your bid of ${etb(amount)} on "${r.title}" was recorded.`
+                : `A new bid of ${etb(amount)} was placed on "${r.title}".`,
+          link: `/auction/${auctionId}`,
+        }),
+      ),
+    );
     await notify(r.sellerId, {
       type: "NEW_BID",
       title: "New bid received",

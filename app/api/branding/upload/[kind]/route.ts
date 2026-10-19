@@ -5,6 +5,7 @@ import { requireAuth } from "@/lib/auth";
 import {
   ASSET_RULES,
   assertTenantAdmin,
+  resolveRequestTenantId,
   uploadBrandingAsset,
 } from "@/lib/branding";
 import { handle, HttpError, notFound } from "@/lib/http";
@@ -22,6 +23,10 @@ export function POST(
     const assetKind = kind === "logo" ? "LOGO" : "FAVICON";
 
     const user = await requireAuth();
+    if (!user.tenantId) {
+      const defId = await resolveRequestTenantId();
+      if (defId) (user as unknown as { tenantId?: string | null }).tenantId = defId;
+    }
     assertTenantAdmin(user); // permission check BEFORE reading the body
 
     if (!rateLimit(`branding-upload:${user.id}`, 20, 60_000))

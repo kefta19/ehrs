@@ -4,12 +4,32 @@ import { useBranding } from "./branding-provider";
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { ETHomeLogo } from "./ethome-brand";
-import { User, Shield, Building2, ArrowRight } from "lucide-react";
 import { AnimatedInput } from "./animated-input";
 
 type Mode = "login" | "register";
 
-export function AuthForm({ mode = "login", redirectUrl }: { mode?: Mode; redirectUrl?: string }) {
+const GOOGLE_AUTH_ERRORS: Record<string, string> = {
+  google_not_configured:
+    "Google sign-in is not configured yet. Ask the site administrator to set it up.",
+  google_cancelled: "Google sign-in was cancelled.",
+  google_unverified:
+    "Google could not verify this email address. Try another account.",
+  google_account_unavailable:
+    "This account is unavailable. Please contact support.",
+  google_registration_unavailable:
+    "Registration is temporarily unavailable. Please try again later.",
+  google_failed: "Google sign-in failed. Please try again.",
+};
+
+export function AuthForm({
+  mode = "login",
+  redirectUrl,
+  googleError,
+}: {
+  mode?: Mode;
+  redirectUrl?: string;
+  googleError?: string;
+}) {
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -22,31 +42,26 @@ export function AuthForm({ mode = "login", redirectUrl }: { mode?: Mode; redirec
 
   const { companyName } = useBranding();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    googleError
+      ? (GOOGLE_AUTH_ERRORS[googleError] ?? GOOGLE_AUTH_ERRORS.google_failed)
+      : null,
+  );
 
   const set = (field: string, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
 
-  async function handleLoginWith(email: string, pass: string) {
+  function continueWithGoogle() {
     setLoading(true);
     setError(null);
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password: pass }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Authentication failed");
-        setLoading(false);
-        return;
-      }
-      window.location.href = data.redirectTo ?? "/dashboard";
-    } catch {
-      setError("Network error. Please try again.");
-      setLoading(false);
-    }
+    const params = new URLSearchParams({ mode });
+    if (mode === "register") params.set("role", form.role);
+    window.location.assign(
+      new URL(
+        `/api/auth/google/start?${params.toString()}`,
+        window.location.origin,
+      ).toString(),
+    );
   }
 
   async function onSubmit(e: FormEvent) {
@@ -192,6 +207,59 @@ export function AuthForm({ mode = "login", redirectUrl }: { mode?: Mode; redirec
           </>
         )}
 
+        <div className="space-y-4">
+          <div className="relative flex items-center">
+            <div className="flex-grow border-t border-slate-200 dark:border-slate-700" />
+            <span className="mx-3 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Or continue with
+            </span>
+            <div className="flex-grow border-t border-slate-200 dark:border-slate-700" />
+          </div>
+          <button
+            type="button"
+            onClick={continueWithGoogle}
+            disabled={loading}
+            className="flex w-full items-center justify-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:shadow disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 48 48"
+              className="h-[18px] w-[18px]"
+            >
+              <path
+                fill="#EA4335"
+                d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5Z"
+              />
+              <path
+                fill="#4285F4"
+                d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.72 7.18l7.62 5.91c4.45-4.11 7.14-10.16 7.14-17.56Z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M10.53 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.13.76-4.59l-7.98-6.2A23.95 23.95 0 0 0 0 24c0 3.87.93 7.53 2.56 10.78l7.97-6.19Z"
+              />
+              <path
+                fill="#34A853"
+                d="M24 48c6.48 0 11.93-2.13 15.9-5.79l-7.62-5.91c-2.12 1.42-4.83 2.26-8.28 2.26-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48Z"
+              />
+            </svg>
+            {loading ? "Connecting to Google..." : "Continue with Google"}
+          </button>
+          {mode === "login" && (
+            <p className="text-center text-xs text-slate-500 dark:text-slate-400">
+              Forgot your Google Account password?{" "}
+              <a
+                href="https://accounts.google.com/signin/recovery"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-blue-600 hover:underline dark:text-blue-400"
+              >
+                Recover it with Google
+              </a>
+            </p>
+          )}
+        </div>
+
         <AnimatedInput
           label="Email Address"
           type="email"
@@ -270,79 +338,6 @@ export function AuthForm({ mode = "login", redirectUrl }: { mode?: Mode; redirec
         </p>
       </form>
 
-      {/* Quick Demo Access Pills for 3 Roles */}
-      {mode === "login" && (
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 p-5 text-xs space-y-3">
-          <span className="font-bold text-slate-700 dark:text-slate-300 block text-center text-[11px] uppercase tracking-wider">
-            Quick One-Click Demo Role Logins
-          </span>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() =>
-                handleLoginWith("buyer@propertyauction.et", "Buyer@1234")
-              }
-              className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-left hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition"
-            >
-              <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
-                  <User size={14} />
-                </div>
-                <div>
-                  <strong className="block text-slate-800 dark:text-slate-200 text-[11px]">
-                    Buyer
-                  </strong>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500">Getachew</span>
-                </div>
-              </div>
-              <ArrowRight size={12} className="text-slate-400" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                handleLoginWith("seller@propertyauction.et", "Seller@1234")
-              }
-              className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-left hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition"
-            >
-              <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
-                  <Building2 size={14} />
-                </div>
-                <div>
-                  <strong className="block text-slate-800 dark:text-slate-200 text-[11px]">
-                    Seller
-                  </strong>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500">Dawit</span>
-                </div>
-              </div>
-              <ArrowRight size={12} className="text-slate-400" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                handleLoginWith("admin@propertyauction.et", "Admin@1234")
-              }
-              className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-left hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition"
-            >
-              <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400">
-                  <Shield size={14} />
-                </div>
-                <div>
-                  <strong className="block text-slate-800 dark:text-slate-200 text-[11px]">
-                    Admin
-                  </strong>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500">Executive</span>
-                </div>
-              </div>
-              <ArrowRight size={12} className="text-slate-400" />
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

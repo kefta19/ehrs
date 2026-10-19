@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS "BuyerBidRegistration" (
     "status" "BuyerRegistrationStatus" NOT NULL DEFAULT 'PENDING',
     "feeAmount" DECIMAL(14,2) NOT NULL DEFAULT 0,
     "currency" TEXT NOT NULL DEFAULT 'ETB',
+    "paymentMethod" TEXT,
+    "paymentProofUrl" TEXT,
     "txRef" TEXT,
     "paidAt" TIMESTAMP(3),
     "note" TEXT,
@@ -20,6 +22,10 @@ CREATE TABLE IF NOT EXISTS "BuyerBidRegistration" (
 
     CONSTRAINT "BuyerBidRegistration_pkey" PRIMARY KEY ("id")
 );
+
+ALTER TABLE "BuyerBidRegistration"
+  ADD COLUMN IF NOT EXISTS "paymentMethod" TEXT,
+  ADD COLUMN IF NOT EXISTS "paymentProofUrl" TEXT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "BuyerBidRegistration_txRef_key" ON "BuyerBidRegistration"("txRef");
 CREATE UNIQUE INDEX IF NOT EXISTS "BuyerBidRegistration_auctionId_buyerId_key" ON "BuyerBidRegistration"("auctionId", "buyerId");

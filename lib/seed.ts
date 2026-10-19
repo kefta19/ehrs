@@ -84,15 +84,20 @@ async function run() {
     process.env.ADMIN_EMAIL || "admin@ethome.com"
   ).toLowerCase();
   const adminPassword = process.env.ADMIN_PASSWORD || "Admin@123456";
+  const adminPasswordHash = await hashPassword(adminPassword);
   const adminRole = await prisma.role.findUnique({ where: { name: "ADMIN" } });
 
   await prisma.user.upsert({
     where: { email: adminEmail },
-    update: { role: "ADMIN", status: "ACTIVE" },
+    update: {
+      passwordHash: adminPasswordHash,
+      role: "ADMIN",
+      status: "ACTIVE",
+    },
     create: {
       name: "Platform Executive Admin",
       email: adminEmail,
-      passwordHash: await hashPassword(adminPassword),
+      passwordHash: adminPasswordHash,
       role: "ADMIN",
       roleId: adminRole?.id,
       status: "ACTIVE",

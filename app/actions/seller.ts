@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { notifyAdmins } from "@/lib/notify";
+import { notify, notifyAdmins } from "@/lib/notify";
 import { logAudit } from "@/lib/security";
 import { can } from "@/lib/rbac";
 import { assertTransition, canTransition } from "@/lib/auction-state";
@@ -31,6 +31,65 @@ function refresh() {
   revalidatePath("/provider");
   revalidatePath("/admin");
   revalidatePath("/");
+}
+
+export async function replyToBuyerInquiryAction(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "SELLER") {
+    return fail("Sign in with the seller account that owns this auction to reply.");
+  }
+
+  const ticketId = str(formData, "ticketId");
+  const body = str(formData, "message").trim();
+  if (!ticketId) return fail("This buyer inquiry could not be identified.");
+  if (body.length < 2 || body.length > 2000) {
+    return fail("Your reply must be between 2 and 2,000 characters.");
+  }
+
+  const ticket = await prisma.ticket.findFirst({
+    where: {
+      id: ticketId,
+      type: "SUPPORT",
+      againstUserId: user.id,
+      auction: { sellerId: user.id },
+    },
+    select: {
+      id: true,
+      number: true,
+      subject: true,
+      createdById: true,
+      auction: { select: { listing: { select: { title: true } } } },
+    },
+  });
+  if (!ticket?.auction) return fail("This inquiry was not found for one of your auctions.");
+
+  await prisma.$transaction([
+    prisma.ticketMessage.create({
+      data: {
+        ticketId: ticket.id,
+        authorId: user.id,
+        body,
+        isInternal: false,
+      },
+    }),
+    prisma.ticket.update({
+      where: { id: ticket.id },
+      data: { status: "OPEN" },
+    }),
+  ]);
+
+  await notify(ticket.createdById, {
+    type: "AUCTION_INQUIRY_REPLY",
+    title: `Seller replied: ${ticket.auction.listing.title}`,
+    body: `${user.name} replied to your inquiry ${ticket.number}: ${body}`,
+    link: "/buyer?tab=notifications",
+  });
+
+  revalidatePath("/seller");
+  revalidatePath("/provider");
+  revalidatePath("/buyer");
+  revalidatePath("/customer");
+  return { success: true, message: "Your reply was sent to the buyer." };
 }
 
 /* ───────────────────────── KYC (unchanged) ───────────────────────── */
@@ -125,7 +184,7 @@ export async function createListingAction(
     imageIds: Array.isArray(imageIdsRaw)
       ? [...new Set(imageIdsRaw.map(String))]
       : [],
-    videoId: str(formData, "videoId"),
+    videoUrl: str(formData, "videoUrl").trim(),
     nationalIdNumber: str(formData, "nationalIdNumber"),
     idDocumentId: str(formData, "idDocumentId"),
     ownershipDocumentId: str(formData, "ownershipDocumentId") || undefined,
@@ -165,7 +224,6 @@ export async function createListingAction(
 
       const wanted = [
         ...d.imageIds,
-        d.videoId,
         d.idDocumentId,
         ...(d.ownershipDocumentId ? [d.ownershipDocumentId] : []),
       ];
@@ -177,10 +235,6 @@ export async function createListingAction(
       if (!d.imageIds.every((id) => kindOk(id, "IMAGE")))
         throw new ActionError(
           "One of the photos is missing or invalid. Please upload it again.",
-        );
-      if (!kindOk(d.videoId, "VIDEO"))
-        throw new ActionError(
-          "The video is missing or invalid. Please upload it again.",
         );
       if (!kindOk(d.idDocumentId, "ID_DOCUMENT"))
         throw new ActionError(
@@ -208,7 +262,7 @@ export async function createListingAction(
           features: d.features,
           attributes,
           status: "DRAFT",
-          videoUrl: `/api/media/${d.videoId}`,
+          videoUrl: d.videoUrl,
           ownerNationalId: d.nationalIdNumber,
           idDocumentMediaId: d.idDocumentId,
           biometricVerificationId: d.biometricVerificationId,

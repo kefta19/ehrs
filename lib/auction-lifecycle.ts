@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notify";
+import { notifyAuctionParticipant } from "@/lib/auction-notifications";
 import { logAudit } from "@/lib/security";
 
 import { deleteFile } from "@/lib/storage";
@@ -30,7 +31,92 @@ export async function syncAuctionStatuses(now: Date = new Date()) {
       console.error(`[auction-lifecycle] failed to close ${id}`, err);
     }
   }
-  return { activated: activated.count, closed };
+  const reminders = await sendSettlementReminders(now);
+  return { activated: activated.count, closed, ...reminders };
+}
+
+async function sendSettlementReminders(now: Date) {
+  const upcomingDeadline = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const reminders = [
+    {
+      field: "reminder24hSentAt" as const,
+      where: {
+        settlementDeadline: { gt: now, lte: upcomingDeadline },
+        reminder24hSentAt: null,
+      },
+      title: "Deposit due in 24 hours",
+      body: (title: string, amount: string, deadline: Date) =>
+        `Your deposit of $${amount} for "${title}" is due within 24 hours, by ${deadline.toLocaleString()}.`,
+    },
+    {
+      field: "deadlineSentAt" as const,
+      where: {
+        settlementDeadline: { lte: now },
+        deadlineSentAt: null,
+      },
+      title: "Deposit deadline reached",
+      body: (title: string, amount: string, deadline: Date) =>
+        `The deposit deadline for "${title}" passed at ${deadline.toLocaleString()}. Review your auction payment page for next steps.`,
+    },
+  ];
+  const sent = { reminders24h: 0, deadlineReminders: 0 };
+
+  for (const reminder of reminders) {
+    const results = await prisma.auctionResult.findMany({
+      where: {
+        isSettled: false,
+        reserveMet: true,
+        ...reminder.where,
+      },
+      select: {
+        id: true,
+        auctionId: true,
+        winningBidderId: true,
+        depositDue: true,
+        settlementDeadline: true,
+        auction: { select: { listing: { select: { title: true } } } },
+      },
+      take: 100,
+    });
+
+    for (const result of results) {
+      const claim = await prisma.auctionResult.updateMany({
+        where: {
+          id: result.id,
+          isSettled: false,
+          reserveMet: true,
+          [reminder.field]: null,
+        },
+        data: { [reminder.field]: now },
+      });
+      if (claim.count !== 1) continue;
+
+      try {
+        await notify(result.winningBidderId, {
+          type:
+            reminder.field === "reminder24hSentAt"
+              ? "AUCTION_DEPOSIT_REMINDER"
+              : "AUCTION_DEPOSIT_DEADLINE",
+          title: reminder.title,
+          body: reminder.body(
+            result.auction.listing.title,
+            Number(result.depositDue).toLocaleString(),
+            result.settlementDeadline,
+          ),
+          link: "/buyer?tab=payments",
+        });
+        if (reminder.field === "reminder24hSentAt") sent.reminders24h += 1;
+        else sent.deadlineReminders += 1;
+      } catch (error) {
+        console.error(
+          `[auction-lifecycle] failed to send ${reminder.field} reminder for result ${result.id}`,
+          error,
+        );
+      }
+    }
+  }
+
+  return sent;
 }
 
 async function closeAuction(auctionId: string, now: Date) {
@@ -118,7 +204,7 @@ async function closeAuction(auctionId: string, now: Date) {
   });
 
   if (winnerId && reserveMet) {
-    await notify(winnerId, {
+    await notifyAuctionParticipant(winnerId, {
       type: "AUCTION_WON",
       title: "You won the auction!",
       body: `Your bid of ${amount} on "${title}" won. Complete the deposit within 72 hours.`,

@@ -9,20 +9,21 @@ const IMG: Record<string, string> = {
 const DOC: Record<string, string> = { ...IMG, "application/pdf": "pdf" };
 
 export const UPLOAD_RULES = {
-  image: { kind: "IMAGE" as MediaKind, maxBytes: 10 * MB, types: IMG },
-  video: {
-    kind: "VIDEO" as MediaKind,
-    maxBytes: 80 * MB,
-    types: {
-      "video/mp4": "mp4",
-      "video/webm": "webm",
-      "video/quicktime": "mov",
-    } as Record<string, string>,
+  avatar: {
+    kind: "IMAGE" as MediaKind,
+    maxBytes: 5 * MB,
+    types: IMG,
   },
+  image: { kind: "IMAGE" as MediaKind, maxBytes: 10 * MB, types: IMG },
   id: { kind: "ID_DOCUMENT" as MediaKind, maxBytes: 10 * MB, types: DOC },
   document: {
     kind: "OWNERSHIP_DOCUMENT" as MediaKind,
     maxBytes: 15 * MB,
+    types: DOC,
+  },
+  proof: {
+    kind: "PAYMENT_PROOF" as MediaKind,
+    maxBytes: 10 * MB,
     types: DOC,
   },
 };

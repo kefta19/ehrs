@@ -4,15 +4,25 @@ import { roleHome } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { ProviderDashboardClient } from "@/components/provider-dashboard-client";
 import { syncAuctionStatuses } from "@/lib/auction-lifecycle";
+import { isGoogleOnlyAccount } from "@/lib/account";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProviderPage() {
+export default async function ProviderPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tab?: string }>;
+} = {}) {
   await syncAuctionStatuses();
 
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role !== "SELLER" && user.role !== "ADMIN") redirect(roleHome(user.role));
+  const resolvedParams = searchParams ? await searchParams : {};
+  const initialTab =
+    resolvedParams.tab === "notifications" || resolvedParams.tab === "account"
+      ? resolvedParams.tab
+      : undefined;
 
   const [sellerProfile, listings, auctions, categories, notifications] =
     await Promise.all([
@@ -25,6 +35,7 @@ export default async function ProviderPage() {
           category: true,
           images: { orderBy: { displayOrder: "asc" } },
           documents: true,
+          _count: { select: { auctions: true } },
         },
         orderBy: { createdAt: "desc" },
       }),
@@ -39,6 +50,32 @@ export default async function ProviderPage() {
           },
           bids: {
             orderBy: { amount: "desc" },
+            include: {
+              bidder: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  role: true,
+                  status: true,
+                },
+              },
+              payment: {
+                select: {
+                  id: true,
+                  amount: true,
+                  currency: true,
+                  method: true,
+                  status: true,
+                  transactionRef: true,
+                  createdAt: true,
+                  verifiedAt: true,
+                  rejectionReason: true,
+                  receiptUrl: true,
+                  bankReferenceUrl: true,
+                },
+              },
+            },
           },
           entryFees: { orderBy: { createdAt: "desc" }, take: 1 },
           result: {
@@ -60,15 +97,24 @@ export default async function ProviderPage() {
         take: 20,
       }),
     ]);
+    const googleOnlyAccount = await isGoogleOnlyAccount(user.id);
 
   return (
     <ProviderDashboardClient
-      user={user}
+      user={{
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        avatarUrl: user.avatarUrl,
+      }}
+      isGoogleOnlyAccount={googleOnlyAccount}
       sellerProfile={sellerProfile ? JSON.parse(JSON.stringify(sellerProfile)) : null}
       listings={JSON.parse(JSON.stringify(listings))}
       auctions={JSON.parse(JSON.stringify(auctions))}
       categories={JSON.parse(JSON.stringify(categories))}
       notifications={JSON.parse(JSON.stringify(notifications))}
+      initialTab={initialTab}
     />
   );
 }

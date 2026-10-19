@@ -1,0 +1,202 @@
+.backdrop {
+  animation: backdrop-in 220ms ease-out both;
+  background:
+    radial-gradient(circle at 16% 10%, rgb(59 130 246 / 22%), transparent 32%),
+    rgb(2 6 23 / 72%);
+}
+
+.dialog {
+  animation: dialog-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  background:
+    radial-gradient(ellipse at top right, rgb(219 234 254 / 52%), transparent 35%),
+    var(--theme-surface-muted, #f8fafc);
+  color: var(--theme-text-strong, #0f172a);
+  box-shadow:
+    0 30px 100px rgb(2 6 23 / 36%),
+    0 2px 8px rgb(15 23 42 / 8%);
+  scrollbar-gutter: stable;
+}
+
+.progressHeader {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: -1.5rem -1.5rem 0;
+  padding: 1.5rem 1.5rem 1rem;
+  border-bottom: 1px solid rgb(226 232 240 / 85%);
+  background: color-mix(in srgb, var(--theme-surface-muted, #f8fafc) 94%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.stepContent {
+  animation: step-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.stepContent :global(input:not([type="file"])),
+.stepContent :global(select),
+.stepContent :global(textarea) {
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.stepContent :global(input:not([type="file"]):focus),
+.stepContent :global(select:focus),
+.stepContent :global(textarea:focus) {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 4px rgb(59 130 246 / 13%);
+}
+
+.stepContent :global(button[type="submit"]) {
+  transition:
+    box-shadow 180ms ease,
+    transform 180ms ease,
+    background-color 180ms ease;
+}
+
+.stepContent :global(button[type="submit"]:not(:disabled):hover) {
+  box-shadow: 0 10px 22px rgb(37 99 235 / 20%);
+  transform: translateY(-1px);
+}
+
+.section {
+  border-color: rgb(226 232 240 / 90%);
+  box-shadow: 0 2px 8px rgb(15 23 42 / 3%);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.section:hover {
+  border-color: rgb(148 163 184 / 70%);
+  box-shadow: 0 10px 26px rgb(15 23 42 / 6%);
+  transform: translateY(-1px);
+}
+
+.stepIcon {
+  display: flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(203 213 225 / 85%);
+  border-radius: 9999px;
+  background: white;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 700;
+  transition:
+    background-color 220ms ease,
+    border-color 220ms ease,
+    color 220ms ease,
+    box-shadow 220ms ease,
+    transform 220ms ease;
+}
+
+.stepIconActive {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: white;
+  box-shadow: 0 0 0 5px rgb(37 99 235 / 12%);
+  transform: scale(1.06);
+}
+
+.stepIconComplete {
+  border-color: #10b981;
+  background: #10b981;
+  color: white;
+}
+
+.stepLabel {
+  color: #94a3b8;
+  transition: color 180ms ease;
+}
+
+.stepLabelActive {
+  color: #1d4ed8;
+}
+
+.stepLabelComplete {
+  color: #059669;
+}
+
+.progressSegment {
+  height: 2px;
+  flex: 1 1 auto;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: #e2e8f0;
+}
+
+.progressSegmentFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb, #10b981);
+  transition: width 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes step-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .progressHeader {
+    margin: -1rem -1rem 0;
+    padding: 1rem 1rem 0.75rem;
+  }
+
+  .section:hover {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop,
+  .dialog,
+  .stepContent {
+    animation: none;
+  }
+
+  .section,
+  .stepIcon,
+  .progressSegmentFill,
+  .stepContent :global(button[type="submit"]),
+  .stepContent :global(input:not([type="file"])),
+  .stepContent :global(select),
+  .stepContent :global(textarea) {
+    transition: none;
+  }
+}

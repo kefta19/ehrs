@@ -131,16 +131,27 @@ function SubmissionCard({ s }: { s: PendingSubmission }) {
               </a>
             ))}
           </div>
-          <h4 className="font-bold text-slate-900">Video</h4>
+          <h4 className="font-bold text-slate-900">Video post</h4>
           {l.videoUrl ? (
-            <video
-              src={l.videoUrl}
-              controls
-              preload="metadata"
-              className="w-full rounded-xl bg-black"
-            />
+            l.videoUrl.startsWith("/") ? (
+              <video
+                src={l.videoUrl}
+                controls
+                preload="metadata"
+                className="w-full rounded-xl bg-black"
+              />
+            ) : (
+              <a
+                href={l.videoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700"
+              >
+                Open original social-media video post
+              </a>
+            )
           ) : (
-            <p className="text-rose-600">No video uploaded.</p>
+            <p className="text-rose-600">No video post link provided.</p>
           )}
         </div>
 

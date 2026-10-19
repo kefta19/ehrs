@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
   LayoutDashboard,
@@ -34,6 +35,8 @@ import {
   Mail,
   Building2,
   Video,
+  Bell,
+  Trash2,
 } from "lucide-react";
 import { ETHomeLogo } from "./ethome-brand";
 import { LogoutButton } from "./logout-button";
@@ -48,12 +51,17 @@ import {
   manageCategoryAction,
   updateSystemSettingsAction,
 } from "@/app/actions/admin";
+import { adminConfirmBuyerRegistrationAction } from "@/app/actions/bid-registration";
+import { deleteNotificationAction } from "@/app/actions/buyer";
+import { AccountManagement } from "@/components/account-management";
+import { deleteListingAction } from "@/app/actions/listing";
 
 export type AdminUser = {
   id: string;
   name: string;
   email: string;
   phone?: string | null;
+  avatarUrl?: string | null;
   role: string;
   status: string;
   createdAt: string;
@@ -118,6 +126,8 @@ type AdminListing = {
     ratePercent?: number | string;
     txRef?: string | null;
     bankReference?: string | null;
+    transactionUrl?: string | null;
+    paymentProofMediaId?: string | null;
     createdAt?: string;
   }>;
   auctions?: Array<{
@@ -138,6 +148,8 @@ type AdminListing = {
       method?: string | null;
       txRef?: string | null;
       bankReference?: string | null;
+      transactionUrl?: string | null;
+      paymentProofMediaId?: string | null;
     }>;
   }>;
 };
@@ -152,20 +164,53 @@ type AdminAuction = {
 
 type AdminBid = {
   id: string;
-  auction?: { listing?: { title?: string } };
+  auction?: {
+    id: string;
+    status: string;
+    startAt: string;
+    endAt: string;
+    listing?: { title?: string };
+  };
   bidder?: AdminUser;
   bidderId?: string;
   amount: number | string;
   createdAt: string;
   ipAddress?: string;
+  status: string;
+  approvedAt?: string | null;
+  payment?: {
+    id: string;
+    amount: number | string;
+    currency: string;
+    method: string;
+    status: string;
+    transactionRef?: string | null;
+    receiptUrl?: string | null;
+    bankReferenceUrl?: string | null;
+    rejectionReason?: string | null;
+    createdAt: string;
+    verifiedAt?: string | null;
+  } | null;
 };
 
 type AdminPayment = {
   id: string;
-  transactionRef: string;
+  transactionRef: string | null;
   payer?: AdminUser;
   amount: number | string;
   status: string;
+};
+
+type AdminBuyerRegistration = {
+  id: string;
+  feeAmount: number | string;
+  currency: string;
+  paymentMethod?: string | null;
+  paymentProofUrl?: string | null;
+  txRef?: string | null;
+  createdAt: string;
+  buyer: { id: string; name: string; email: string };
+  auction: { id: string; listing: { title: string } };
 };
 
 type AdminTicket = {
@@ -196,6 +241,15 @@ type AdminAuditLog = {
   createdAt: string;
 };
 
+type AdminNotification = {
+  id: string;
+  title: string;
+  body: string;
+  link?: string | null;
+  readAt?: string | null;
+  createdAt: string;
+};
+
 type AdminSystemSetting = {
   id?: string;
   key?: string;
@@ -204,19 +258,25 @@ type AdminSystemSetting = {
 
 export function AdminDashboardClient({
   user,
+  isGoogleOnlyAccount,
+  initialTab,
   stats,
   usersList,
   pendingKyc,
   pendingListings,
   allAuctions,
   allBids,
+  pendingBuyerRegistrations,
   payments,
   tickets,
   categories,
   systemSettings,
   auditLogs,
+  notifications,
 }: {
   user: AdminUser;
+  isGoogleOnlyAccount: boolean;
+  initialTab?: string;
   stats: {
     totalUsers: number;
     pendingKycCount: number;
@@ -229,28 +289,40 @@ export function AdminDashboardClient({
   pendingListings: AdminListing[];
   allAuctions: AdminAuction[];
   allBids: AdminBid[];
+  pendingBuyerRegistrations: AdminBuyerRegistration[];
   payments: AdminPayment[];
   tickets: AdminTicket[];
   categories: AdminCategory[];
   systemSettings: AdminSystemSetting[];
   auditLogs: AdminAuditLog[];
+  notifications: AdminNotification[];
 }) {
-  const [activeTab, setActiveTab] = useState<
-    | "dashboard"
-    | "users"
-    | "kyc"
-    | "listings"
-    | "auctions"
-    | "bids"
-    | "payments"
-    | "tickets"
-    | "reports"
-    | "categories"
-    | "settings"
-    | "audit"
-  >("dashboard");
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState(() => {
+    const validTabs = [
+      "dashboard",
+      "users",
+      "kyc",
+      "listings",
+      "auctions",
+      "bids",
+      "payments",
+      "tickets",
+      "reports",
+      "categories",
+      "settings",
+      "audit",
+      "notifications",
+      "account",
+    ] as const;
+    if (initialTab && (validTabs as readonly string[]).includes(initialTab)) {
+      return initialTab as (typeof validTabs)[number];
+    }
+    return "dashboard";
+  });
 
   const [isPending, startTransition] = useTransition();
+  const [selectedBid, setSelectedBid] = useState<AdminBid | null>(null);
 
   // Search in users
   const [userSearch, setUserSearch] = useState("");
@@ -289,6 +361,7 @@ export function AdminDashboardClient({
     message?: string;
     success?: boolean;
   } | null>(null);
+  const [buyerRegistrationNotes, setBuyerRegistrationNotes] = useState<Record<string, string>>({});
 
   const filteredUsers = usersList.filter((u) => {
     const matchSearch =
@@ -412,9 +485,9 @@ export function AdminDashboardClient({
                 <CreditCard size={16} />
                 <span>Manage Payments</span>
               </div>
-              {payments.filter((p) => p.status === "PENDING").length > 0 && (
+              {payments.filter((p) => p.status === "PENDING").length + pendingBuyerRegistrations.length > 0 && (
                 <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
-                  {payments.filter((p) => p.status === "PENDING").length}
+                  {payments.filter((p) => p.status === "PENDING").length + pendingBuyerRegistrations.length}
                 </span>
               )}
             </button>
@@ -485,6 +558,28 @@ export function AdminDashboardClient({
               <History size={16} />
               <span>Audit Logs</span>
             </button>
+            <button
+              onClick={() => setActiveTab("notifications")}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                activeTab === "notifications"
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+              }`}
+            >
+              <Bell size={16} />
+              <span>Notifications</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("account")}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                activeTab === "account"
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+              }`}
+            >
+              <User size={16} />
+              <span>Manage Account</span>
+            </button>
           </nav>
 
           <Link
@@ -523,6 +618,8 @@ export function AdminDashboardClient({
               {activeTab === "categories" && "Marketplace Categories"}
               {activeTab === "settings" && "Platform Governance & Parameters"}
               {activeTab === "audit" && "Immutable Audit Trail"}
+              {activeTab === "notifications" && "Notification Center"}
+              {activeTab === "account" && "Manage Account"}
             </h1>
           </div>
 
@@ -1004,12 +1101,37 @@ export function AdminDashboardClient({
                       <span className="rounded bg-amber-50 px-2 py-0.5 font-bold text-amber-700">
                         {l.status}
                       </span>
-                      <button
-                        onClick={() => setReviewingListing(l)}
-                        className="rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-700"
-                      >
-                        Inspect & Approve
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {(l.auctions?.length ?? 0) === 0 &&
+                          (l.entryFees?.length ?? 0) === 0 && (
+                            <button
+                              disabled={isPending}
+                              onClick={() => {
+                                if (
+                                  !window.confirm(
+                                    `Delete "${l.title}"? This cannot be undone.`,
+                                  )
+                                ) {
+                                  return;
+                                }
+                                startTransition(async () => {
+                                  const result = await deleteListingAction(l.id);
+                                  setActionMsg(result);
+                                  if (result.success) router.refresh();
+                                });
+                              }}
+                              className="rounded-lg border border-rose-200 px-3 py-1.5 font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        <button
+                          onClick={() => setReviewingListing(l)}
+                          className="rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-700"
+                        >
+                          Inspect & Approve
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1122,8 +1244,10 @@ export function AdminDashboardClient({
                       <th className="pb-3 font-semibold">Auction Item</th>
                       <th className="pb-3 font-semibold">Bidder</th>
                       <th className="pb-3 font-semibold">Amount</th>
+                      <th className="pb-3 font-semibold">Bid Status</th>
                       <th className="pb-3 font-semibold">IP Address</th>
                       <th className="pb-3 font-semibold">Timestamp</th>
+                      <th className="pb-3 text-right font-semibold">Details</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1138,14 +1262,35 @@ export function AdminDashboardClient({
                         <td className="py-3 font-bold text-blue-600">
                           $ {Number(b.amount).toLocaleString()}
                         </td>
+                        <td className="py-3">
+                          <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-700">
+                            {b.status}
+                          </span>
+                        </td>
                         <td className="py-3 font-mono text-slate-400">
                           {b.ipAddress || "127.0.0.1"}
                         </td>
                         <td className="py-3 text-slate-400">
                           {new Date(b.createdAt).toLocaleString()}
                         </td>
+                        <td className="py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedBid(b)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-3 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-50"
+                          >
+                            <Eye size={13} /> View details
+                          </button>
+                        </td>
                       </tr>
                     ))}
+                    {allBids.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-sm text-slate-500">
+                          No bids have been submitted yet.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1155,6 +1300,100 @@ export function AdminDashboardClient({
           {/* ══════════════════ TAB 7: MANAGE PAYMENTS ══════════════════ */}
           {activeTab === "payments" && (
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
+              <section className="space-y-4">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    Buyer Entrance Fee Reviews
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Check the buyer&apos;s transaction reference and receipt before granting bid access.
+                  </p>
+                </div>
+                {pendingBuyerRegistrations.length === 0 ? (
+                  <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
+                    No buyer entrance fee payments are waiting for review.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {pendingBuyerRegistrations.map((registration) => (
+                      <div
+                        key={registration.id}
+                        className="flex flex-col gap-4 rounded-xl border border-amber-200 bg-amber-50/50 p-4 lg:flex-row lg:items-center lg:justify-between"
+                      >
+                        <div className="space-y-1 text-sm">
+                          <p className="font-semibold text-slate-900">
+                            {registration.buyer.name} · {registration.auction.listing.title}
+                          </p>
+                          <p className="text-slate-600">{registration.buyer.email}</p>
+                          <p className="text-slate-600">
+                            {registration.currency} {Number(registration.feeAmount).toLocaleString()} · {registration.paymentMethod || "Payment method unavailable"}
+                          </p>
+                          <p className="font-mono text-xs text-slate-500">
+                            Reference: {registration.txRef || "—"} · Submitted {new Date(registration.createdAt).toLocaleString()}
+                          </p>
+                          {registration.paymentProofUrl ? (
+                            <a
+                              href={registration.paymentProofUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 font-semibold text-blue-600 underline"
+                            >
+                              Open payment receipt <ExternalLink size={13} />
+                            </a>
+                          ) : (
+                            <p className="font-semibold text-rose-600">No payment receipt link was submitted.</p>
+                          )}
+                          <input
+                            value={buyerRegistrationNotes[registration.id] || ""}
+                            maxLength={500}
+                            onChange={(event) => {
+                              setBuyerRegistrationNotes((previous) => ({
+                                ...previous,
+                                [registration.id]: event.target.value,
+                              }));
+                            }}
+                            placeholder="Optional note if rejecting"
+                            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
+                          />
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          <button
+                            disabled={isPending}
+                            onClick={() => {
+                              startTransition(async () => {
+                                const result = await adminConfirmBuyerRegistrationAction(
+                                  registration.id,
+                                  "REJECTED",
+                                  buyerRegistrationNotes[registration.id] || "",
+                                );
+                                setActionMsg(result);
+                                if (result.success) router.refresh();
+                              });
+                            }}
+                            className="rounded-lg border border-rose-200 px-4 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                          >
+                            Reject
+                          </button>
+                          <button
+                            disabled={isPending || !registration.paymentProofUrl}
+                            onClick={() => {
+                              startTransition(async () => {
+                                const result = await adminConfirmBuyerRegistrationAction(registration.id, "PAID");
+                                setActionMsg(result);
+                                if (result.success) router.refresh();
+                              });
+                            }}
+                            className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            Approve & enable bidding
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
                   Escrow Deposit & Settlement Verification
@@ -1182,7 +1421,7 @@ export function AdminDashboardClient({
                     {payments.map((p) => (
                       <tr key={p.id} className="hover:bg-slate-50">
                         <td className="py-3 font-mono font-semibold text-slate-900">
-                          {p.transactionRef}
+                          {p.transactionRef ?? "—"}
                         </td>
                         <td className="py-3 text-slate-600">{p.payer?.name}</td>
                         <td className="py-3 font-bold text-slate-900">
@@ -1489,6 +1728,95 @@ export function AdminDashboardClient({
                 </button>
               </form>
             </div>
+          )}
+
+          {activeTab === "notifications" && (
+            <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                  Admin notifications
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Delete a notification from your account. This does not delete its related inquiry or other users&apos; notifications.
+                </p>
+              </div>
+              {notifications.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-300 px-4 py-10 text-center dark:border-slate-700">
+                  <Bell className="mx-auto mb-2 text-slate-400" size={24} />
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    You&apos;re all caught up
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    New updates will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {notifications.map((notification) => (
+                    <article
+                      key={notification.id}
+                      className={`flex items-start justify-between gap-4 rounded-xl border p-4 ${
+                        notification.readAt
+                          ? "border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/50"
+                          : "border-blue-100 bg-blue-50/60 dark:border-blue-900 dark:bg-blue-950/30"
+                      }`}
+                    >
+                      <div className="flex min-w-0 items-start gap-3">
+                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+                          <Bell size={14} />
+                        </span>
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                            {notification.title}
+                          </h3>
+                          <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-600 dark:text-slate-300">
+                            {notification.body}
+                          </p>
+                          <time
+                            className="mt-2 block text-[10px] text-slate-400"
+                            dateTime={notification.createdAt}
+                          >
+                            {new Date(notification.createdAt).toLocaleString()}
+                          </time>
+                          {notification.link && (
+                            <Link
+                              href={notification.link}
+                              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-800 dark:text-blue-300"
+                            >
+                              View details <ExternalLink size={12} />
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isPending}
+                        onClick={() => {
+                          if (!window.confirm("Delete this notification? This will not delete the inquiry or other users’ copies.")) return;
+                          startTransition(async () => {
+                            await deleteNotificationAction(notification.id);
+                          });
+                        }}
+                        aria-label={`Delete notification: ${notification.title}`}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-rose-200 px-3 py-1.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/40"
+                      >
+                        <Trash2 size={13} /> Delete
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {activeTab === "account" && (
+            <AccountManagement
+              name={user.name}
+              email={user.email}
+              phone={user.phone}
+              avatarUrl={user.avatarUrl}
+              isGoogleOnly={isGoogleOnlyAccount}
+            />
           )}
 
           {/* ══════════════════ TAB 12: AUDIT LOGS ══════════════════ */}
@@ -1959,6 +2287,47 @@ export function AdminDashboardClient({
                           {fee?.bankReference || fee?.txRef || "—"}
                         </span>
                       </div>
+                      <div className="flex justify-between items-center gap-3">
+                        <span className="text-slate-500">Transaction Link</span>
+                        <span className="max-w-[65%] truncate font-semibold bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-900">
+                          {fee?.transactionUrl ? (
+                            <a
+                              href={fee.transactionUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              aria-label="Open submitted transaction link"
+                              className="inline-flex items-center gap-1 text-blue-700 underline decoration-dotted underline-offset-2 hover:text-blue-800"
+                            >
+                              Open transaction details
+                              <ExternalLink size={12} />
+                            </a>
+                          ) : fee?.paymentProofMediaId ? (
+                            <a
+                              href={`/api/media/${encodeURIComponent(fee.paymentProofMediaId)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              aria-label="Open legacy uploaded payment receipt"
+                              className="inline-flex items-center gap-1 text-blue-700 underline decoration-dotted underline-offset-2 hover:text-blue-800"
+                            >
+                              Open previous receipt
+                              <ExternalLink size={12} />
+                            </a>
+                          ) : (
+                            "—"
+                          )}
+                        </span>
+                      </div>
+                      {!fee?.transactionUrl &&
+                      !fee?.paymentProofMediaId &&
+                      fee?.method === "CHAPA" ? (
+                        <p className="text-[11px] text-emerald-700">
+                          Online payment is verified through Chapa.
+                        </p>
+                      ) : !fee?.transactionUrl && !fee?.paymentProofMediaId ? (
+                        <p className="text-[11px] text-amber-700">
+                          No transaction link was submitted.
+                        </p>
+                      ) : null}
                     </div>
                   </div>
 
@@ -1993,13 +2362,26 @@ export function AdminDashboardClient({
                     {reviewingListing.videoUrl && (
                       <div className="pt-2">
                         <p className="font-bold text-slate-700 mb-1 flex items-center gap-1">
-                          <Video size={14} /> Item Video Walkthrough:
+                          <Video size={14} /> Item Video Post:
                         </p>
-                        <video
-                          src={reviewingListing.videoUrl}
-                          controls
-                          className="w-full max-h-40 rounded-xl bg-black"
-                        />
+                        {reviewingListing.videoUrl.startsWith("/") ? (
+                          <video
+                            src={reviewingListing.videoUrl}
+                            controls
+                            preload="metadata"
+                            className="w-full max-h-40 rounded-xl bg-black"
+                          />
+                        ) : (
+                          <a
+                            href={reviewingListing.videoUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                          >
+                            Open original social-media video post
+                            <ExternalLink size={14} />
+                          </a>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2228,6 +2610,156 @@ export function AdminDashboardClient({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {selectedBid && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelectedBid(null);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-bid-details-title"
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-900"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Bid record</p>
+                <h2 id="admin-bid-details-title" className="mt-1 text-xl font-bold text-slate-900 dark:text-white">
+                  {selectedBid.auction?.listing?.title || "Auction bid"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedBid(null)}
+                aria-label="Close bid details"
+                className="rounded-full bg-slate-100 p-2 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
+                <dt className="text-xs text-slate-500">Bid amount</dt>
+                <dd className="mt-1 text-lg font-bold text-slate-900 dark:text-white">$ {Number(selectedBid.amount).toLocaleString()}</dd>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
+                <dt className="text-xs text-slate-500">Bid status</dt>
+                <dd className="mt-1 font-semibold text-slate-900 dark:text-white">{selectedBid.status}</dd>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
+                <dt className="text-xs text-slate-500">Submitted</dt>
+                <dd className="mt-1 text-sm font-medium text-slate-900 dark:text-white">{new Date(selectedBid.createdAt).toLocaleString()}</dd>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
+                <dt className="text-xs text-slate-500">Approved</dt>
+                <dd className="mt-1 text-sm font-medium text-slate-900 dark:text-white">
+                  {selectedBid.approvedAt ? new Date(selectedBid.approvedAt).toLocaleString() : "Not approved"}
+                </dd>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
+                <dt className="text-xs text-slate-500">Auction status</dt>
+                <dd className="mt-1 text-sm font-medium text-slate-900 dark:text-white">{selectedBid.auction?.status || "Unknown"}</dd>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
+                <dt className="text-xs text-slate-500">Auction schedule</dt>
+                <dd className="mt-1 text-sm text-slate-900 dark:text-white">
+                  {selectedBid.auction
+                    ? `${new Date(selectedBid.auction.startAt).toLocaleString()} – ${new Date(selectedBid.auction.endAt).toLocaleString()}`
+                    : "Unavailable"}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="mt-5 rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
+              <h3 className="font-semibold text-slate-900 dark:text-white">Bidder account</h3>
+              <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs text-slate-500">Name</dt>
+                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">{selectedBid.bidder?.name || "Unavailable"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Email</dt>
+                  <dd className="mt-1 break-all text-sm font-medium text-slate-800 dark:text-slate-200">{selectedBid.bidder?.email || "Unavailable"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Role</dt>
+                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">{selectedBid.bidder?.role || "Unknown"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Account status</dt>
+                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">{selectedBid.bidder?.status || "Unknown"}</dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-xs text-slate-500">Bidder ID</dt>
+                  <dd className="mt-1 break-all font-mono text-xs text-slate-600 dark:text-slate-300">{selectedBid.bidderId || "Unavailable"}</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
+              <h3 className="font-semibold text-slate-900 dark:text-white">Bid payment</h3>
+              {selectedBid.payment ? (
+                <>
+                  <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <dt className="text-xs text-slate-500">Payment status</dt>
+                      <dd className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedBid.payment.status}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-slate-500">Payment amount</dt>
+                      <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">{Number(selectedBid.payment.amount).toLocaleString()} {selectedBid.payment.currency}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-slate-500">Payment method</dt>
+                      <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">{selectedBid.payment.method}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-slate-500">Transaction reference</dt>
+                      <dd className="mt-1 break-all font-mono text-xs text-slate-700 dark:text-slate-300">{selectedBid.payment.transactionRef || "Not provided"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-slate-500">Payment submitted</dt>
+                      <dd className="mt-1 text-sm text-slate-700 dark:text-slate-300">{new Date(selectedBid.payment.createdAt).toLocaleString()}</dd>
+                    </div>
+                    {selectedBid.payment.verifiedAt && (
+                      <div>
+                        <dt className="text-xs text-slate-500">Verified</dt>
+                        <dd className="mt-1 text-sm text-slate-700 dark:text-slate-300">{new Date(selectedBid.payment.verifiedAt).toLocaleString()}</dd>
+                      </div>
+                    )}
+                  </dl>
+                  {selectedBid.payment.rejectionReason && (
+                    <p className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+                      Rejection reason: {selectedBid.payment.rejectionReason}
+                    </p>
+                  )}
+                  {(selectedBid.payment.receiptUrl || selectedBid.payment.bankReferenceUrl) && (
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      {selectedBid.payment.receiptUrl && (
+                        <a href={selectedBid.payment.receiptUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-blue-700 underline dark:text-blue-300">
+                          Open receipt
+                        </a>
+                      )}
+                      {selectedBid.payment.bankReferenceUrl && (
+                        <a href={selectedBid.payment.bankReferenceUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-blue-700 underline dark:text-blue-300">
+                          Open payment evidence
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">No bid payment record has been submitted.</p>
+              )}
+            </div>
+          </section>
         </div>
       )}
 

@@ -1,0 +1,3 @@
+ALTER TABLE "AuctionResult"
+  ADD COLUMN IF NOT EXISTS "reminder24hSentAt" TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS "deadlineSentAt" TIMESTAMP(3);
