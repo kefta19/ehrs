@@ -219,12 +219,12 @@ async function main() {
     console.log('\n✅ Sample auctions created successfully!');
     console.log('\nLive Auction:');
     console.log(`  - ${liveListing.title}`);
-    console.log(`  - Current Bid: $${liveAuction.currentHighestBid.toLocaleString()}`);
+    console.log(`  - Current Bid: ${liveAuction.currentHighestBid.toLocaleString()} ETB`);
     console.log(`  - Ends in: 24 hours`);
     
     console.log('\nUpcoming Auction:');
     console.log(`  - ${upcomingListing.title}`);
-    console.log(`  - Starting Price: $${upcomingAuction.startingPrice.toLocaleString()}`);
+    console.log(`  - Starting Price: ${upcomingAuction.startingPrice.toLocaleString()} ETB`);
     console.log(`  - Starts in: 3 days`);
     
     console.log('\nTest Accounts:');

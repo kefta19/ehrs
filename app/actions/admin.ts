@@ -261,7 +261,7 @@ export async function verifyPaymentAction(formData: FormData) {
         : `Payment Status: ${status}`,
     body:
       status === "PAID"
-        ? `Your payment of $${Number(payment.amount).toLocaleString()} for "${payment.auctionResult.auction.listing.title}" has been verified in escrow.`
+        ? `Your payment of ${Number(payment.amount).toLocaleString()} ETB for "${payment.auctionResult.auction.listing.title}" has been verified in escrow.`
         : `Your payment was updated to ${status}. Notes: ${notes || "Contact billing for details."}`,
     link: `/buyer?tab=payments`,
   });

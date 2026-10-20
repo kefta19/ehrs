@@ -26,6 +26,8 @@ import {
   Building2,
   Factory,
   Package,
+  Users,
+  TrendingUp,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +37,14 @@ export default async function HomePage() {
 
   const user = await getCurrentUser();
 
-  const [categories, featuredAuctions] = await Promise.all([
+  const [
+    categories,
+    featuredAuctions,
+    totalUsersCount,
+    liveAuctionsCount,
+    liveBidsCount,
+    liveAuctionAggregate,
+  ] = await Promise.all([
     prisma.category.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: "asc" },
@@ -67,7 +76,32 @@ export default async function HomePage() {
       orderBy: { createdAt: "desc" },
       take: 8,
     }),
+    prisma.user.count(),
+    prisma.auction.count({
+      where: {
+        status: "ACTIVE",
+      },
+    }),
+    prisma.bid.count({
+      where: {
+        auction: {
+          status: "ACTIVE",
+        },
+      },
+    }),
+    prisma.auction.aggregate({
+      where: {
+        status: "ACTIVE",
+      },
+      _sum: {
+        currentHighestBid: true,
+      },
+    }),
   ]);
+
+  const totalLiveBidAmount = Number(
+    liveAuctionAggregate._sum.currentHighestBid || 0,
+  );
   const heroImages = featuredAuctions.flatMap((auction) =>
     auction.listing.images.map((image) => ({
       id: image.id,
@@ -132,7 +166,7 @@ export default async function HomePage() {
         </div>
 
         <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="max-w-2xl space-y-6">
+          <div className="max-w-2xl lg:max-w-3xl space-y-6">
             <span className="inline-block text-xs font-semibold tracking-wider text-blue-400 uppercase">
               Buy • Bid • Own
             </span>
@@ -186,6 +220,80 @@ export default async function HomePage() {
               >
                 <Search size={16} /> Search
               </Link>
+            </div>
+
+            {/* Exact Live Platform Stats from Database */}
+            <div className="pt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Link
+                href="/buyer?tab=browse"
+                className="group rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur-md p-3.5 transition-all hover:border-blue-400/50 hover:bg-white/[0.1] flex flex-col justify-between"
+              >
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-400">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+                  </span>
+                  <span>Live Bid List</span>
+                </div>
+                <div className="mt-1.5 flex items-baseline gap-1.5">
+                  <span className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                    {liveAuctionsCount.toLocaleString()}
+                  </span>
+                  <span className="text-[11px] font-medium text-emerald-400">
+                    Active
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-300 block mt-0.5 group-hover:text-blue-200 transition-colors">
+                  Open auctions
+                </span>
+              </Link>
+
+              <div className="rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur-md p-3.5 transition-all hover:border-blue-400/50 hover:bg-white/[0.1] flex flex-col justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-400">
+                  <Gavel size={13} className="text-blue-400" />
+                  <span>Total Live Bids</span>
+                </div>
+                <div className="mt-1.5 flex items-baseline gap-1.5">
+                  <span className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                    {liveBidsCount.toLocaleString()}
+                  </span>
+                  <span className="text-[11px] text-slate-300">Bids</span>
+                </div>
+                <span className="text-[10px] text-slate-300 block mt-0.5">
+                  Placed on live items
+                </span>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur-md p-3.5 transition-all hover:border-blue-400/50 hover:bg-white/[0.1] flex flex-col justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-400">
+                  <TrendingUp size={13} className="text-blue-400" />
+                  <span>Total Bid Amount</span>
+                </div>
+                <div className="mt-1.5 flex items-baseline gap-1.5">
+                  <span className="text-xl sm:text-2xl font-extrabold text-white tracking-tight truncate">
+                    {totalLiveBidAmount.toLocaleString()} ETB
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-300 block mt-0.5">
+                  Live bidding volume
+                </span>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur-md p-3.5 transition-all hover:border-blue-400/50 hover:bg-white/[0.1] flex flex-col justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-400">
+                  <Users size={13} className="text-blue-400" />
+                  <span>Total Users</span>
+                </div>
+                <div className="mt-1.5 flex items-baseline gap-1.5">
+                  <span className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                    {totalUsersCount.toLocaleString()}
+                  </span>
+                  <span className="text-[11px] text-slate-300">Users</span>
+                </div>
+                <span className="text-[10px] text-slate-300 block mt-0.5">
+                  Registered on platform
+                </span>
+              </div>
             </div>
 
             {/* 4 Trust Value Props (Matching Screenshot) */}
@@ -389,7 +497,7 @@ export default async function HomePage() {
                             {isLive ? "Current Bid" : "Starting Price"}
                           </span>
                           <span className="text-base font-bold text-slate-900 dark:text-white">
-                            $ {currentBid.toLocaleString()}
+                            {currentBid.toLocaleString()} ETB
                           </span>
                         </div>
                         <div className="text-right text-[11px] text-slate-500 dark:text-slate-400">
@@ -619,13 +727,19 @@ export default async function HomePage() {
               </h4>
               <ul className="space-y-2 text-slate-600 dark:text-slate-300">
                 <li className="flex items-center gap-2">
-                  <Phone size={14} className="text-blue-600" /> +251 11 123 4567
+                  <Phone size={14} className="text-blue-600 shrink-0" />
+                  <a href="tel:0948841228" className="hover:text-blue-600 transition-colors">
+                    0948841228
+                  </a>
                 </li>
                 <li className="flex items-center gap-2">
-                  <Mail size={14} className="text-blue-600" /> info@ethome.com
+                  <Mail size={14} className="text-blue-600 shrink-0" />
+                  <a href="mailto:keftagedefaw@gmail.com" className="hover:text-blue-600 transition-colors">
+                    keftagedefaw@gmail.com
+                  </a>
                 </li>
                 <li className="flex items-center gap-2">
-                  <MapPin size={14} className="text-blue-600" /> Addis Ababa,
+                  <MapPin size={14} className="text-blue-600 shrink-0" /> Addis Ababa,
                   Ethiopia
                 </li>
               </ul>

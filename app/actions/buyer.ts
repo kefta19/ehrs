@@ -98,7 +98,7 @@ export async function placeBidAction(formData: FormData) {
   if (amount < minimumRequired) {
     return {
       success: false,
-      error: `Your bid must be at least $${minimumRequired.toLocaleString()} (minimum increment of $${minIncrement.toLocaleString()}).`,
+      error: `Your bid must be at least ${minimumRequired.toLocaleString()} ETB (minimum increment of ${minIncrement.toLocaleString()} ETB).`,
     };
   }
 
@@ -148,10 +148,10 @@ export async function placeBidAction(formData: FormData) {
               : "New bid placed",
         body:
           bidderId === previousHighestBidderId && bidderId !== user.id
-            ? `A new bid of $${amount.toLocaleString()} was placed on "${auction.listing.title}". You are no longer the highest bidder.`
+            ? `A new bid of ${amount.toLocaleString()} ETB was placed on "${auction.listing.title}". You are no longer the highest bidder.`
             : bidderId === user.id
-              ? `Your bid of $${amount.toLocaleString()} on "${auction.listing.title}" was recorded.`
-              : `A new bid of $${amount.toLocaleString()} was placed on "${auction.listing.title}".`,
+              ? `Your bid of ${amount.toLocaleString()} ETB on "${auction.listing.title}" was recorded.`
+              : `A new bid of ${amount.toLocaleString()} ETB was placed on "${auction.listing.title}".`,
         link: `/auction/${auction.id}`,
       }),
     ),
@@ -161,7 +161,7 @@ export async function placeBidAction(formData: FormData) {
   await notify(auction.sellerId, {
     type: "NEW_BID",
     title: "New Bid Received",
-    body: `${user.name} placed a new highest bid of $${amount.toLocaleString()} on "${auction.listing.title}".`,
+    body: `${user.name} placed a new highest bid of ${amount.toLocaleString()} ETB on "${auction.listing.title}".`,
     link: `/seller?tab=auctions`,
   });
 
@@ -184,7 +184,7 @@ export async function placeBidAction(formData: FormData) {
 
   return {
     success: true,
-    message: `Bid of $${amount.toLocaleString()} placed successfully! You are currently the highest bidder.`,
+    message: `Bid of ${amount.toLocaleString()} ETB placed successfully! You are currently the highest bidder.`,
   };
 }
 
@@ -259,7 +259,7 @@ export async function submitPaymentAction(formData: FormData) {
       auctionResultId,
       payerId: user.id,
       amount: result.depositDue,
-      currency: "USD",
+      currency: "ETB",
       method,
       status: "PENDING",
       transactionRef,
@@ -271,7 +271,7 @@ export async function submitPaymentAction(formData: FormData) {
   await notifyAdmins({
     type: "PAYMENT_SUBMITTED",
     title: "New Escrow Payment Submitted",
-    body: `Buyer ${user.name} submitted payment ref "${transactionRef}" ($${Number(result.depositDue).toLocaleString()}) for "${result.auction.listing.title}". Verification required.`,
+    body: `Buyer ${user.name} submitted payment ref "${transactionRef}" (${Number(result.depositDue).toLocaleString()} ETB) for "${result.auction.listing.title}". Verification required.`,
     link: `/admin?tab=payments`,
   });
 

@@ -367,7 +367,7 @@ export function AuctionDetailClient({
                           {formatTime(bid.createdAt)}
                         </time>
                       </div>
-                      <span className="text-sm font-bold text-slate-900 dark:text-white">${Number(bid.amount).toLocaleString()}</span>
+                      <span className="text-sm font-bold text-slate-900 dark:text-white">{Number(bid.amount).toLocaleString()} ETB</span>
                     </div>
                   ))}
                 </div>
@@ -387,7 +387,7 @@ export function AuctionDetailClient({
                   <div>
                     <dt className="text-xs text-slate-500">Current bid</dt>
                     <dd className="font-bold text-slate-900 dark:text-white">
-                      {currentBid > 0 ? `$${currentBid.toLocaleString()}` : `$${startingPrice.toLocaleString()} starting`}
+                      {currentBid > 0 ? `${currentBid.toLocaleString()} ETB` : `${startingPrice.toLocaleString()} ETB starting`}
                     </dd>
                   </div>
                 </div>
@@ -395,7 +395,7 @@ export function AuctionDetailClient({
                   <DollarSign size={18} className="mt-0.5 text-blue-600" />
                   <div>
                     <dt className="text-xs text-slate-500">Minimum increment</dt>
-                    <dd className="font-semibold text-slate-800 dark:text-slate-200">${minBidIncrement.toLocaleString()}</dd>
+                    <dd className="font-semibold text-slate-800 dark:text-slate-200">{minBidIncrement.toLocaleString()} ETB</dd>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
@@ -558,7 +558,7 @@ export function AuctionDetailClient({
                 <form onSubmit={handlePlaceBid} className="space-y-4">
                   <div>
                     <label htmlFor="bidAmount" className="mb-1 mt-4 block text-sm font-medium text-slate-800 dark:text-slate-200">
-                      Bid Amount (USD)
+                      Bid Amount (ETB)
                     </label>
                     <input
                       id="bidAmount"
@@ -567,12 +567,12 @@ export function AuctionDetailClient({
                       min={minRequired}
                       value={bidAmount}
                       onChange={(e) => setBidAmount(e.target.value)}
-                      placeholder={`Minimum: $${minRequired.toLocaleString()}`}
+                      placeholder={`Minimum: ${minRequired.toLocaleString()} ETB`}
                       required
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     />
                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      Minimum bid: ${minRequired.toLocaleString()}
+                      Minimum bid: {minRequired.toLocaleString()} ETB
                     </p>
                   </div>
                   <button

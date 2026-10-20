@@ -89,7 +89,7 @@ export function BidPaymentClient({
           </div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Payment Submitted!</h2>
           <p className="text-slate-600 dark:text-slate-400 mb-6">
-            Your bid payment of ${bidAmount.toLocaleString()} ETB has been submitted for admin review.
+            Your bid payment of {bidAmount.toLocaleString()} ETB has been submitted for admin review.
             You will be notified once approved.
           </p>
           <p className="text-sm text-slate-500 dark:text-slate-500">Redirecting to dashboard...</p>
@@ -130,7 +130,7 @@ export function BidPaymentClient({
             <div className="text-center mb-6">
               <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Your Bid Amount</p>
               <p className="text-4xl font-bold text-slate-900 dark:text-white">
-                ${bidAmount.toLocaleString()} <span className="text-lg font-normal text-slate-500">ETB</span>
+                {bidAmount.toLocaleString()} <span className="text-lg font-normal text-slate-500">ETB</span>
               </p>
             </div>
 

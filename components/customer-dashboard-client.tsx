@@ -737,7 +737,7 @@ export function CustomerDashboardClient({
                       Total Spent
                     </div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">
-                      $ {totalSpent.toLocaleString()}
+                      {totalSpent.toLocaleString()} ETB
                     </div>
                   </div>
                 </div>
@@ -818,7 +818,7 @@ export function CustomerDashboardClient({
                         <div>
                           <span className="text-slate-400 block">Current Bid</span>
                           <span className="font-bold text-slate-900">
-                            $ {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()}
+                            {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()} ETB
                           </span>
                         </div>
                         <div>
@@ -893,7 +893,7 @@ export function CustomerDashboardClient({
                         <div>
                           <span className="text-slate-400 block">Starting from</span>
                           <span className="font-bold text-slate-900">
-                            $ {Number(auc.startingPrice).toLocaleString()}
+                            {Number(auc.startingPrice).toLocaleString()} ETB
                           </span>
                         </div>
                         <button
@@ -962,7 +962,7 @@ export function CustomerDashboardClient({
                                 </div>
                               </td>
                               <td className="py-3 font-bold text-slate-900">
-                                $ {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()}
+                                {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()} ETB
                               </td>
                               <td className="py-3">
                                 {isWinning ? (
@@ -1024,7 +1024,7 @@ export function CustomerDashboardClient({
                               {auc.listing.title}
                             </h5>
                             <span className="font-bold text-slate-800 text-[11px]">
-                              $ {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()}
+                              {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()} ETB
                             </span>
                           </div>
                         </div>
@@ -1080,7 +1080,7 @@ export function CustomerDashboardClient({
                         <span className="font-semibold text-slate-800">
                           You placed a bid on Modern Family House
                         </span>
-                        <span className="text-slate-500 ml-1">($320,000)</span>
+                        <span className="text-slate-500 ml-1">(320,000 ETB)</span>
                       </div>
                     </div>
                     <span className="text-slate-400 text-[11px]">2 hours ago</span>
@@ -1095,7 +1095,7 @@ export function CustomerDashboardClient({
                         <span className="font-semibold text-slate-800">
                           You were outbid on Toyota Land Cruiser
                         </span>
-                        <span className="text-slate-500 ml-1">($42,000)</span>
+                        <span className="text-slate-500 ml-1">(42,000 ETB)</span>
                       </div>
                     </div>
                     <span className="text-slate-400 text-[11px]">4 hours ago</span>
@@ -1110,7 +1110,7 @@ export function CustomerDashboardClient({
                         <span className="font-semibold text-slate-800">
                           You won the auction for Residential Land
                         </span>
-                        <span className="text-slate-500 ml-1">($78,000)</span>
+                        <span className="text-slate-500 ml-1">(78,000 ETB)</span>
                       </div>
                     </div>
                     <span className="text-slate-400 text-[11px]">1 day ago</span>
@@ -1125,7 +1125,7 @@ export function CustomerDashboardClient({
                         <span className="font-semibold text-slate-800">
                           Payment confirmed for Commercial Building
                         </span>
-                        <span className="text-slate-500 ml-1">($1,150,000)</span>
+                        <span className="text-slate-500 ml-1">(1,150,000 ETB)</span>
                       </div>
                     </div>
                     <span className="text-slate-400 text-[11px]">3 days ago</span>
@@ -1348,7 +1348,7 @@ export function CustomerDashboardClient({
                                   {isLive ? "Current Bid" : "Starting Price"}
                                 </span>
                                 <span className="text-lg font-bold text-slate-900 dark:text-white">
-                                  $ {currentBid.toLocaleString()}
+                                  {currentBid.toLocaleString()} ETB
                                 </span>
                               </div>
                               <div className="text-right text-xs text-slate-500 dark:text-slate-400">
@@ -1448,10 +1448,10 @@ export function CustomerDashboardClient({
                           </td>
                           <td className="py-4">
                             <div className="font-bold text-slate-900 text-sm">
-                              $ {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()}
+                              {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()} ETB
                             </div>
                             <div className="text-[10px] text-slate-400">
-                              Increment: +${Number(auc.minBidIncrement).toLocaleString()}
+                              Increment: +{Number(auc.minBidIncrement).toLocaleString()} ETB
                             </div>
                           </td>
                           <td className="py-4">
@@ -1535,13 +1535,13 @@ export function CustomerDashboardClient({
                         <div>
                           <span className="text-slate-400 block">Winning Amount</span>
                           <span className="font-bold text-slate-900 text-sm">
-                            $ {Number(res.winningAmount).toLocaleString()}
+                            {Number(res.winningAmount).toLocaleString()} ETB
                           </span>
                         </div>
                         <div>
                           <span className="text-slate-400 block">Earnest Deposit Due</span>
                           <span className="font-bold text-blue-600 text-sm">
-                            $ {Number(res.depositDue).toLocaleString()}
+                            {Number(res.depositDue).toLocaleString()} ETB
                           </span>
                         </div>
                       </div>
@@ -1615,7 +1615,7 @@ export function CustomerDashboardClient({
                               {auc.listing.city}
                             </div>
                             <div className="font-bold text-blue-600 text-sm mt-1">
-                              $ {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()}
+                              {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()} ETB
                             </div>
                           </div>
                         </div>
@@ -1677,7 +1677,7 @@ export function CustomerDashboardClient({
                           {p.auctionResult?.auction?.listing?.title || "Property Settlement"}
                         </td>
                         <td className="py-3 font-bold text-slate-900">
-                          $ {Number(p.amount).toLocaleString()}
+                          {Number(p.amount).toLocaleString()} ETB
                         </td>
                         <td className="py-3 text-slate-600">{p.method}</td>
                         <td className="py-3">
@@ -1948,19 +1948,19 @@ export function CustomerDashboardClient({
               <div className="flex justify-between">
                 <span className="text-slate-500">Current Highest Bid:</span>
                 <span className="font-bold text-slate-900">
-                  $ {Number(biddingAuction.currentHighestBid || biddingAuction.startingPrice).toLocaleString()}
+                  {Number(biddingAuction.currentHighestBid || biddingAuction.startingPrice).toLocaleString()} ETB
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Minimum Bid Increment:</span>
                 <span className="font-bold text-blue-600">
-                  + $ {Number(biddingAuction.minBidIncrement).toLocaleString()}
+                  + {Number(biddingAuction.minBidIncrement).toLocaleString()} ETB
                 </span>
               </div>
               <div className="flex justify-between border-t border-slate-200 pt-2 font-semibold">
                 <span className="text-slate-700">Minimum Required Bid:</span>
                 <span className="text-slate-900">
-                  $ {(Number(biddingAuction.currentHighestBid || biddingAuction.startingPrice) + Number(biddingAuction.minBidIncrement)).toLocaleString()}
+                  {(Number(biddingAuction.currentHighestBid || biddingAuction.startingPrice) + Number(biddingAuction.minBidIncrement)).toLocaleString()} ETB
                 </span>
               </div>
             </div>
@@ -1980,7 +1980,7 @@ export function CustomerDashboardClient({
             <form onSubmit={handleSubmitBid} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Your Bid Amount ($ USD)
+                  Your Bid Amount (ETB)
                 </label>
                 <input
                   type="number"
@@ -2043,7 +2043,7 @@ export function CustomerDashboardClient({
               <div className="flex justify-between text-slate-700">
                 <span>Earnest Deposit Due:</span>
                 <span className="font-bold">
-                  $ {Number(payingResult.depositDue).toLocaleString()}
+                  {Number(payingResult.depositDue).toLocaleString()} ETB
                 </span>
               </div>
             </div>

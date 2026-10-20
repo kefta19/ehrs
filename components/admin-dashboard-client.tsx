@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
+  Menu,
   Eye,
   Check,
   Search,
@@ -199,6 +200,21 @@ type AdminPayment = {
   payer?: AdminUser;
   amount: number | string;
   status: string;
+  currency?: string;
+  method?: string;
+  receiptUrl?: string | null;
+  notes?: string | null;
+  createdAt?: string;
+  paidAt?: string | null;
+  auctionResult?: {
+    id: string;
+    auction: {
+      id: string;
+      listing: {
+        title: string;
+      };
+    };
+  } | null;
 };
 
 type AdminBuyerRegistration = {
@@ -362,6 +378,11 @@ export function AdminDashboardClient({
     success?: boolean;
   } | null>(null);
   const [buyerRegistrationNotes, setBuyerRegistrationNotes] = useState<Record<string, string>>({});
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const selectTab = (tab: typeof activeTab) => {
+    setActiveTab(tab);
+    setMobileMenuOpen(false);
+  };
 
   const filteredUsers = usersList.filter((u) => {
     const matchSearch =
@@ -374,16 +395,35 @@ export function AdminDashboardClient({
 
   return (
     <div className="flex min-h-screen bg-background text-slate-800 dark:text-slate-100 transition-colors">
+      {/* Mobile backdrop */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       {/* ─────────────────── LEFT SIDEBAR ─────────────────── */}
-      <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-[#132238] bg-[#0A192F] text-slate-300">
-        <div className="flex h-16 items-center px-6 border-b border-[#132644]">
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-[#132238] bg-[#0A192F] text-slate-300 transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+          mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="flex h-16 items-center justify-between px-6 border-b border-[#132644]">
           <ETHomeLogo dark size="md" href="/admin" />
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(false)}
+            className="lg:hidden p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-[#12233f] transition-colors"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         <div className="flex flex-1 flex-col justify-between overflow-y-auto px-4 py-4">
           <nav className="space-y-0.5 text-xs">
             <button
-              onClick={() => setActiveTab("dashboard")}
+              onClick={() => selectTab("dashboard")}
               className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "dashboard"
                   ? "bg-blue-600 text-white shadow-sm"
@@ -395,7 +435,7 @@ export function AdminDashboardClient({
             </button>
 
             <button
-              onClick={() => setActiveTab("users")}
+              onClick={() => selectTab("users")}
               className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "users"
                   ? "bg-blue-600 text-white shadow-sm"
@@ -412,7 +452,7 @@ export function AdminDashboardClient({
             </button>
 
             <button
-              onClick={() => setActiveTab("kyc")}
+              onClick={() => selectTab("kyc")}
               className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "kyc"
                   ? "bg-blue-600 text-white shadow-sm"
@@ -431,7 +471,7 @@ export function AdminDashboardClient({
             </button>
 
             <button
-              onClick={() => setActiveTab("listings")}
+              onClick={() => selectTab("listings")}
               className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "listings"
                   ? "bg-blue-600 text-white shadow-sm"
@@ -450,7 +490,7 @@ export function AdminDashboardClient({
             </button>
 
             <button
-              onClick={() => setActiveTab("auctions")}
+              onClick={() => selectTab("auctions")}
               className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "auctions"
                   ? "bg-blue-600 text-white shadow-sm"
@@ -462,7 +502,7 @@ export function AdminDashboardClient({
             </button>
 
             <button
-              onClick={() => setActiveTab("bids")}
+              onClick={() => selectTab("bids")}
               className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "bids"
                   ? "bg-blue-600 text-white shadow-sm"
@@ -474,7 +514,7 @@ export function AdminDashboardClient({
             </button>
 
             <button
-              onClick={() => setActiveTab("payments")}
+              onClick={() => selectTab("payments")}
               className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "payments"
                   ? "bg-blue-600 text-white shadow-sm"
@@ -493,7 +533,7 @@ export function AdminDashboardClient({
             </button>
 
             <button
-              onClick={() => setActiveTab("tickets")}
+              onClick={() => selectTab("tickets")}
               className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "tickets"
                   ? "bg-blue-600 text-white shadow-sm"
@@ -512,7 +552,7 @@ export function AdminDashboardClient({
             </button>
 
             <button
-              onClick={() => setActiveTab("reports")}
+              onClick={() => selectTab("reports")}
               className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "reports"
                   ? "bg-blue-600 text-white shadow-sm"
@@ -524,7 +564,7 @@ export function AdminDashboardClient({
             </button>
 
             <button
-              onClick={() => setActiveTab("categories")}
+              onClick={() => selectTab("categories")}
               className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "categories"
                   ? "bg-blue-600 text-white shadow-sm"
@@ -536,7 +576,7 @@ export function AdminDashboardClient({
             </button>
 
             <button
-              onClick={() => setActiveTab("settings")}
+              onClick={() => selectTab("settings")}
               className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "settings"
                   ? "bg-blue-600 text-white shadow-sm"
@@ -548,7 +588,7 @@ export function AdminDashboardClient({
             </button>
 
             <button
-              onClick={() => setActiveTab("audit")}
+              onClick={() => selectTab("audit")}
               className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "audit"
                   ? "bg-blue-600 text-white shadow-sm"
@@ -559,7 +599,7 @@ export function AdminDashboardClient({
               <span>Audit Logs</span>
             </button>
             <button
-              onClick={() => setActiveTab("notifications")}
+              onClick={() => selectTab("notifications")}
               className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "notifications"
                   ? "bg-blue-600 text-white shadow-sm"
@@ -570,7 +610,7 @@ export function AdminDashboardClient({
               <span>Notifications</span>
             </button>
             <button
-              onClick={() => setActiveTab("account")}
+              onClick={() => selectTab("account")}
               className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                 activeTab === "account"
                   ? "bg-blue-600 text-white shadow-sm"
@@ -584,6 +624,7 @@ export function AdminDashboardClient({
 
           <Link
             href="/dashboard/settings/branding"
+            onClick={() => setMobileMenuOpen(false)}
             className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium text-slate-400 transition-all hover:bg-white/10 hover:text-white"
           >
             <Palette size={16} />
@@ -597,14 +638,22 @@ export function AdminDashboardClient({
       </aside>
 
       {/* ─────────────────── MAIN VIEWPORT ─────────────────── */}
-      <div className="flex flex-1 flex-col pl-64">
+      <div className="flex flex-1 flex-col lg:pl-64 min-w-0 w-full overflow-x-hidden">
         {/* Top Navbar */}
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#0c1220]/95 px-8 backdrop-blur-sm transition-colors">
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#0c1220]/95 px-4 sm:px-8 backdrop-blur-sm transition-colors">
           <div className="flex items-center gap-3">
-            <span className="rounded-md bg-blue-100 dark:bg-blue-950/60 px-2.5 py-1 text-xs font-bold text-blue-700 dark:text-blue-300">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden p-2 text-slate-600 dark:text-slate-300 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              aria-label="Open sidebar navigation"
+            >
+              <Menu size={20} />
+            </button>
+            <span className="hidden sm:inline-block rounded-md bg-blue-100 dark:bg-blue-950/60 px-2.5 py-1 text-xs font-bold text-blue-700 dark:text-blue-300">
               Admin Portal
             </span>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+            <h1 className="text-base sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white truncate">
               {activeTab === "dashboard" &&
                 "Platform Operations & Intelligence"}
               {activeTab === "users" && "User Directory & Access Control"}
@@ -641,7 +690,7 @@ export function AdminDashboardClient({
 
         {/* Action feedback alert */}
         {actionMsg && (
-          <div className="mx-8 mt-6">
+          <div className="mx-4 sm:mx-8 mt-6">
             <div
               className={`flex items-center justify-between rounded-xl p-4 text-xs ${
                 actionMsg.error
@@ -662,7 +711,7 @@ export function AdminDashboardClient({
         )}
 
         {/* Content Body */}
-        <main className="flex-1 p-8 space-y-8">
+        <main className="flex-1 p-4 sm:p-8 space-y-8">
           {/* ══════════════════ TAB 1: EXECUTIVE OVERVIEW ══════════════════ */}
           {activeTab === "dashboard" && (
             <div className="space-y-8">
@@ -727,7 +776,7 @@ export function AdminDashboardClient({
                       Platform Volume
                     </div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">
-                      $ {stats.totalVolume.toLocaleString()}
+                      {stats.totalVolume.toLocaleString()} ETB
                     </div>
                   </div>
                 </div>
@@ -874,7 +923,7 @@ export function AdminDashboardClient({
                       </div>
                       <div className="text-right">
                         <span className="font-bold text-slate-900 text-sm block">
-                          $ {Number(b.amount).toLocaleString()}
+                          {Number(b.amount).toLocaleString()} ETB
                         </span>
                         <span className="text-slate-400 text-[10px]">
                           {new Date(b.createdAt).toLocaleTimeString()}
@@ -1173,7 +1222,7 @@ export function AdminDashboardClient({
                         </td>
                         <td className="py-3 text-slate-600">{a.seller.name}</td>
                         <td className="py-3 font-bold text-slate-900">
-                          $ {Number(a.startingPrice).toLocaleString()}
+                          {Number(a.startingPrice).toLocaleString()} ETB
                         </td>
                         <td className="py-3">
                           <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
@@ -1260,7 +1309,7 @@ export function AdminDashboardClient({
                           {b.bidder?.name}
                         </td>
                         <td className="py-3 font-bold text-blue-600">
-                          $ {Number(b.amount).toLocaleString()}
+                          {Number(b.amount).toLocaleString()} ETB
                         </td>
                         <td className="py-3">
                           <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-700">
@@ -1404,59 +1453,94 @@ export function AdminDashboardClient({
                 </p>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-slate-400">
-                      <th className="pb-3 font-semibold">Reference</th>
-                      <th className="pb-3 font-semibold">Payer</th>
-                      <th className="pb-3 font-semibold">Amount</th>
-                      <th className="pb-3 font-semibold">Status</th>
-                      <th className="pb-3 font-semibold text-right">
-                        Verification
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {payments.map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-50">
-                        <td className="py-3 font-mono font-semibold text-slate-900">
-                          {p.transactionRef ?? "—"}
-                        </td>
-                        <td className="py-3 text-slate-600">{p.payer?.name}</td>
-                        <td className="py-3 font-bold text-slate-900">
-                          $ {Number(p.amount).toLocaleString()}
-                        </td>
-                        <td className="py-3">
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                              p.status === "PAID"
-                                ? "bg-emerald-50 text-emerald-700"
-                                : "bg-amber-50 text-amber-700"
-                            }`}
-                          >
-                            {p.status}
-                          </span>
-                        </td>
-                        <td className="py-3 text-right">
-                          {p.status !== "PAID" ? (
-                            <button
-                              onClick={() => setVerifyingPayment(p)}
-                              className="rounded-lg bg-blue-600 px-3 py-1 font-semibold text-white hover:bg-blue-700"
-                            >
-                              Verify Deposit
-                            </button>
-                          ) : (
-                            <span className="text-emerald-600 font-semibold">
-                              Verified
-                            </span>
-                          )}
-                        </td>
+              {payments.length === 0 ? (
+                <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
+                  No escrow deposit payments recorded yet.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-400">
+                        <th className="pb-3 font-semibold">Reference</th>
+                        <th className="pb-3 font-semibold">Property / Auction</th>
+                        <th className="pb-3 font-semibold">Payer</th>
+                        <th className="pb-3 font-semibold">Amount</th>
+                        <th className="pb-3 font-semibold">Proof / Slip</th>
+                        <th className="pb-3 font-semibold">Status</th>
+                        <th className="pb-3 font-semibold text-right">
+                          Verification
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {payments.map((p) => (
+                        <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-3 font-mono font-semibold text-slate-900">
+                            <div>{p.transactionRef ?? "—"}</div>
+                            {p.createdAt && (
+                              <div className="text-[10px] text-slate-400 font-normal">
+                                {new Date(p.createdAt).toLocaleDateString()}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 text-slate-700 max-w-xs truncate font-medium">
+                            {p.auctionResult?.auction.listing.title || "Auction Settlement"}
+                          </td>
+                          <td className="py-3 text-slate-600">
+                            <div className="font-medium text-slate-900">{p.payer?.name ?? "—"}</div>
+                            <div className="text-[10px] text-slate-400">{p.payer?.email}</div>
+                          </td>
+                          <td className="py-3 font-bold text-slate-900">
+                            {Number(p.amount).toLocaleString()} {p.currency || "ETB"}
+                          </td>
+                          <td className="py-3">
+                            {p.receiptUrl ? (
+                              <a
+                                href={p.receiptUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-700 underline"
+                              >
+                                View slip <ExternalLink size={12} />
+                              </a>
+                            ) : (
+                              <span className="text-slate-400 italic">None</span>
+                            )}
+                          </td>
+                          <td className="py-3">
+                            <span
+                              className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                                p.status === "PAID"
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : p.status === "FAILED"
+                                  ? "bg-rose-50 text-rose-700"
+                                  : "bg-amber-50 text-amber-700"
+                              }`}
+                            >
+                              {p.status}
+                            </span>
+                          </td>
+                          <td className="py-3 text-right">
+                            {p.status !== "PAID" ? (
+                              <button
+                                onClick={() => setVerifyingPayment(p)}
+                                className="rounded-lg bg-blue-600 px-3 py-1 font-semibold text-white hover:bg-blue-700 shadow-sm"
+                              >
+                                Verify Deposit
+                              </button>
+                            ) : (
+                              <span className="text-emerald-600 font-semibold inline-flex items-center gap-1">
+                                ✓ Verified
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
@@ -1573,7 +1657,7 @@ export function AdminDashboardClient({
                     Platform Gross GMV
                   </span>
                   <span className="text-2xl font-bold text-emerald-600 mt-1 block">
-                    $ {stats.totalVolume.toLocaleString()}
+                    {stats.totalVolume.toLocaleString()} ETB
                   </span>
                 </div>
                 <div className="rounded-xl bg-slate-50 p-4">
@@ -1581,7 +1665,7 @@ export function AdminDashboardClient({
                     Estimated Commission (2.5%)
                   </span>
                   <span className="text-2xl font-bold text-blue-600 mt-1 block">
-                    $ {(stats.totalVolume * 0.025).toLocaleString()}
+                    {(stats.totalVolume * 0.025).toLocaleString()} ETB
                   </span>
                 </div>
               </div>
@@ -1669,14 +1753,14 @@ export function AdminDashboardClient({
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
                       Currency Code
                     </label>
                     <input
                       name="currency"
-                      defaultValue="USD"
+                      defaultValue="ETB"
                       className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
                     />
                   </div>
@@ -1693,7 +1777,7 @@ export function AdminDashboardClient({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
                       Earnest Money Deposit (%)
@@ -2338,7 +2422,7 @@ export function AdminDashboardClient({
                     </h4>
                     {reviewingListing.images &&
                     reviewingListing.images.length > 0 ? (
-                      <div className="grid grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         {reviewingListing.images.map((img, idx) => (
                           <a
                             key={idx}
@@ -2481,22 +2565,46 @@ export function AdminDashboardClient({
             </div>
 
             <div className="space-y-2 text-xs">
+              {verifyingPayment.auctionResult?.auction.listing.title && (
+                <div>
+                  <span className="text-slate-400 block">Property / Auction</span>
+                  <strong className="text-slate-900">
+                    {verifyingPayment.auctionResult.auction.listing.title}
+                  </strong>
+                </div>
+              )}
               <div>
                 <span className="text-slate-400 block">Payer</span>
-                <strong>{verifyingPayment.payer?.name}</strong>
+                <strong className="text-slate-900">{verifyingPayment.payer?.name ?? "—"}</strong>
+                {verifyingPayment.payer?.email && (
+                  <span className="text-slate-500 block text-[11px]">{verifyingPayment.payer.email}</span>
+                )}
               </div>
               <div>
                 <span className="text-slate-400 block">Reference No.</span>
-                <span className="font-mono text-sm font-bold">
-                  {verifyingPayment.transactionRef}
+                <span className="font-mono text-sm font-bold text-slate-800">
+                  {verifyingPayment.transactionRef || "—"}
                 </span>
               </div>
               <div>
                 <span className="text-slate-400 block">Deposit Amount</span>
-                <span className="text-sm font-bold text-emerald-600">
-                  $ {Number(verifyingPayment.amount).toLocaleString()}
+                <span className="text-base font-bold text-emerald-600">
+                  {Number(verifyingPayment.amount).toLocaleString()} {verifyingPayment.currency || "ETB"}
                 </span>
               </div>
+              {verifyingPayment.receiptUrl && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3">
+                  <span className="text-blue-900 font-semibold block mb-1">Bank Wire Slip / Receipt</span>
+                  <a
+                    href={verifyingPayment.receiptUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 font-bold text-blue-600 hover:text-blue-700 underline text-xs"
+                  >
+                    Open payment slip in new tab <ExternalLink size={13} />
+                  </a>
+                </div>
+              )}
             </div>
 
             <div>
@@ -2506,13 +2614,14 @@ export function AdminDashboardClient({
               <input
                 value={paymentNote}
                 onChange={(e) => setPaymentNote(e.target.value)}
-                placeholder="Confirmed into bank escrow..."
+                placeholder="Confirmed into bank escrow (e.g. CBE, Telebirr, Awash)..."
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none focus:border-blue-600"
               />
             </div>
 
             <div className="flex items-center gap-3 pt-2 text-xs">
               <button
+                disabled={isPending}
                 onClick={() => {
                   const formData = new FormData();
                   formData.append("paymentId", verifyingPayment.id);
@@ -2521,14 +2630,16 @@ export function AdminDashboardClient({
                   startTransition(async () => {
                     const res = await verifyPaymentAction(formData);
                     setActionMsg(res);
+                    if (res.success) router.refresh();
                     setVerifyingPayment(null);
                   });
                 }}
-                className="flex-1 rounded-xl border border-rose-200 py-2.5 font-bold text-rose-600 hover:bg-rose-50"
+                className="flex-1 rounded-xl border border-rose-200 py-2.5 font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
               >
                 Mark Failed
               </button>
               <button
+                disabled={isPending}
                 onClick={() => {
                   const formData = new FormData();
                   formData.append("paymentId", verifyingPayment.id);
@@ -2537,10 +2648,11 @@ export function AdminDashboardClient({
                   startTransition(async () => {
                     const res = await verifyPaymentAction(formData);
                     setActionMsg(res);
+                    if (res.success) router.refresh();
                     setVerifyingPayment(null);
                   });
                 }}
-                className="flex-1 rounded-xl bg-blue-600 py-2.5 font-bold text-white hover:bg-blue-700"
+                className="flex-1 rounded-xl bg-blue-600 py-2.5 font-bold text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 Confirm Escrow (PAID)
               </button>
@@ -2647,7 +2759,7 @@ export function AdminDashboardClient({
             <dl className="mt-5 grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
                 <dt className="text-xs text-slate-500">Bid amount</dt>
-                <dd className="mt-1 text-lg font-bold text-slate-900 dark:text-white">$ {Number(selectedBid.amount).toLocaleString()}</dd>
+                <dd className="mt-1 text-lg font-bold text-slate-900 dark:text-white">{Number(selectedBid.amount).toLocaleString()} ETB</dd>
               </div>
               <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
                 <dt className="text-xs text-slate-500">Bid status</dt>

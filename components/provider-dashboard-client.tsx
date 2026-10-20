@@ -662,7 +662,7 @@ export function ProviderDashboardClient({
                   <div className="mt-4">
                     <div className="text-xs font-medium text-slate-500">Gross Sales Volume</div>
                     <div className="text-2xl font-bold text-slate-900 mt-1">
-                      $ {totalSales.toLocaleString()}
+                      {totalSales.toLocaleString()} ETB
                     </div>
                   </div>
                 </div>
@@ -711,7 +711,7 @@ export function ProviderDashboardClient({
                         <div>
                           <span className="text-slate-400 block">Current High Bid</span>
                           <span className="text-base font-bold text-slate-900">
-                            $ {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()}
+                            {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()} ETB
                           </span>
                         </div>
                         <div className="text-right">
@@ -744,8 +744,8 @@ export function ProviderDashboardClient({
                   {allBids.slice(0, 5).map((b, idx) => (
                     <div key={idx} className="flex items-center justify-between py-3">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-bold">
-                          $
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-bold text-[10px]">
+                          ETB
                         </div>
                         <div>
                           <span className="font-semibold text-slate-900 block">
@@ -758,7 +758,7 @@ export function ProviderDashboardClient({
                       </div>
                       <div className="text-right">
                         <span className="font-bold text-slate-900 text-sm block">
-                          $ {Number(b.amount).toLocaleString()}
+                          {Number(b.amount).toLocaleString()} ETB
                         </span>
                         <span className="text-slate-400 text-[10px]">
                           {new Date(b.createdAt).toLocaleTimeString()}
@@ -926,10 +926,10 @@ export function ProviderDashboardClient({
                           {auc.listing?.title}
                         </td>
                         <td className="py-3 font-medium text-slate-700">
-                          $ {Number(auc.startingPrice).toLocaleString()}
+                          {Number(auc.startingPrice).toLocaleString()} ETB
                         </td>
                         <td className="py-3 font-bold text-blue-600">
-                          $ {Number(auc.currentHighestBid || 0).toLocaleString()}
+                          {Number(auc.currentHighestBid || 0).toLocaleString()} ETB
                         </td>
                         <td className="py-3">
                           <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${TONE_CLASS[auctionStatusMeta(auc.status || "DRAFT").tone]}`}>  {auctionStatusMeta(auc.status || "DRAFT").label}</span>
@@ -1020,7 +1020,7 @@ export function ProviderDashboardClient({
                           <span className="block text-[11px] text-slate-500">{b.bidder?.email || b.bidderId}</span>
                         </td>
                         <td className="py-3 font-bold text-slate-900">
-                          $ {Number(b.amount).toLocaleString()}
+                          {Number(b.amount).toLocaleString()} ETB
                         </td>
                         <td className="py-3">
                           <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-700">
@@ -1091,13 +1091,13 @@ export function ProviderDashboardClient({
                         <div className="flex justify-between">
                           <span className="text-slate-500">Winning Amount:</span>
                           <span className="font-bold text-slate-900">
-                            $ {Number(auc.result?.winningAmount || auc.currentHighestBid).toLocaleString()}
+                            {Number(auc.result?.winningAmount || auc.currentHighestBid).toLocaleString()} ETB
                           </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-slate-500">Deposit Due:</span>
                           <span className="font-bold text-blue-600">
-                            $ {Number(auc.result?.depositDue || 0).toLocaleString()}
+                            {Number(auc.result?.depositDue || 0).toLocaleString()} ETB
                           </span>
                         </div>
                         <div className="flex justify-between">
@@ -1271,7 +1271,7 @@ export function ProviderDashboardClient({
                 <div className="rounded-xl bg-slate-50 p-4">
                   <span className="text-slate-400 block">Settled Gross Volume</span>
                   <span className="text-2xl font-bold text-emerald-600 mt-1 block">
-                    $ {totalSales.toLocaleString()}
+                    {totalSales.toLocaleString()} ETB
                   </span>
                 </div>
               </div>
@@ -1489,7 +1489,7 @@ export function ProviderDashboardClient({
               <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
                 <dt className="text-xs text-slate-500">Bid amount</dt>
                 <dd className="mt-1 text-lg font-bold text-slate-900 dark:text-white">
-                  $ {Number(selectedBid.amount).toLocaleString()}
+                  {Number(selectedBid.amount).toLocaleString()} ETB
                 </dd>
               </div>
               <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">

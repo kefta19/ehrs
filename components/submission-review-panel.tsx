@@ -34,7 +34,7 @@ export type PendingSubmission = {
 };
 
 const money = (v: number | string | null | undefined) =>
-  v == null ? "—" : Number(v).toLocaleString();
+  v == null ? "—" : `${Number(v).toLocaleString()} ETB`;
 const when = (iso: string) => new Date(iso).toLocaleString();
 
 export function SubmissionReviewPanel({
@@ -113,7 +113,7 @@ function SubmissionCard({ s }: { s: PendingSubmission }) {
           <h4 className="font-bold text-slate-900">
             Photos ({l.images.length})
           </h4>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {l.images.map((im) => (
               <a
                 key={im.id}

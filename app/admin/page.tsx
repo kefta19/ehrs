@@ -50,7 +50,13 @@ export default async function AdminPage({
         id: true,
         transactionRef: true,
         amount: true,
+        currency: true,
+        method: true,
         status: true,
+        receiptUrl: true,
+        notes: true,
+        paidAt: true,
+        createdAt: true,
         payer: {
           select: {
             id: true,
@@ -60,6 +66,21 @@ export default async function AdminPage({
             role: true,
             status: true,
             createdAt: true,
+          },
+        },
+        auctionResult: {
+          select: {
+            id: true,
+            auction: {
+              select: {
+                id: true,
+                listing: {
+                  select: {
+                    title: true,
+                  },
+                },
+              },
+            },
           },
         },
       },

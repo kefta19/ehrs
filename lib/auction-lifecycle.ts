@@ -46,7 +46,7 @@ async function sendSettlementReminders(now: Date) {
       },
       title: "Deposit due in 24 hours",
       body: (title: string, amount: string, deadline: Date) =>
-        `Your deposit of $${amount} for "${title}" is due within 24 hours, by ${deadline.toLocaleString()}.`,
+        `Your deposit of ${amount} ETB for "${title}" is due within 24 hours, by ${deadline.toLocaleString()}.`,
     },
     {
       field: "deadlineSentAt" as const,

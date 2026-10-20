@@ -157,7 +157,7 @@ export function EntryFeePaymentClient({
                     {auction.listing.category.name} • {auction.listing.city}
                   </p>
                   <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-                    Starting Price: ${Number(auction.startingPrice).toLocaleString()}
+                    Starting Price: {Number(auction.startingPrice).toLocaleString()} ETB
                   </p>
                 </div>
               </div>

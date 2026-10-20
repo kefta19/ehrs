@@ -641,7 +641,7 @@ function Preview({
               <div className="text-sm font-bold">Modern Family House</div>
               <div className="text-xs opacity-70">Current bid</div>
               <div className="text-lg font-bold" style={{ color: primary }}>
-                $320,000
+                320,000 ETB
               </div>
               <button
                 type="button"
