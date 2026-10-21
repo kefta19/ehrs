@@ -24,11 +24,17 @@ export default async function AdminPage({
   // Run auction status sync in background without blocking page render
   syncAuctionStatuses().catch((e) => console.error("Auction sync error:", e));
 
+  // Fetch critical stats first (for dashboard overview)
+  const [totalUsers, pendingKycCount, activeAuctionsCount, openTicketsCount] =
+    await Promise.all([
+      prisma.user.count(),
+      prisma.sellerProfile.count({ where: { status: "PENDING" } }),
+      prisma.auction.count({ where: { status: "ACTIVE" } }),
+      prisma.ticket.count({ where: { status: "OPEN" } }),
+    ]);
+
+  // Fetch non-critical data in parallel
   const [
-    totalUsers,
-    pendingKycCount,
-    activeAuctionsCount,
-    openTicketsCount,
     allPayments,
     usersList,
     pendingKyc,
@@ -42,10 +48,6 @@ export default async function AdminPage({
     auditLogs,
     notifications,
   ] = await Promise.all([
-    prisma.user.count(),
-    prisma.sellerProfile.count({ where: { status: "PENDING" } }),
-    prisma.auction.count({ where: { status: "ACTIVE" } }),
-    prisma.ticket.count({ where: { status: "OPEN" } }),
     prisma.payment.findMany({
       select: {
         id: true,

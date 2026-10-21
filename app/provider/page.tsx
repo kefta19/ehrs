@@ -25,82 +25,91 @@ export default async function ProviderPage({
   // Run auction status sync in background without blocking page render
   syncAuctionStatuses().catch((e) => console.error("Auction sync error:", e));
 
-  const [sellerProfile, listings, auctions, categories, notifications] =
-    await Promise.all([
-      prisma.sellerProfile.findUnique({
-        where: { userId: user.id },
-      }),
-      prisma.listing.findMany({
-        where: { sellerId: user.id },
-        include: {
-          category: true,
-          images: { orderBy: { displayOrder: "asc" }, take: 3 },
-          documents: { take: 5 },
-          _count: { select: { auctions: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 50,
-      }),
-      prisma.auction.findMany({
-        where: { sellerId: user.id },
-        include: {
-          listing: {
-            include: {
-              category: true,
-              images: { take: 3 },
-            },
-          },
-          bids: {
-            orderBy: { amount: "desc" },
-            take: 10,
-            include: {
-              bidder: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                  role: true,
-                  status: true,
-                },
-              },
-              payment: {
-                select: {
-                  id: true,
-                  amount: true,
-                  currency: true,
-                  method: true,
-                  status: true,
-                  transactionRef: true,
-                  createdAt: true,
-                  verifiedAt: true,
-                  rejectionReason: true,
-                  receiptUrl: true,
-                  bankReferenceUrl: true,
-                },
-              },
-            },
-          },
-          entryFees: { orderBy: { createdAt: "desc" }, take: 1 },
-          result: {
-            include: {
-              winningBidder: true,
-              payments: { take: 1 },
-            },
+  // Fetch critical data first (listings, categories, seller profile)
+  const [sellerProfile, listings, categories] = await Promise.all([
+    prisma.sellerProfile.findUnique({
+      where: { userId: user.id },
+    }),
+    prisma.listing.findMany({
+      where: { sellerId: user.id },
+      include: {
+        category: true,
+        images: { orderBy: { displayOrder: "asc" }, take: 3 },
+        documents: { take: 5 },
+        _count: { select: { auctions: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    }),
+    prisma.category.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: "asc" },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+      },
+    }),
+  ]);
+
+  // Fetch non-critical data in parallel (auctions, notifications)
+  const [auctions, notifications] = await Promise.all([
+    prisma.auction.findMany({
+      where: { sellerId: user.id },
+      include: {
+        listing: {
+          include: {
+            category: true,
+            images: { take: 3 },
           },
         },
-        orderBy: { createdAt: "desc" },
-        take: 50,
-      }),
-      prisma.category.findMany({
-        where: { isActive: true },
-        orderBy: { sortOrder: "asc" },
-      }),
-      prisma.notification.findMany({
-        where: { userId: user.id },
-        orderBy: { createdAt: "desc" },
-        take: 20,
-      }),
-    ]);
+        bids: {
+          orderBy: { amount: "desc" },
+          take: 10,
+          include: {
+            bidder: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
+                status: true,
+              },
+            },
+            payment: {
+              select: {
+                id: true,
+                amount: true,
+                currency: true,
+                method: true,
+                status: true,
+                transactionRef: true,
+                createdAt: true,
+                verifiedAt: true,
+                rejectionReason: true,
+                receiptUrl: true,
+                bankReferenceUrl: true,
+              },
+            },
+          },
+        },
+        entryFees: { orderBy: { createdAt: "desc" }, take: 1 },
+        result: {
+          include: {
+            winningBidder: true,
+            payments: { take: 1 },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    }),
+    prisma.notification.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    }),
+  ]);
   const googleOnlyAccount = await isGoogleOnlyAccount(user.id);
 
   return (

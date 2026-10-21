@@ -1,5 +1,4 @@
 import { AuthForm } from "@/components/auth-form";
-import { prisma } from "@/lib/prisma";
 import { syncAuctionStatuses } from "@/lib/auction-lifecycle";
 
 import styles from "./login.module.css";
@@ -13,36 +12,16 @@ export default async function LoginPage({
 }) {
   const { redirect, error } = await searchParams;
 
-  // Fetch background images in parallel with page render
-  const [liveAuctions] = await Promise.all([
-    prisma.auction.findMany({
-      where: {
-        status: "ACTIVE",
-        listing: { images: { some: {} } },
-      },
-      select: {
-        id: true,
-        listing: {
-          select: {
-            images: {
-              select: { url: true },
-              orderBy: { displayOrder: "asc" },
-              take: 1,
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 8,
-    }),
-    // Run auction status sync in background without blocking
-    syncAuctionStatuses().catch((e) => console.error("Auction sync error:", e)),
-  ]);
+  // Run auction status sync in background without blocking
+  syncAuctionStatuses().catch((e) => console.error("Auction sync error:", e));
 
-  const backgroundImages = liveAuctions.flatMap((auction) => {
-    const image = auction.listing.images[0];
-    return image ? [{ id: auction.id, url: image.url }] : [];
-  });
+  // Use static background image for fastest render - no database query needed
+  const backgroundImages = [
+    {
+      id: "default",
+      url: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1920&q=80",
+    },
+  ];
 
   return (
     <main className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-[#0A192F] px-5 py-12 text-foreground transition-colors">

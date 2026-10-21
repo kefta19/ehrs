@@ -38,18 +38,15 @@ export default async function HomePage() {
   // Run auction status sync in background without blocking page render
   syncAuctionStatuses().catch((e) => console.error("Auction sync error:", e));
 
-  const [
-    categories,
-    featuredAuctions,
-    totalUsersCount,
-    liveAuctionsCount,
-    liveBidsCount,
-    liveAuctionAggregate,
-  ] = await Promise.all([
+  // Fetch critical data first, then fetch stats in parallel
+  const [categories, featuredAuctions] = await Promise.all([
     prisma.category.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: "asc" },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        slug: true,
         _count: { select: { listings: true } },
       },
     }),
@@ -77,28 +74,33 @@ export default async function HomePage() {
       orderBy: { createdAt: "desc" },
       take: 8,
     }),
-    prisma.user.count(),
-    prisma.auction.count({
-      where: {
-        status: "ACTIVE",
-      },
-    }),
-    prisma.bid.count({
-      where: {
-        auction: {
+  ]);
+
+  // Fetch stats in background (they're less critical for initial render)
+  const [totalUsersCount, liveAuctionsCount, liveBidsCount, liveAuctionAggregate] =
+    await Promise.all([
+      prisma.user.count(),
+      prisma.auction.count({
+        where: {
           status: "ACTIVE",
         },
-      },
-    }),
-    prisma.auction.aggregate({
-      where: {
-        status: "ACTIVE",
-      },
-      _sum: {
-        currentHighestBid: true,
-      },
-    }),
-  ]);
+      }),
+      prisma.bid.count({
+        where: {
+          auction: {
+            status: "ACTIVE",
+          },
+        },
+      }),
+      prisma.auction.aggregate({
+        where: {
+          status: "ACTIVE",
+        },
+        _sum: {
+          currentHighestBid: true,
+        },
+      }),
+    ]);
 
   const totalLiveBidAmount = Number(
     liveAuctionAggregate._sum.currentHighestBid || 0,

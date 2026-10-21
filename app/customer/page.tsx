@@ -24,17 +24,8 @@ export default async function CustomerPage({
   syncAuctionStatuses().catch((e) => console.error("Auction sync error:", e));
 
   // cspell:disable
-  const [
-    auctions,
-    myBids,
-    wonAuctions,
-    watchlist,
-    payments,
-    tickets,
-    notifications,
-    categories,
-    userProfile,
-  ] = await Promise.all([
+  // Fetch critical data first (auctions, categories, user profile)
+  const [auctions, categories, userProfile] = await Promise.all([
     prisma.auction.findMany({
       where: {
         status: { in: ["ACTIVE", "SCHEDULED"] },
@@ -65,108 +56,130 @@ export default async function CustomerPage({
       orderBy: { createdAt: "desc" },
       take: 50,
     }),
-    prisma.bid.findMany({
-      where: { bidderId: user.id },
-      include: {
-        auction: {
-          include: {
-            listing: {
-              select: {
-                id: true,
-                title: true,
-                city: true,
-                images: { take: 1 },
-                category: {
-                  select: { id: true, name: true, slug: true, icon: true },
-                },
-              },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    }),
-    prisma.auctionResult.findMany({
-      where: { winningBidderId: user.id },
-      include: {
-        auction: {
-          include: {
-            listing: {
-              select: {
-                id: true,
-                title: true,
-                city: true,
-                images: { take: 1 },
-                category: {
-                  select: { id: true, name: true, slug: true, icon: true },
-                },
-              },
-            },
-          },
-        },
-        payments: { take: 1 },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    }),
-    prisma.watchlistItem.findMany({
-      where: { userId: user.id },
-      include: {
-        auction: {
-          include: {
-            listing: {
-              select: {
-                id: true,
-                title: true,
-                city: true,
-                images: { take: 1 },
-                category: {
-                  select: { id: true, name: true, slug: true, icon: true },
-                },
-              },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    }),
-    prisma.payment.findMany({
-      where: { payerId: user.id },
-      include: {
-        auctionResult: {
-          include: {
-            auction: {
-              include: {
-                listing: { select: { id: true, title: true } },
-              },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    }),
-    prisma.ticket.findMany({
-      where: { createdById: user.id },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    }),
-    prisma.notification.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
-      take: 25,
-    }),
     prisma.category.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: "asc" },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+      },
     }),
     prisma.user.findUnique({
       where: { id: user.id },
-      include: { buyerProfile: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        avatarUrl: true,
+        buyerProfile: {
+          select: {
+            address: true,
+            preferredLocation: true,
+          },
+        },
+      },
     }),
   ]);
+
+  // Fetch non-critical data in parallel (bids, payments, etc.)
+  const [myBids, wonAuctions, watchlist, payments, tickets, notifications] =
+    await Promise.all([
+      prisma.bid.findMany({
+        where: { bidderId: user.id },
+        include: {
+          auction: {
+            include: {
+              listing: {
+                select: {
+                  id: true,
+                  title: true,
+                  city: true,
+                  images: { take: 1 },
+                  category: {
+                    select: { id: true, name: true, slug: true, icon: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      }),
+      prisma.auctionResult.findMany({
+        where: { winningBidderId: user.id },
+        include: {
+          auction: {
+            include: {
+              listing: {
+                select: {
+                  id: true,
+                  title: true,
+                  city: true,
+                  images: { take: 1 },
+                  category: {
+                    select: { id: true, name: true, slug: true, icon: true },
+                  },
+                },
+              },
+            },
+          },
+          payments: { take: 1 },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+      prisma.watchlistItem.findMany({
+        where: { userId: user.id },
+        include: {
+          auction: {
+            include: {
+              listing: {
+                select: {
+                  id: true,
+                  title: true,
+                  city: true,
+                  images: { take: 1 },
+                  category: {
+                    select: { id: true, name: true, slug: true, icon: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      }),
+      prisma.payment.findMany({
+        where: { payerId: user.id },
+        include: {
+          auctionResult: {
+            include: {
+              auction: {
+                include: {
+                  listing: { select: { id: true, title: true } },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+      prisma.ticket.findMany({
+        where: { createdById: user.id },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+      prisma.notification.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: "desc" },
+        take: 25,
+      }),
+    ]);
   const googleOnlyAccount = await isGoogleOnlyAccount(user.id);
   // cspell:enable
 
