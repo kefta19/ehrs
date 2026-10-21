@@ -1,8 +1,115 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+
+export async function updateListingAction(
+  listingId: string,
+  data: {
+    title?: string;
+    description?: string;
+    city?: string;
+    region?: string;
+    address?: string;
+    features?: string[];
+    condition?: string;
+  }
+) {
+  const user = await getCurrentUser();
+  if (!user || (user.role !== "ADMIN" && user.role !== "SELLER")) {
+    return { success: false, error: "You are not authorized to edit listings." };
+  }
+
+  if (!listingId.trim()) {
+    return { success: false, error: "The listing could not be identified." };
+  }
+
+  const listing = await prisma.listing.findUnique({
+    where: { id: listingId },
+    select: {
+      id: true,
+      sellerId: true,
+      title: true,
+      status: true,
+    },
+  });
+
+  if (!listing) {
+    return { success: false, error: "This listing no longer exists." };
+  }
+
+  if (user.role === "SELLER" && listing.sellerId !== user.id) {
+    return {
+      success: false,
+      error: "You can only edit your own listings.",
+    };
+  }
+
+  // Only allow editing of DRAFT, REJECTED, or PENDING_REVIEW listings
+  if (
+    listing.status !== "DRAFT" &&
+    listing.status !== "REJECTED" &&
+    listing.status !== "PENDING_REVIEW"
+  ) {
+    return {
+      success: false,
+      error: "Only draft, rejected, or pending review listings can be edited.",
+    };
+  }
+
+  try {
+    await prisma.$transaction(async (transaction) => {
+      const updated = await transaction.listing.update({
+        where: { id: listing.id },
+        data: {
+          ...(data.title && { title: data.title }),
+          ...(data.description && { description: data.description }),
+          ...(data.city && { city: data.city }),
+          ...(data.region && { region: data.region }),
+          ...(data.address && { address: data.address }),
+          ...(data.features && { features: data.features }),
+          ...(data.condition && { condition: data.condition as any }),
+          // Reset to DRAFT if REJECTED or PENDING_REVIEW
+          ...(listing.status === "REJECTED" || listing.status === "PENDING_REVIEW"
+            ? { status: "DRAFT", reviewedAt: null, reviewedById: null, rejectionReason: null }
+            : {}),
+        },
+      });
+
+      await transaction.auditLog.create({
+        data: {
+          actorId: user.id,
+          action: "LISTING_UPDATED",
+          module: "LISTINGS",
+          entityType: "Listing",
+          entityId: listing.id,
+          previousValue: {
+            title: listing.title,
+            status: listing.status,
+          },
+          newValue: {
+            title: updated.title,
+            status: updated.status,
+          },
+        },
+      });
+    });
+  } catch (error) {
+    console.error("[listing] Failed to update listing:", error);
+    return {
+      success: false,
+      error: "The listing could not be updated. Refresh and try again.",
+    };
+  }
+
+  // Only revalidate the current dashboard path
+  // This prevents unnecessary full-page refreshes across the entire app
+  revalidatePath("/admin");
+  revalidatePath("/provider");
+
+  return { success: true, message: "Listing updated successfully." };
+}
 
 export async function deleteListingAction(listingId: string) {
   const user = await getCurrentUser();
@@ -77,9 +184,10 @@ export async function deleteListingAction(listingId: string) {
     };
   }
 
-  revalidatePath("/seller");
-  revalidatePath("/provider");
+  // Only revalidate the current dashboard path
+  // This prevents unnecessary full-page refreshes across the entire app
   revalidatePath("/admin");
-  revalidatePath("/");
+  revalidatePath("/provider");
+
   return { success: true, message: "Listing deleted." };
 }

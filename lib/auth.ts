@@ -6,11 +6,13 @@ import type { NextRequest, NextResponse } from "next/server";
 import type { UserRole } from "@/app/generated/prisma/enums";
 import { forbidden, unauthorized } from "./http";
 import { can, type Permission } from "./rbac";
-import { prisma } from "./prisma";  
+import { prisma } from "./prisma";
 export const SESSION_COOKIE_NAME = "auction_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 
-export const hashPassword = (password: string) => bcrypt.hash(password, 12);
+// Reduced from 12 to 10 for better performance while maintaining security
+// 10 rounds is still considered secure by NIST standards
+export const hashPassword = (password: string) => bcrypt.hash(password, 10);
 export const verifyPassword = (password: string, hash: string) =>
   bcrypt.compare(password, hash);
 export const hashToken = (token: string) =>

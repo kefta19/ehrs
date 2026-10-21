@@ -73,14 +73,14 @@ export function AuthForm({
       mode === "login"
         ? { email: form.email, password: form.password }
         : {
-            name: form.name,
-            email: form.email,
-            password: form.password,
-            phone: form.phone,
-            role: form.role,
-            businessName:
-              form.role === "SELLER" ? form.businessName : undefined,
-          };
+          name: form.name,
+          email: form.email,
+          password: form.password,
+          phone: form.phone,
+          role: form.role,
+          businessName:
+            form.role === "SELLER" ? form.businessName : undefined,
+        };
 
     try {
       const res = await fetch(`/api/auth/${mode}`, {
@@ -99,6 +99,7 @@ export function AuthForm({
         setLoading(false);
         return;
       }
+      // Immediate redirect for faster perceived performance
       window.location.href = data.redirectTo ?? redirectUrl ?? "/dashboard";
     } catch {
       setError("Network error. Please try again.");

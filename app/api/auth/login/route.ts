@@ -63,11 +63,6 @@ export async function POST(request: NextRequest) {
       userAgent,
     });
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date(), failedLoginCount: 0 },
-    }).catch(() => undefined);
-
     const response = NextResponse.json({
       success: true,
       redirectTo: roleHome(user.role),
@@ -82,16 +77,23 @@ export async function POST(request: NextRequest) {
 
     setSessionCookie(response, token, expiresAt);
 
-    await logAudit({
-      actorId: user.id,
-      action: "USER_LOGIN",
-      module: "AUTH",
-      entityType: "User",
-      entityId: user.id,
-      newValue: { role: user.role },
-      ipAddress,
-      userAgent,
-    }).catch(() => undefined);
+    // Run user update and audit logging in background without blocking response
+    Promise.all([
+      prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date(), failedLoginCount: 0 },
+      }).catch(() => undefined),
+      logAudit({
+        actorId: user.id,
+        action: "USER_LOGIN",
+        module: "AUTH",
+        entityType: "User",
+        entityId: user.id,
+        newValue: { role: user.role },
+        ipAddress,
+        userAgent,
+      }).catch(() => undefined),
+    ]).catch((e) => console.error("Background login tasks error:", e));
 
     return response;
   } catch (error) {

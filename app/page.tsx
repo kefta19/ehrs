@@ -33,9 +33,10 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  await syncAuctionStatuses();
-
   const user = await getCurrentUser();
+
+  // Run auction status sync in background without blocking page render
+  syncAuctionStatuses().catch((e) => console.error("Auction sync error:", e));
 
   const [
     categories,
@@ -69,7 +70,7 @@ export default async function HomePage() {
             city: true,
             region: true,
             features: true,
-            images: { orderBy: { displayOrder: "asc" } },
+            images: { orderBy: { displayOrder: "asc" }, take: 3 },
           },
         },
       },
@@ -450,8 +451,8 @@ export default async function HomePage() {
                           auc.listing.images.length > 0
                             ? auc.listing.images.map((image) => image.url)
                             : [
-                                "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=600&q=80",
-                              ]
+                              "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=600&q=80",
+                            ]
                         }
                         title={auc.listing.title}
                         startDelayMs={index * 350}

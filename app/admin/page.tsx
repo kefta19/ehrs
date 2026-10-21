@@ -16,12 +16,13 @@ export default async function AdminPage({
 }: {
   searchParams?: Promise<{ tab?: string }>;
 }) {
-  await syncAuctionStatuses();
-
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role !== "ADMIN") redirect(roleHome(user.role));
   const { tab: initialTab } = searchParams ? await searchParams : {};
+
+  // Run auction status sync in background without blocking page render
+  syncAuctionStatuses().catch((e) => console.error("Auction sync error:", e));
 
   const [
     totalUsers,
@@ -85,6 +86,7 @@ export default async function AdminPage({
         },
       },
       orderBy: { createdAt: "desc" },
+      take: 50,
     }),
     prisma.user.findMany({
       orderBy: { createdAt: "desc" },
@@ -104,6 +106,7 @@ export default async function AdminPage({
       where: { status: { in: ["PENDING", "UNDER_REVIEW"] } },
       include: { user: true },
       orderBy: { createdAt: "desc" },
+      take: 50,
     }),
     prisma.listing.findMany({
       include: {
@@ -113,35 +116,38 @@ export default async function AdminPage({
           },
         },
         category: true,
-        images: { orderBy: { displayOrder: "asc" } },
-        documents: true,
+        images: { orderBy: { displayOrder: "asc" }, take: 3 },
+        documents: { take: 5 },
         biometricVerification: true,
-        entryFees: { orderBy: { createdAt: "desc" } },
+        entryFees: { orderBy: { createdAt: "desc" }, take: 3 },
         auctions: {
           include: {
-            entryFees: { orderBy: { createdAt: "desc" } },
+            entryFees: { orderBy: { createdAt: "desc" }, take: 3 },
             bids: { orderBy: { amount: "desc" }, take: 5 },
           },
           orderBy: { createdAt: "desc" },
+          take: 3,
         },
       },
       orderBy: { createdAt: "desc" },
+      take: 50,
     }),
     prisma.auction.findMany({
       include: {
         listing: {
           include: {
             category: true,
-            images: true,
-            documents: true,
+            images: { take: 3 },
+            documents: { take: 3 },
             seller: { include: { sellerProfile: true } },
           },
         },
         seller: { include: { sellerProfile: true } },
-        entryFees: { orderBy: { createdAt: "desc" } },
+        entryFees: { orderBy: { createdAt: "desc" }, take: 3 },
         bids: { take: 10, orderBy: { createdAt: "desc" } },
       },
       orderBy: { createdAt: "desc" },
+      take: 50,
     }),
     prisma.bid.findMany({
       include: {

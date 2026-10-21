@@ -38,6 +38,8 @@ import {
   Video,
   Bell,
   Trash2,
+  Home,
+  Edit,
 } from "lucide-react";
 import { ETHomeLogo } from "./ethome-brand";
 import { LogoutButton } from "./logout-button";
@@ -55,7 +57,7 @@ import {
 import { adminConfirmBuyerRegistrationAction } from "@/app/actions/bid-registration";
 import { deleteNotificationAction } from "@/app/actions/buyer";
 import { AccountManagement } from "@/components/account-management";
-import { deleteListingAction } from "@/app/actions/listing";
+import { deleteListingAction, updateListingAction } from "@/app/actions/listing";
 
 export type AdminUser = {
   id: string;
@@ -356,6 +358,25 @@ export function AdminDashboardClient({
   );
   const [rejectionReason, setRejectionReason] = useState("");
 
+  // Edit Listing Modal
+  const [showEditListingModal, setShowEditListingModal] = useState(false);
+  const [selectedListingForEdit, setSelectedListingForEdit] = useState<AdminListing | null>(null);
+  const [editListingForm, setEditListingForm] = useState({
+    title: "",
+    description: "",
+    city: "",
+    region: "",
+    address: "",
+    features: [] as string[],
+  });
+  const [editListingMessage, setEditListingMessage] = useState<{
+    error?: string;
+    message?: string;
+  } | null>(null);
+
+  // Local state for listings to avoid full page refresh
+  const [localListings, setLocalListings] = useState<AdminListing[]>(pendingListings);
+
   // Payment Verification Modal
   const [verifyingPayment, setVerifyingPayment] = useState<AdminPayment | null>(
     null,
@@ -405,9 +426,8 @@ export function AdminDashboardClient({
 
       {/* ─────────────────── LEFT SIDEBAR ─────────────────── */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-[#132238] bg-[#0A192F] text-slate-300 transition-transform duration-300 ease-in-out lg:translate-x-0 ${
-          mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-[#132238] bg-[#0A192F] text-slate-300 transition-transform duration-300 ease-in-out lg:translate-x-0 ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         <div className="flex h-16 items-center justify-between px-6 border-b border-[#132644]">
           <ETHomeLogo dark size="md" href="/admin" />
@@ -422,13 +442,21 @@ export function AdminDashboardClient({
 
         <div className="flex flex-1 flex-col justify-between overflow-y-auto px-4 py-4">
           <nav className="space-y-0.5 text-xs">
+            <Link
+              href="/"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium text-slate-400 transition-all hover:bg-[#12233f] hover:text-white"
+            >
+              <Home size={16} />
+              <span>Home Page</span>
+            </Link>
+
             <button
               onClick={() => selectTab("dashboard")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "dashboard"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "dashboard"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <LayoutDashboard size={16} />
               <span>Executive Overview</span>
@@ -436,11 +464,10 @@ export function AdminDashboardClient({
 
             <button
               onClick={() => selectTab("users")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "users"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "users"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <div className="flex items-center gap-3">
                 <Users size={16} />
@@ -453,11 +480,10 @@ export function AdminDashboardClient({
 
             <button
               onClick={() => selectTab("kyc")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "kyc"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "kyc"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <div className="flex items-center gap-3">
                 <ShieldCheck size={16} />
@@ -472,11 +498,10 @@ export function AdminDashboardClient({
 
             <button
               onClick={() => selectTab("listings")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "listings"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "listings"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <div className="flex items-center gap-3">
                 <PackageCheck size={16} />
@@ -491,11 +516,10 @@ export function AdminDashboardClient({
 
             <button
               onClick={() => selectTab("auctions")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "auctions"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "auctions"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <Gavel size={16} />
               <span>Approve Auctions</span>
@@ -503,11 +527,10 @@ export function AdminDashboardClient({
 
             <button
               onClick={() => selectTab("bids")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "bids"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "bids"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <TrendingUp size={16} />
               <span>Monitor Live Bids</span>
@@ -515,11 +538,10 @@ export function AdminDashboardClient({
 
             <button
               onClick={() => selectTab("payments")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "payments"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "payments"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <div className="flex items-center gap-3">
                 <CreditCard size={16} />
@@ -534,11 +556,10 @@ export function AdminDashboardClient({
 
             <button
               onClick={() => selectTab("tickets")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "tickets"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "tickets"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <div className="flex items-center gap-3">
                 <MessageSquareWarning size={16} />
@@ -553,11 +574,10 @@ export function AdminDashboardClient({
 
             <button
               onClick={() => selectTab("reports")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "reports"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "reports"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <BarChart3 size={16} />
               <span>Reports & GMV</span>
@@ -565,11 +585,10 @@ export function AdminDashboardClient({
 
             <button
               onClick={() => selectTab("categories")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "categories"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "categories"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <Tags size={16} />
               <span>Categories</span>
@@ -577,11 +596,10 @@ export function AdminDashboardClient({
 
             <button
               onClick={() => selectTab("settings")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "settings"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "settings"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <Settings size={16} />
               <span>System Settings</span>
@@ -589,33 +607,30 @@ export function AdminDashboardClient({
 
             <button
               onClick={() => selectTab("audit")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "audit"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "audit"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <History size={16} />
               <span>Audit Logs</span>
             </button>
             <button
               onClick={() => selectTab("notifications")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "notifications"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "notifications"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <Bell size={16} />
               <span>Notifications</span>
             </button>
             <button
               onClick={() => selectTab("account")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "account"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "account"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <User size={16} />
               <span>Manage Account</span>
@@ -692,11 +707,10 @@ export function AdminDashboardClient({
         {actionMsg && (
           <div className="mx-4 sm:mx-8 mt-6">
             <div
-              className={`flex items-center justify-between rounded-xl p-4 text-xs ${
-                actionMsg.error
-                  ? "bg-rose-50 text-rose-700 border border-rose-200"
-                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-              }`}
+              className={`flex items-center justify-between rounded-xl p-4 text-xs ${actionMsg.error
+                ? "bg-rose-50 text-rose-700 border border-rose-200"
+                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                }`}
             >
               <span>
                 {actionMsg.error ||
@@ -996,11 +1010,10 @@ export function AdminDashboardClient({
                         </td>
                         <td className="py-3">
                           <span
-                            className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                              u.status === "ACTIVE"
-                                ? "bg-emerald-50 text-emerald-700"
-                                : "bg-rose-50 text-rose-700"
-                            }`}
+                            className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${u.status === "ACTIVE"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-rose-50 text-rose-700"
+                              }`}
                           >
                             {u.status}
                           </span>
@@ -1113,7 +1126,7 @@ export function AdminDashboardClient({
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {pendingListings.map((l) => (
+                {localListings.map((l) => (
                   <div
                     key={l.id}
                     className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm flex flex-col justify-between"
@@ -1151,6 +1164,23 @@ export function AdminDashboardClient({
                         {l.status}
                       </span>
                       <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setSelectedListingForEdit(l);
+                            setEditListingForm({
+                              title: l.title,
+                              description: (l.description as string) || "",
+                              city: (l.city as string) || "",
+                              region: (l.region as string) || "",
+                              address: (l.address as string) || "",
+                              features: (l.features as string[]) || [],
+                            });
+                            setShowEditListingModal(true);
+                          }}
+                          className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          <Edit size={14} />
+                        </button>
                         {(l.auctions?.length ?? 0) === 0 &&
                           (l.entryFees?.length ?? 0) === 0 && (
                             <button
@@ -1510,13 +1540,12 @@ export function AdminDashboardClient({
                           </td>
                           <td className="py-3">
                             <span
-                              className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                                p.status === "PAID"
-                                  ? "bg-emerald-50 text-emerald-700"
-                                  : p.status === "FAILED"
+                              className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${p.status === "PAID"
+                                ? "bg-emerald-50 text-emerald-700"
+                                : p.status === "FAILED"
                                   ? "bg-rose-50 text-rose-700"
                                   : "bg-amber-50 text-amber-700"
-                              }`}
+                                }`}
                             >
                               {p.status}
                             </span>
@@ -1576,11 +1605,10 @@ export function AdminDashboardClient({
                         </h4>
                       </div>
                       <span
-                        className={`rounded-full px-2.5 py-0.5 font-bold ${
-                          t.status === "RESOLVED"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-amber-50 text-amber-700"
-                        }`}
+                        className={`rounded-full px-2.5 py-0.5 font-bold ${t.status === "RESOLVED"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-amber-50 text-amber-700"
+                          }`}
                       >
                         {t.status}
                       </span>
@@ -1839,11 +1867,10 @@ export function AdminDashboardClient({
                   {notifications.map((notification) => (
                     <article
                       key={notification.id}
-                      className={`flex items-start justify-between gap-4 rounded-xl border p-4 ${
-                        notification.readAt
-                          ? "border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/50"
-                          : "border-blue-100 bg-blue-50/60 dark:border-blue-900 dark:bg-blue-950/30"
-                      }`}
+                      className={`flex items-start justify-between gap-4 rounded-xl border p-4 ${notification.readAt
+                        ? "border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/50"
+                        : "border-blue-100 bg-blue-50/60 dark:border-blue-900 dark:bg-blue-950/30"
+                        }`}
                     >
                       <div className="flex min-w-0 items-start gap-3">
                         <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
@@ -2139,11 +2166,10 @@ export function AdminDashboardClient({
                       <div className="flex justify-between items-center pt-1 border-t border-slate-200">
                         <span className="text-slate-500">Seller KYC Status</span>
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            profile?.status === "APPROVED"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-amber-100 text-amber-800"
-                          }`}
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${profile?.status === "APPROVED"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-amber-100 text-amber-800"
+                            }`}
                         >
                           {profile?.status || "PENDING"}
                         </span>
@@ -2199,7 +2225,7 @@ export function AdminDashboardClient({
                           Legal Deeds & Ownership Certificates
                         </span>
                         {reviewingListing.documents &&
-                        reviewingListing.documents.length > 0 ? (
+                          reviewingListing.documents.length > 0 ? (
                           <div className="space-y-1">
                             {reviewingListing.documents.map((doc) => (
                               <div
@@ -2327,12 +2353,11 @@ export function AdminDashboardClient({
                         <h4>Listing Entry Fee Verification</h4>
                       </div>
                       <span
-                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                          fee?.status === "CONFIRMED" ||
+                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${fee?.status === "CONFIRMED" ||
                           reviewingListing.entryFeeStatus === "CONFIRMED"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : "bg-amber-100 text-amber-800"
-                        }`}
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-amber-100 text-amber-800"
+                          }`}
                       >
                         {fee?.status ||
                           reviewingListing.entryFeeStatus ||
@@ -2402,8 +2427,8 @@ export function AdminDashboardClient({
                         </span>
                       </div>
                       {!fee?.transactionUrl &&
-                      !fee?.paymentProofMediaId &&
-                      fee?.method === "CHAPA" ? (
+                        !fee?.paymentProofMediaId &&
+                        fee?.method === "CHAPA" ? (
                         <p className="text-[11px] text-emerald-700">
                           Online payment is verified through Chapa.
                         </p>
@@ -2421,7 +2446,7 @@ export function AdminDashboardClient({
                       Uploaded Photos & Media ({reviewingListing.images?.length || 0})
                     </h4>
                     {reviewingListing.images &&
-                    reviewingListing.images.length > 0 ? (
+                      reviewingListing.images.length > 0 ? (
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         {reviewingListing.images.map((img, idx) => (
                           <a
@@ -2551,6 +2576,151 @@ export function AdminDashboardClient({
         );
       })()}
 
+      {/* Edit Listing Modal */}
+      {showEditListingModal && selectedListingForEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Edit Listing</h3>
+              <button
+                onClick={() => {
+                  setShowEditListingModal(false);
+                  setSelectedListingForEdit(null);
+                  setEditListingMessage(null);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {editListingMessage && (
+                <div
+                  className={`rounded-lg p-3 text-sm ${editListingMessage.error
+                    ? "bg-rose-50 text-rose-700"
+                    : "bg-emerald-50 text-emerald-700"
+                    }`}
+                >
+                  {editListingMessage.error || editListingMessage.message}
+                </div>
+              )}
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1 text-xs">Title</label>
+                <input
+                  type="text"
+                  value={editListingForm.title}
+                  onChange={(e) => setEditListingForm({ ...editListingForm, title: e.target.value })}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
+                  placeholder="Enter listing title"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1 text-xs">Description</label>
+                <textarea
+                  value={editListingForm.description}
+                  onChange={(e) => setEditListingForm({ ...editListingForm, description: e.target.value })}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white min-h-[120px]"
+                  placeholder="Enter detailed description"
+                  rows={4}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 text-xs">City</label>
+                  <input
+                    type="text"
+                    value={editListingForm.city}
+                    onChange={(e) => setEditListingForm({ ...editListingForm, city: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
+                    placeholder="City"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 text-xs">Region</label>
+                  <input
+                    type="text"
+                    value={editListingForm.region}
+                    onChange={(e) => setEditListingForm({ ...editListingForm, region: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
+                    placeholder="Region"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1 text-xs">Address</label>
+                <input
+                  type="text"
+                  value={editListingForm.address}
+                  onChange={(e) => setEditListingForm({ ...editListingForm, address: e.target.value })}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
+                  placeholder="Full address"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1 text-xs">Features (comma-separated)</label>
+                <input
+                  type="text"
+                  value={editListingForm.features.join(", ")}
+                  onChange={(e) =>
+                    setEditListingForm({
+                      ...editListingForm,
+                      features: e.target.value.split(",").map((f) => f.trim()).filter(Boolean),
+                    })
+                  }
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
+                  placeholder="e.g., Swimming pool, Garage, Garden"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <button
+                  onClick={() => {
+                    setShowEditListingModal(false);
+                    setSelectedListingForEdit(null);
+                    setEditListingMessage(null);
+                  }}
+                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={isPending}
+                  onClick={() => {
+                    startTransition(async () => {
+                      const result = await updateListingAction(selectedListingForEdit.id, editListingForm);
+                      setEditListingMessage(result);
+                      if (result.success) {
+                        // Update local state instead of full page refresh
+                        setLocalListings(prevListings =>
+                          prevListings.map(l =>
+                            l.id === selectedListingForEdit.id
+                              ? { ...l, ...editListingForm }
+                              : l
+                          )
+                        );
+                        setTimeout(() => {
+                          setShowEditListingModal(false);
+                          setSelectedListingForEdit(null);
+                          setEditListingMessage(null);
+                        }, 1500);
+                      }
+                    });
+                  }}
+                  className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isPending ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ─────────────────── MODAL: VERIFY PAYMENT ─────────────────── */}
       {verifyingPayment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">

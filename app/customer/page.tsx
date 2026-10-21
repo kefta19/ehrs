@@ -13,14 +13,15 @@ export default async function CustomerPage({
 }: {
   searchParams?: Promise<{ tab?: string }>;
 } = {}) {
-  await syncAuctionStatuses();
-
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role !== "BUYER" && user.role !== "ADMIN") redirect(roleHome(user.role));
 
   const resolvedParams = searchParams ? await searchParams : {};
   const initialTab = resolvedParams?.tab || "dashboard";
+
+  // Run auction status sync in background without blocking page render
+  syncAuctionStatuses().catch((e) => console.error("Auction sync error:", e));
 
   // cspell:disable
   const [
@@ -41,8 +42,8 @@ export default async function CustomerPage({
           status: "APPROVED",
           ...(user.tenantId
             ? {
-                OR: [{ tenantId: user.tenantId }, { tenantId: null }],
-              }
+              OR: [{ tenantId: user.tenantId }, { tenantId: null }],
+            }
             : {}),
         },
       },
@@ -54,7 +55,7 @@ export default async function CustomerPage({
             city: true,
             region: true,
             features: true,
-            images: { orderBy: { displayOrder: "asc" } },
+            images: { orderBy: { displayOrder: "asc" }, take: 3 },
             category: {
               select: { id: true, name: true, slug: true, icon: true },
             },
@@ -62,6 +63,7 @@ export default async function CustomerPage({
         },
       },
       orderBy: { createdAt: "desc" },
+      take: 50,
     }),
     prisma.bid.findMany({
       where: { bidderId: user.id },
@@ -73,7 +75,7 @@ export default async function CustomerPage({
                 id: true,
                 title: true,
                 city: true,
-                images: true,
+                images: { take: 1 },
                 category: {
                   select: { id: true, name: true, slug: true, icon: true },
                 },
@@ -83,6 +85,7 @@ export default async function CustomerPage({
         },
       },
       orderBy: { createdAt: "desc" },
+      take: 50,
     }),
     prisma.auctionResult.findMany({
       where: { winningBidderId: user.id },
@@ -94,7 +97,7 @@ export default async function CustomerPage({
                 id: true,
                 title: true,
                 city: true,
-                images: true,
+                images: { take: 1 },
                 category: {
                   select: { id: true, name: true, slug: true, icon: true },
                 },
@@ -102,9 +105,10 @@ export default async function CustomerPage({
             },
           },
         },
-        payments: true,
+        payments: { take: 1 },
       },
       orderBy: { createdAt: "desc" },
+      take: 20,
     }),
     prisma.watchlistItem.findMany({
       where: { userId: user.id },
@@ -116,7 +120,7 @@ export default async function CustomerPage({
                 id: true,
                 title: true,
                 city: true,
-                images: true,
+                images: { take: 1 },
                 category: {
                   select: { id: true, name: true, slug: true, icon: true },
                 },
@@ -126,6 +130,7 @@ export default async function CustomerPage({
         },
       },
       orderBy: { createdAt: "desc" },
+      take: 50,
     }),
     prisma.payment.findMany({
       where: { payerId: user.id },
@@ -141,10 +146,12 @@ export default async function CustomerPage({
         },
       },
       orderBy: { createdAt: "desc" },
+      take: 20,
     }),
     prisma.ticket.findMany({
       where: { createdById: user.id },
       orderBy: { createdAt: "desc" },
+      take: 20,
     }),
     prisma.notification.findMany({
       where: { userId: user.id },
@@ -167,15 +174,15 @@ export default async function CustomerPage({
   const auctionIds = auctions.map((a) => a.id);
   const [bidRegistrations, buyerEntryFees] = auctionIds.length
     ? await Promise.all([
-        prisma.buyerBidRegistration.findMany({
-          where: { auctionId: { in: auctionIds }, buyerId: user.id },
-          select: { auctionId: true, status: true },
-        }),
-        prisma.buyerAuctionEntryFee.findMany({
-          where: { auctionId: { in: auctionIds }, buyerId: user.id },
-          select: { auctionId: true, status: true, amount: true, id: true, txRef: true, method: true },
-        }),
-      ])
+      prisma.buyerBidRegistration.findMany({
+        where: { auctionId: { in: auctionIds }, buyerId: user.id },
+        select: { auctionId: true, status: true },
+      }),
+      prisma.buyerAuctionEntryFee.findMany({
+        where: { auctionId: { in: auctionIds }, buyerId: user.id },
+        select: { auctionId: true, status: true, amount: true, id: true, txRef: true, method: true },
+      }),
+    ])
     : [[], []];
 
   const paidEntranceFeeAuctionIds = Array.from(
@@ -197,10 +204,10 @@ export default async function CustomerPage({
     avatarUrl: userProfile?.avatarUrl ?? user.avatarUrl,
     buyerProfile: userProfile?.buyerProfile
       ? {
-          address: userProfile.buyerProfile.address ?? undefined,
-          preferredLocation:
-            userProfile.buyerProfile.preferredLocation ?? undefined,
-        }
+        address: userProfile.buyerProfile.address ?? undefined,
+        preferredLocation:
+          userProfile.buyerProfile.preferredLocation ?? undefined,
+      }
       : undefined,
   };
 

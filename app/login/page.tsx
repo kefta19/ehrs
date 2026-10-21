@@ -12,28 +12,33 @@ export default async function LoginPage({
   searchParams: Promise<{ redirect?: string; error?: string }>;
 }) {
   const { redirect, error } = await searchParams;
-  await syncAuctionStatuses();
 
-  const liveAuctions = await prisma.auction.findMany({
-    where: {
-      status: "ACTIVE",
-      listing: { images: { some: {} } },
-    },
-    select: {
-      id: true,
-      listing: {
-        select: {
-          images: {
-            select: { url: true },
-            orderBy: { displayOrder: "asc" },
-            take: 1,
+  // Fetch background images in parallel with page render
+  const [liveAuctions] = await Promise.all([
+    prisma.auction.findMany({
+      where: {
+        status: "ACTIVE",
+        listing: { images: { some: {} } },
+      },
+      select: {
+        id: true,
+        listing: {
+          select: {
+            images: {
+              select: { url: true },
+              orderBy: { displayOrder: "asc" },
+              take: 1,
+            },
           },
         },
       },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 8,
-  });
+      orderBy: { createdAt: "desc" },
+      take: 8,
+    }),
+    // Run auction status sync in background without blocking
+    syncAuctionStatuses().catch((e) => console.error("Auction sync error:", e)),
+  ]);
+
   const backgroundImages = liveAuctions.flatMap((auction) => {
     const image = auction.listing.images[0];
     return image ? [{ id: auction.id, url: image.url }] : [];

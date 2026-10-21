@@ -61,22 +61,22 @@ export async function POST(request: NextRequest) {
         status: "ACTIVE",
         ...(role === "BUYER"
           ? {
-              buyerProfile: {
-                create: {},
-              },
-            }
+            buyerProfile: {
+              create: {},
+            },
+          }
           : {}),
         ...(role === "SELLER"
           ? {
-              sellerProfile: {
-                create: {
-                  nationalIdNumber: nationalId || "PENDING",
-                  businessName: businessName || null,
-                  address: "Not provided",
-                  status: "PENDING",
-                },
+            sellerProfile: {
+              create: {
+                nationalIdNumber: nationalId || "PENDING",
+                businessName: businessName || null,
+                address: "Not provided",
+                status: "PENDING",
               },
-            }
+            },
+          }
           : {}),
       },
     });
@@ -103,7 +103,8 @@ export async function POST(request: NextRequest) {
 
     setSessionCookie(response, token, expiresAt);
 
-    await logAudit({
+    // Run audit logging in background without blocking response
+    logAudit({
       actorId: user.id,
       action: "USER_REGISTERED",
       module: "AUTH",
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
       newValue: { email: normalizedEmail, role: user.role },
       ipAddress,
       userAgent,
-    }).catch(() => undefined);
+    }).catch((e) => console.error("Background audit log error:", e));
 
     return response;
   } catch (error) {

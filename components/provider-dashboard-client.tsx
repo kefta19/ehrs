@@ -29,6 +29,7 @@ import {
   Menu,
   Trash2,
   UserRound,
+  Edit,
 } from "lucide-react";
 import { ETHomeLogo } from "./ethome-brand";
 import { LogoutButton } from "./logout-button";
@@ -48,7 +49,7 @@ import {
 import { ListingWizard } from "./listing-wizard";
 import { auctionStatusMeta, listingStatusMeta, TONE_CLASS } from "@/lib/status-labels";
 import { AccountManagement } from "@/components/account-management";
-import { deleteListingAction } from "@/app/actions/listing";
+import { deleteListingAction, updateListingAction } from "@/app/actions/listing";
 import { useRouter } from "next/navigation";
 
 type SellerUser = {
@@ -288,6 +289,23 @@ export function ProviderDashboardClient({
   const [showListingModal, setShowListingModal] = useState(false);
   const [showAuctionModal, setShowAuctionModal] = useState(false);
   const [selectedListingForAuction, setSelectedListingForAuction] = useState<Listing | null>(null);
+  const [showEditListingModal, setShowEditListingModal] = useState(false);
+  const [selectedListingForEdit, setSelectedListingForEdit] = useState<Listing | null>(null);
+  const [editListingForm, setEditListingForm] = useState({
+    title: "",
+    description: "",
+    city: "",
+    region: "",
+    address: "",
+    features: [] as string[],
+  });
+  const [editListingMessage, setEditListingMessage] = useState<{
+    error?: string;
+    message?: string;
+  } | null>(null);
+
+  // Local state for listings to avoid full page refresh
+  const [localListings, setLocalListings] = useState<Listing[]>(listings);
 
   // Payment and success dialogs
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
@@ -356,9 +374,8 @@ export function ProviderDashboardClient({
 
       {/* ─────────────────── LEFT SIDEBAR ─────────────────── */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-[#132238] bg-[#0A192F] text-slate-300 transition-transform duration-300 ease-in-out lg:translate-x-0 ${
-          mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-[#132238] bg-[#0A192F] text-slate-300 transition-transform duration-300 ease-in-out lg:translate-x-0 ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         <div className="flex h-16 items-center justify-between px-6 border-b border-[#132644]">
           <ETHomeLogo dark size="md" href="/seller" />
@@ -375,11 +392,10 @@ export function ProviderDashboardClient({
           <nav className="space-y-0.5 text-xs">
             <button
               onClick={() => selectTab("dashboard")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "dashboard"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "dashboard"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <LayoutDashboard size={16} />
               <span>Seller Overview</span>
@@ -387,11 +403,10 @@ export function ProviderDashboardClient({
 
             <button
               onClick={() => selectTab("listings")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "listings"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "listings"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <div className="flex items-center gap-3.5">
                 <PackagePlus size={16} />
@@ -404,11 +419,10 @@ export function ProviderDashboardClient({
 
             <button
               onClick={() => selectTab("auctions")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "auctions"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "auctions"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <div className="flex items-center gap-3.5">
                 <Gavel size={16} />
@@ -421,11 +435,10 @@ export function ProviderDashboardClient({
 
             <button
               onClick={() => selectTab("bids")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "bids"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "bids"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <div className="flex items-center gap-3.5">
                 <TrendingUp size={16} />
@@ -438,11 +451,10 @@ export function ProviderDashboardClient({
 
             <button
               onClick={() => selectTab("winners")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "winners"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "winners"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <Award size={16} />
               <span>Winning Bidders</span>
@@ -450,11 +462,10 @@ export function ProviderDashboardClient({
 
             <button
               onClick={() => selectTab("payments")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "payments"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "payments"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <CreditCard size={16} />
               <span>Escrow & Settlements</span>
@@ -462,22 +473,20 @@ export function ProviderDashboardClient({
 
             <button
               onClick={() => selectTab("kyc")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "kyc"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "kyc"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <div className="flex items-center gap-3.5">
                 <ShieldCheck size={16} />
                 <span>Seller Verification</span>
               </div>
               <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                  kycStatus === "APPROVED"
-                    ? "bg-emerald-500/20 text-emerald-300"
-                    : "bg-amber-500/20 text-amber-300"
-                }`}
+                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${kycStatus === "APPROVED"
+                  ? "bg-emerald-500/20 text-emerald-300"
+                  : "bg-amber-500/20 text-amber-300"
+                  }`}
               >
                 {kycStatus}
               </span>
@@ -485,11 +494,10 @@ export function ProviderDashboardClient({
 
             <button
               onClick={() => selectTab("reports")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "reports"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "reports"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <BarChart3 size={16} />
               <span>Reports & Analytics</span>
@@ -497,11 +505,10 @@ export function ProviderDashboardClient({
 
             <button
               onClick={() => selectTab("account")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "account"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "account"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <UserRound size={16} />
               <span>Manage Account</span>
@@ -509,11 +516,10 @@ export function ProviderDashboardClient({
 
             <button
               onClick={() => selectTab("notifications")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "notifications"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
+              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "notifications"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
             >
               <div className="flex items-center gap-3.5">
                 <Bell size={16} />
@@ -776,11 +782,10 @@ export function ProviderDashboardClient({
             <div className="space-y-6">
               {listingDeleteMessage && (
                 <div
-                  className={`rounded-xl border p-3 text-xs ${
-                    listingDeleteMessage.error
-                      ? "border-rose-200 bg-rose-50 text-rose-700"
-                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  }`}
+                  className={`rounded-xl border p-3 text-xs ${listingDeleteMessage.error
+                    ? "border-rose-200 bg-rose-50 text-rose-700"
+                    : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    }`}
                 >
                   {listingDeleteMessage.error || listingDeleteMessage.message}
                 </div>
@@ -803,7 +808,7 @@ export function ProviderDashboardClient({
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {listings.map((l) => (
+                {localListings.map((l) => (
                   <div
                     key={l.id}
                     className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm flex flex-col justify-between"
@@ -828,7 +833,7 @@ export function ProviderDashboardClient({
                         <p className="text-xs text-slate-500 line-clamp-2">
                           {l.description}
                         </p>
-                        {l.status === "REJECTED" && l.rejectionReason && (  <p className="rounded-lg bg-rose-50 p-2 text-[11px] text-rose-700">Admin: {l.rejectionReason}</p>)}
+                        {l.status === "REJECTED" && l.rejectionReason && (<p className="rounded-lg bg-rose-50 p-2 text-[11px] text-rose-700">Admin: {l.rejectionReason}</p>)}
                         <div className="flex items-center gap-1 text-[11px] text-slate-400">
                           <MapPin size={12} /> {l.city}, {l.region}
                         </div>
@@ -840,6 +845,25 @@ export function ProviderDashboardClient({
                         Ref: {l.referenceNumber || "ETH-LST"}
                       </span>
                       <div className="flex items-center gap-2">
+                        {(l.status === "DRAFT" || l.status === "REJECTED" || l.status === "PENDING_REVIEW") && (
+                          <button
+                            onClick={() => {
+                              setSelectedListingForEdit(l);
+                              setEditListingForm({
+                                title: l.title,
+                                description: (l.description as string) || "",
+                                city: (l.city as string) || "",
+                                region: (l.region as string) || "",
+                                address: (l.address as string) || "",
+                                features: (l.features as string[]) || [],
+                              });
+                              setShowEditListingModal(true);
+                            }}
+                            className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50"
+                          >
+                            <Edit size={14} />
+                          </button>
+                        )}
                         {(l.status === "DRAFT" || l.status === "REJECTED") && (
                           <>
                             <button
@@ -1127,11 +1151,10 @@ export function ProviderDashboardClient({
 
               {kycMsg && (
                 <div
-                  className={`rounded-xl p-3 text-xs ${
-                    kycMsg.error
-                      ? "bg-rose-50 text-rose-700"
-                      : "bg-emerald-50 text-emerald-700"
-                  }`}
+                  className={`rounded-xl p-3 text-xs ${kycMsg.error
+                    ? "bg-rose-50 text-rose-700"
+                    : "bg-emerald-50 text-emerald-700"
+                    }`}
                 >
                   {kycMsg.error || kycMsg.success}
                 </div>
@@ -1304,137 +1327,134 @@ export function ProviderDashboardClient({
                   {notifications.map((notification) => {
                     const inquiryTicketId = getInquiryTicketId(notification);
                     return (
-                    <article
-                      key={notification.id}
-                      className={`flex flex-col gap-4 rounded-xl border p-4 sm:flex-row sm:items-start sm:justify-between ${
-                        notification.readAt
+                      <article
+                        key={notification.id}
+                        className={`flex flex-col gap-4 rounded-xl border p-4 sm:flex-row sm:items-start sm:justify-between ${notification.readAt
                           ? "border-slate-100 bg-slate-50"
                           : "border-blue-100 bg-blue-50/60"
-                      }`}
-                    >
-                      <div className="flex min-w-0 items-start gap-3">
-                        <span
-                          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white ${
-                            notification.readAt ? "bg-slate-400" : "bg-blue-600"
                           }`}
-                        >
-                          <Bell size={14} />
-                        </span>
-                        <div className="min-w-0">
-                          <h3 className="text-sm font-bold text-slate-900">
-                            {notification.title}
-                          </h3>
-                          <p className="mt-1 text-xs leading-5 text-slate-600">
-                            {notification.body}
-                          </p>
-                          <time
-                            className="mt-2 block text-[10px] text-slate-400"
-                            dateTime={notification.createdAt}
+                      >
+                        <div className="flex min-w-0 items-start gap-3">
+                          <span
+                            className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white ${notification.readAt ? "bg-slate-400" : "bg-blue-600"
+                              }`}
                           >
-                            {new Date(notification.createdAt).toLocaleString()}
-                          </time>
-                          {notification.link && (
-                            <a
-                              href={notification.link}
-                              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-800"
+                            <Bell size={14} />
+                          </span>
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-bold text-slate-900">
+                              {notification.title}
+                            </h3>
+                            <p className="mt-1 text-xs leading-5 text-slate-600">
+                              {notification.body}
+                            </p>
+                            <time
+                              className="mt-2 block text-[10px] text-slate-400"
+                              dateTime={notification.createdAt}
                             >
-                              View details <ExternalLink size={12} />
-                            </a>
-                          )}
-
-                          {inquiryTicketId && (
-                            <form
-                              onSubmit={(event) =>
-                                handleReplyToInquiry(event, inquiryTicketId)
-                              }
-                              className="mt-4 max-w-xl rounded-xl border border-blue-100 bg-white p-3 dark:border-slate-700 dark:bg-slate-900"
-                            >
-                              <label
-                                htmlFor={`inquiry-reply-${notification.id}`}
-                                className="text-xs font-semibold text-slate-800 dark:text-slate-200"
+                              {new Date(notification.createdAt).toLocaleString()}
+                            </time>
+                            {notification.link && (
+                              <a
+                                href={notification.link}
+                                className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-800"
                               >
-                                Reply to this buyer
-                              </label>
-                              <textarea
-                                id={`inquiry-reply-${notification.id}`}
-                                name="message"
-                                value={inquiryReplies[inquiryTicketId] ?? ""}
-                                onChange={(event) =>
-                                  setInquiryReplies((current) => ({
-                                    ...current,
-                                    [inquiryTicketId]: event.target.value,
-                                  }))
+                                View details <ExternalLink size={12} />
+                              </a>
+                            )}
+
+                            {inquiryTicketId && (
+                              <form
+                                onSubmit={(event) =>
+                                  handleReplyToInquiry(event, inquiryTicketId)
                                 }
-                                minLength={2}
-                                maxLength={2000}
-                                required
-                                rows={3}
-                                placeholder="Write a helpful reply to the buyer..."
-                                className="mt-2 w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                              />
-                              <div className="mt-2 flex items-center justify-between gap-3">
-                                <span className="text-[10px] text-slate-500">
-                                  2–2,000 characters
-                                </span>
-                                <button
-                                  type="submit"
-                                  disabled={replyingToInquiry === inquiryTicketId}
-                                  className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+                                className="mt-4 max-w-xl rounded-xl border border-blue-100 bg-white p-3 dark:border-slate-700 dark:bg-slate-900"
+                              >
+                                <label
+                                  htmlFor={`inquiry-reply-${notification.id}`}
+                                  className="text-xs font-semibold text-slate-800 dark:text-slate-200"
                                 >
-                                  <Send size={13} />
-                                  {replyingToInquiry === inquiryTicketId
-                                    ? "Sending..."
-                                    : "Send reply"}
-                                </button>
-                              </div>
-                              {inquiryReplyFeedback[inquiryTicketId] && (
-                                <p
-                                  role="status"
-                                  className={`mt-2 text-xs ${
-                                    inquiryReplyFeedback[inquiryTicketId].success
+                                  Reply to this buyer
+                                </label>
+                                <textarea
+                                  id={`inquiry-reply-${notification.id}`}
+                                  name="message"
+                                  value={inquiryReplies[inquiryTicketId] ?? ""}
+                                  onChange={(event) =>
+                                    setInquiryReplies((current) => ({
+                                      ...current,
+                                      [inquiryTicketId]: event.target.value,
+                                    }))
+                                  }
+                                  minLength={2}
+                                  maxLength={2000}
+                                  required
+                                  rows={3}
+                                  placeholder="Write a helpful reply to the buyer..."
+                                  className="mt-2 w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                                />
+                                <div className="mt-2 flex items-center justify-between gap-3">
+                                  <span className="text-[10px] text-slate-500">
+                                    2–2,000 characters
+                                  </span>
+                                  <button
+                                    type="submit"
+                                    disabled={replyingToInquiry === inquiryTicketId}
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+                                  >
+                                    <Send size={13} />
+                                    {replyingToInquiry === inquiryTicketId
+                                      ? "Sending..."
+                                      : "Send reply"}
+                                  </button>
+                                </div>
+                                {inquiryReplyFeedback[inquiryTicketId] && (
+                                  <p
+                                    role="status"
+                                    className={`mt-2 text-xs ${inquiryReplyFeedback[inquiryTicketId].success
                                       ? "text-emerald-700 dark:text-emerald-400"
                                       : "text-rose-700 dark:text-rose-400"
-                                  }`}
-                                >
-                                  {inquiryReplyFeedback[inquiryTicketId].message}
-                                </p>
-                              )}
-                            </form>
-                          )}
+                                      }`}
+                                  >
+                                    {inquiryReplyFeedback[inquiryTicketId].message}
+                                  </p>
+                                )}
+                              </form>
+                            )}
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="flex shrink-0 flex-col items-end gap-2">
-                        {!notification.readAt && (
+                        <div className="flex shrink-0 flex-col items-end gap-2">
+                          {!notification.readAt && (
+                            <button
+                              type="button"
+                              disabled={isPending}
+                              onClick={() =>
+                                startTransition(async () => {
+                                  await markNotificationReadAction(notification.id);
+                                })
+                              }
+                              className="rounded-lg bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Mark as read
+                            </button>
+                          )}
                           <button
                             type="button"
                             disabled={isPending}
-                            onClick={() =>
+                            onClick={() => {
+                              if (!window.confirm("Delete this notification? This will not delete the inquiry or other users’ copies.")) return;
                               startTransition(async () => {
-                                await markNotificationReadAction(notification.id);
-                              })
-                            }
-                            className="rounded-lg bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                await deleteNotificationAction(notification.id);
+                              });
+                            }}
+                            aria-label={`Delete notification: ${notification.title}`}
+                            className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-3 py-1.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            Mark as read
+                            <Trash2 size={13} /> Delete
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          disabled={isPending}
-                          onClick={() => {
-                            if (!window.confirm("Delete this notification? This will not delete the inquiry or other users’ copies.")) return;
-                            startTransition(async () => {
-                              await deleteNotificationAction(notification.id);
-                            });
-                          }}
-                          aria-label={`Delete notification: ${notification.title}`}
-                          className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-3 py-1.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <Trash2 size={13} /> Delete
-                        </button>
-                      </div>
-                    </article>
+                        </div>
+                      </article>
                     );
                   })}
                 </div>
@@ -1605,6 +1625,152 @@ export function ProviderDashboardClient({
             setSelectedListingForAuction(null);
           }}
         />
+      )}
+
+      {/* Edit Listing Modal */}
+      {showEditListingModal && selectedListingForEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Edit Listing</h3>
+              <button
+                onClick={() => {
+                  setShowEditListingModal(false);
+                  setSelectedListingForEdit(null);
+                  setEditListingMessage(null);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {editListingMessage && (
+                <div
+                  className={`rounded-lg p-3 text-sm ${editListingMessage.error
+                    ? "bg-rose-50 text-rose-700"
+                    : "bg-emerald-50 text-emerald-700"
+                    }`}
+                >
+                  {editListingMessage.error || editListingMessage.message}
+                </div>
+              )}
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1 text-xs">Title</label>
+                <input
+                  type="text"
+                  value={editListingForm.title}
+                  onChange={(e) => setEditListingForm({ ...editListingForm, title: e.target.value })}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
+                  placeholder="Enter listing title"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1 text-xs">Description</label>
+                <textarea
+                  value={editListingForm.description}
+                  onChange={(e) => setEditListingForm({ ...editListingForm, description: e.target.value })}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white min-h-[120px]"
+                  placeholder="Enter detailed description"
+                  rows={4}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 text-xs">City</label>
+                  <input
+                    type="text"
+                    value={editListingForm.city}
+                    onChange={(e) => setEditListingForm({ ...editListingForm, city: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
+                    placeholder="City"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 text-xs">Region</label>
+                  <input
+                    type="text"
+                    value={editListingForm.region}
+                    onChange={(e) => setEditListingForm({ ...editListingForm, region: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
+                    placeholder="Region"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1 text-xs">Address</label>
+                <input
+                  type="text"
+                  value={editListingForm.address}
+                  onChange={(e) => setEditListingForm({ ...editListingForm, address: e.target.value })}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
+                  placeholder="Full address"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1 text-xs">Features (comma-separated)</label>
+                <input
+                  type="text"
+                  value={editListingForm.features.join(", ")}
+                  onChange={(e) =>
+                    setEditListingForm({
+                      ...editListingForm,
+                      features: e.target.value.split(",").map((f) => f.trim()).filter(Boolean),
+                    })
+                  }
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
+                  placeholder="e.g., Swimming pool, Garage, Garden"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                <button
+                  onClick={() => {
+                    setShowEditListingModal(false);
+                    setSelectedListingForEdit(null);
+                    setEditListingMessage(null);
+                  }}
+                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={isPending}
+                  onClick={() => {
+                    startTransition(async () => {
+                      const result = await updateListingAction(selectedListingForEdit.id, editListingForm);
+                      setEditListingMessage(result);
+                      if (result.success) {
+                        // Update local state instead of full page refresh
+                        setLocalListings(prevListings =>
+                          prevListings.map(l =>
+                            l.id === selectedListingForEdit.id
+                              ? { ...l, ...editListingForm }
+                              : l
+                          )
+                        );
+                        setTimeout(() => {
+                          setShowEditListingModal(false);
+                          setSelectedListingForEdit(null);
+                          setEditListingMessage(null);
+                        }, 1500);
+                      }
+                    });
+                  }}
+                  className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isPending ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Payment Method Dialog */}

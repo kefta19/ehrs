@@ -13,8 +13,6 @@ export default async function ProviderPage({
 }: {
   searchParams?: Promise<{ tab?: string }>;
 } = {}) {
-  await syncAuctionStatuses();
-
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role !== "SELLER" && user.role !== "ADMIN") redirect(roleHome(user.role));
@@ -23,6 +21,9 @@ export default async function ProviderPage({
     resolvedParams.tab === "notifications" || resolvedParams.tab === "account"
       ? resolvedParams.tab
       : undefined;
+
+  // Run auction status sync in background without blocking page render
+  syncAuctionStatuses().catch((e) => console.error("Auction sync error:", e));
 
   const [sellerProfile, listings, auctions, categories, notifications] =
     await Promise.all([
@@ -33,11 +34,12 @@ export default async function ProviderPage({
         where: { sellerId: user.id },
         include: {
           category: true,
-          images: { orderBy: { displayOrder: "asc" } },
-          documents: true,
+          images: { orderBy: { displayOrder: "asc" }, take: 3 },
+          documents: { take: 5 },
           _count: { select: { auctions: true } },
         },
         orderBy: { createdAt: "desc" },
+        take: 50,
       }),
       prisma.auction.findMany({
         where: { sellerId: user.id },
@@ -45,11 +47,12 @@ export default async function ProviderPage({
           listing: {
             include: {
               category: true,
-              images: true,
+              images: { take: 3 },
             },
           },
           bids: {
             orderBy: { amount: "desc" },
+            take: 10,
             include: {
               bidder: {
                 select: {
@@ -81,11 +84,12 @@ export default async function ProviderPage({
           result: {
             include: {
               winningBidder: true,
-              payments: true,
+              payments: { take: 1 },
             },
           },
         },
         orderBy: { createdAt: "desc" },
+        take: 50,
       }),
       prisma.category.findMany({
         where: { isActive: true },
@@ -97,7 +101,7 @@ export default async function ProviderPage({
         take: 20,
       }),
     ]);
-    const googleOnlyAccount = await isGoogleOnlyAccount(user.id);
+  const googleOnlyAccount = await isGoogleOnlyAccount(user.id);
 
   return (
     <ProviderDashboardClient
