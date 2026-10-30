@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -40,24 +40,28 @@ import {
   Trash2,
   Home,
   Edit,
+  Layers,
 } from "lucide-react";
 import { ETHomeLogo } from "./ethome-brand";
+import { Pagination } from "./pagination";
 import { LogoutButton } from "./logout-button";
 import { ThemeToggle } from "./theme-toggle";
 import {
-  verifySellerKycAction,
   reviewListingAction,
   updateAuctionStatusAction,
-  verifyPaymentAction,
   updateTicketStatusAction,
   updateUserStatusAction,
+  verifySellerKycAction,
   manageCategoryAction,
   updateSystemSettingsAction,
 } from "@/app/actions/admin";
-import { adminConfirmBuyerRegistrationAction } from "@/app/actions/bid-registration";
 import { deleteNotificationAction } from "@/app/actions/buyer";
 import { AccountManagement } from "@/components/account-management";
-import { deleteListingAction, updateListingAction } from "@/app/actions/listing";
+import { adminConfirmBuyerRegistrationAction } from "@/app/actions/bid-registration";
+import {
+  deleteListingAction,
+  updateListingAction,
+} from "@/app/actions/listing";
 
 export type AdminUser = {
   id: string;
@@ -86,6 +90,38 @@ type AdminSellerProfile = {
   taxId?: string | null;
   status: string;
   address: string;
+  idDocumentUrl?: string | null;
+  createdAt: string;
+};
+
+type AdminBuyerRegistration = {
+  id: string;
+  buyerId: string;
+  auctionId: string;
+  feeAmount: number | string;
+  currency: string;
+  paymentMethod: string | null;
+  paymentProofUrl: string | null;
+  status: string;
+  txRef: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  buyer: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string | null;
+    status: string;
+    createdAt: string;
+    emailVerifiedAt: string | null;
+    buyerProfile: {
+      address: string | null;
+      preferredLocation: string | null;
+      idDocumentUrl: string | null;
+      isVerified: boolean;
+    } | null;
+  };
+  auction: { id: string; listing: { title: string } };
 };
 
 type AdminListing = {
@@ -157,6 +193,28 @@ type AdminListing = {
   }>;
 };
 
+function getListingStatusClasses(status: string) {
+  switch (status) {
+    case "APPROVED":
+      return "bg-emerald-50 text-emerald-700";
+    case "REJECTED":
+      return "bg-rose-50 text-rose-700";
+    case "PENDING_REVIEW":
+    case "UNDER_REVIEW":
+      return "bg-amber-50 text-amber-700";
+    case "AUCTIONED":
+      return "bg-blue-50 text-blue-700";
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+}
+
+function getListingStatusLabel(status: string) {
+  return status === "PENDING_REVIEW" || status === "UNDER_REVIEW"
+    ? "UNDER REVIEW"
+    : status;
+}
+
 type AdminAuction = {
   id: string;
   listing: { title: string };
@@ -172,9 +230,69 @@ type AdminBid = {
     status: string;
     startAt: string;
     endAt: string;
-    listing?: { title?: string };
+    startingPrice: number | string;
+    reservePrice: number | string | null;
+    minBidIncrement: number | string;
+    currentHighestBid: number | string;
+    terms: string | null;
+    seller?: AdminUser & {
+      sellerProfile?: {
+        nationalIdNumber: string;
+        businessName: string | null;
+        taxId: string | null;
+        address: string;
+        idDocumentUrl: string | null;
+        status: string;
+      } | null;
+    };
+    listing?: {
+      id: string;
+      title: string;
+      description: string;
+      condition: string;
+      address: string | null;
+      city: string;
+      region: string;
+      country: string;
+      postalCode: string | null;
+      referenceNumber: string | null;
+      features: string[];
+      attributes: Record<string, unknown> | null;
+      status: string;
+      videoUrl: string | null;
+      ownerNationalId: string | null;
+      idDocumentMediaId: string | null;
+      createdAt: string;
+      category: { name: string };
+      images: Array<{ id: string; url: string; isPrimary: boolean }>;
+      documents: Array<{
+        id: string;
+        title: string;
+        documentType: string;
+        fileUrl: string;
+        isVerified: boolean;
+      }>;
+      seller?: AdminUser & {
+        sellerProfile?: {
+          nationalIdNumber: string;
+          businessName: string | null;
+          taxId: string | null;
+          address: string;
+          idDocumentUrl: string | null;
+          status: string;
+        } | null;
+      };
+    };
   };
-  bidder?: AdminUser;
+  bidder?: AdminUser & {
+    emailVerifiedAt?: string | null;
+    buyerProfile?: {
+      address: string | null;
+      preferredLocation: string | null;
+      idDocumentUrl: string | null;
+      isVerified: boolean;
+    } | null;
+  };
   bidderId?: string;
   amount: number | string;
   createdAt: string;
@@ -196,39 +314,34 @@ type AdminBid = {
   } | null;
 };
 
-type AdminPayment = {
+type AdminEntryFee = {
   id: string;
-  transactionRef: string | null;
-  payer?: AdminUser;
-  amount: number | string;
-  status: string;
-  currency?: string;
-  method?: string;
-  receiptUrl?: string | null;
-  notes?: string | null;
-  createdAt?: string;
-  paidAt?: string | null;
-  auctionResult?: {
-    id: string;
-    auction: {
-      id: string;
-      listing: {
-        title: string;
-      };
-    };
-  } | null;
-};
-
-type AdminBuyerRegistration = {
-  id: string;
-  feeAmount: number | string;
+  role: "BUYER" | "SELLER";
+  payer: { id: string; name: string; email: string };
+  payerDetails: {
+    phone: string | null;
+    accountStatus: string;
+    joinedAt: string;
+    emailVerified: boolean;
+    address: string | null;
+    preferredLocation: string | null;
+    isVerified: boolean;
+    nationalIdNumber: string | null;
+    businessName: string | null;
+    taxId: string | null;
+    identityAddress: string | null;
+    idDocumentUrl: string | null;
+    verificationStatus: string | null;
+  };
+  auctionTitle: string;
+  amount: number;
   currency: string;
-  paymentMethod?: string | null;
-  paymentProofUrl?: string | null;
-  txRef?: string | null;
+  method: string | null;
+  status: string;
+  transactionRef: string;
+  transactionUrl: string | null;
+  confirmedAt: string | null;
   createdAt: string;
-  buyer: { id: string; name: string; email: string };
-  auction: { id: string; listing: { title: string } };
 };
 
 type AdminTicket = {
@@ -280,12 +393,12 @@ export function AdminDashboardClient({
   initialTab,
   stats,
   usersList,
-  pendingKyc,
   pendingListings,
   allAuctions,
   allBids,
-  pendingBuyerRegistrations,
-  payments,
+  sellerProfiles,
+  buyerRegistrations,
+  entryFeePayments,
   tickets,
   categories,
   systemSettings,
@@ -297,18 +410,18 @@ export function AdminDashboardClient({
   initialTab?: string;
   stats: {
     totalUsers: number;
-    pendingKycCount: number;
+    pendingListingsCount: number;
     activeAuctionsCount: number;
     totalVolume: number;
     openTicketsCount: number;
   };
   usersList: AdminUser[];
-  pendingKyc: AdminSellerProfile[];
   pendingListings: AdminListing[];
   allAuctions: AdminAuction[];
   allBids: AdminBid[];
-  pendingBuyerRegistrations: AdminBuyerRegistration[];
-  payments: AdminPayment[];
+  sellerProfiles: AdminSellerProfile[];
+  buyerRegistrations: AdminBuyerRegistration[];
+  entryFeePayments: AdminEntryFee[];
   tickets: AdminTicket[];
   categories: AdminCategory[];
   systemSettings: AdminSystemSetting[];
@@ -320,7 +433,8 @@ export function AdminDashboardClient({
     const validTabs = [
       "dashboard",
       "users",
-      "kyc",
+      "sellers",
+      "buyers",
       "listings",
       "auctions",
       "bids",
@@ -341,16 +455,24 @@ export function AdminDashboardClient({
 
   const [isPending, startTransition] = useTransition();
   const [selectedBid, setSelectedBid] = useState<AdminBid | null>(null);
+  const selectedBidListing = selectedBid?.auction?.listing;
+  const selectedBidSeller =
+    selectedBidListing?.seller ?? selectedBid?.auction?.seller;
+  const [selectedBuyerRegistration, setSelectedBuyerRegistration] =
+    useState<AdminBuyerRegistration | null>(null);
+  const [buyerReviewNote, setBuyerReviewNote] = useState("");
+  const pendingBuyerRegistrations = buyerRegistrations.filter(
+    (registration) => registration.status === "PENDING",
+  );
+  const pendingSellerProfiles = sellerProfiles.filter(
+    (seller) => seller.status === "PENDING" || seller.status === "UNDER_REVIEW",
+  );
 
   // Search in users
   const [userSearch, setUserSearch] = useState("");
   const [userRoleFilter, setUserRoleFilter] = useState("ALL");
 
-  // KYC Review Modal
-  const [reviewingKyc, setReviewingKyc] = useState<AdminSellerProfile | null>(
-    null,
-  );
-  const [kycNote, setKycNote] = useState("");
+
 
   // Listing Review Modal
   const [reviewingListing, setReviewingListing] = useState<AdminListing | null>(
@@ -360,7 +482,8 @@ export function AdminDashboardClient({
 
   // Edit Listing Modal
   const [showEditListingModal, setShowEditListingModal] = useState(false);
-  const [selectedListingForEdit, setSelectedListingForEdit] = useState<AdminListing | null>(null);
+  const [selectedListingForEdit, setSelectedListingForEdit] =
+    useState<AdminListing | null>(null);
   const [editListingForm, setEditListingForm] = useState({
     title: "",
     description: "",
@@ -373,15 +496,13 @@ export function AdminDashboardClient({
     error?: string;
     message?: string;
   } | null>(null);
+  const [sellerReviewNotes, setSellerReviewNotes] = useState<
+    Record<string, string>
+  >({});
 
   // Local state for listings to avoid full page refresh
-  const [localListings, setLocalListings] = useState<AdminListing[]>(pendingListings);
-
-  // Payment Verification Modal
-  const [verifyingPayment, setVerifyingPayment] = useState<AdminPayment | null>(
-    null,
-  );
-  const [paymentNote, setPaymentNote] = useState("");
+  const [localListings, setLocalListings] =
+    useState<AdminListing[]>(pendingListings);
 
   // Ticket Resolution Modal
   const [resolvingTicket, setResolvingTicket] = useState<AdminTicket | null>(
@@ -398,11 +519,12 @@ export function AdminDashboardClient({
     message?: string;
     success?: boolean;
   } | null>(null);
-  const [buyerRegistrationNotes, setBuyerRegistrationNotes] = useState<Record<string, string>>({});
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const selectTab = (tab: typeof activeTab) => {
     setActiveTab(tab);
     setMobileMenuOpen(false);
+    setProfileMenuOpen(false);
   };
 
   const filteredUsers = usersList.filter((u) => {
@@ -413,6 +535,142 @@ export function AdminDashboardClient({
     const matchRole = userRoleFilter === "ALL" || u.role === userRoleFilter;
     return matchSearch && matchRole;
   });
+
+  // Pagination States for Admin Tabs
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersPageSize, setUsersPageSize] = useState(10);
+  useEffect(() => {
+    setUsersPage(1);
+  }, [userSearch, userRoleFilter]);
+  const usersTotal = filteredUsers.length;
+  const usersTotalPages = Math.max(1, Math.ceil(usersTotal / usersPageSize));
+  const paginatedUsers = filteredUsers.slice(
+    (usersPage - 1) * usersPageSize,
+    usersPage * usersPageSize,
+  );
+
+  const [listingsPage, setListingsPage] = useState(1);
+  const [listingsPageSize, setListingsPageSize] = useState(6);
+  const listingsTotal = pendingListings.length;
+  const listingsTotalPages = Math.max(1, Math.ceil(listingsTotal / listingsPageSize));
+  const paginatedListings = pendingListings.slice(
+    (listingsPage - 1) * listingsPageSize,
+    listingsPage * listingsPageSize,
+  );
+
+  const [auctionsPage, setAuctionsPage] = useState(1);
+  const [auctionsPageSize, setAuctionsPageSize] = useState(10);
+  const auctionsTotal = allAuctions.length;
+  const auctionsTotalPages = Math.max(1, Math.ceil(auctionsTotal / auctionsPageSize));
+  const paginatedAuctions = allAuctions.slice(
+    (auctionsPage - 1) * auctionsPageSize,
+    auctionsPage * auctionsPageSize,
+  );
+
+  const [bidsPage, setBidsPage] = useState(1);
+  const [bidsPageSize, setBidsPageSize] = useState(15);
+  const bidsTotal = allBids.length;
+  const bidsTotalPages = Math.max(1, Math.ceil(bidsTotal / bidsPageSize));
+  const paginatedBids = allBids.slice(
+    (bidsPage - 1) * bidsPageSize,
+    bidsPage * bidsPageSize,
+  );
+
+  const [entryFeePage, setEntryFeePage] = useState(1);
+  const [entryFeePageSize, setEntryFeePageSize] = useState(10);
+  const [selectedEntryFee, setSelectedEntryFee] =
+    useState<AdminEntryFee | null>(null);
+  const [entryFeeRoleFilter, setEntryFeeRoleFilter] = useState<
+    "ALL" | AdminEntryFee["role"]
+  >("ALL");
+  const [entryFeeStatusFilter, setEntryFeeStatusFilter] = useState("ALL");
+  const [entryFeeMethodFilter, setEntryFeeMethodFilter] = useState("ALL");
+  const [entryFeeSearch, setEntryFeeSearch] = useState("");
+  const entryFeeMethods = Array.from(
+    new Set(
+      entryFeePayments
+        .map((fee) => fee.method)
+        .filter((method): method is string => Boolean(method)),
+    ),
+  ).sort();
+  const normalizedEntryFeeSearch = entryFeeSearch.trim().toLowerCase();
+  const filteredEntryFeePayments = entryFeePayments.filter((fee) => {
+    const matchesRole =
+      entryFeeRoleFilter === "ALL" || fee.role === entryFeeRoleFilter;
+    const matchesStatus =
+      entryFeeStatusFilter === "ALL" || fee.status === entryFeeStatusFilter;
+    const matchesMethod =
+      entryFeeMethodFilter === "ALL" || fee.method === entryFeeMethodFilter;
+    const matchesSearch =
+      !normalizedEntryFeeSearch ||
+      [
+        fee.payer.name,
+        fee.payer.email,
+        fee.auctionTitle,
+        fee.transactionRef,
+      ].some((value) => value.toLowerCase().includes(normalizedEntryFeeSearch));
+
+    return matchesRole && matchesStatus && matchesMethod && matchesSearch;
+  });
+  const resetEntryFeeFilters = () => {
+    setEntryFeeRoleFilter("ALL");
+    setEntryFeeStatusFilter("ALL");
+    setEntryFeeMethodFilter("ALL");
+    setEntryFeeSearch("");
+    setEntryFeePage(1);
+  };
+  const entryFeeTotalPages = Math.max(
+    1,
+    Math.ceil(filteredEntryFeePayments.length / entryFeePageSize),
+  );
+  const paginatedEntryFeePayments = filteredEntryFeePayments.slice(
+    (entryFeePage - 1) * entryFeePageSize,
+    entryFeePage * entryFeePageSize,
+  );
+  const buyerEntryFeeCount = entryFeePayments.filter(
+    (fee) => fee.role === "BUYER",
+  ).length;
+  const sellerEntryFeeCount = entryFeePayments.length - buyerEntryFeeCount;
+  const entryFeeStatusCounts = [
+    "UNPAID",
+    "PENDING",
+    "CONFIRMED",
+    "FAILED",
+    "SUPERSEDED",
+    "PAID",
+    "WAIVED",
+    "REJECTED",
+  ].map((status) => ({
+      status,
+      count: entryFeePayments.filter((fee) => fee.status === status).length,
+    }));
+
+  const [ticketsPage, setTicketsPage] = useState(1);
+  const [ticketsPageSize, setTicketsPageSize] = useState(10);
+  const ticketsTotal = tickets.length;
+  const ticketsTotalPages = Math.max(1, Math.ceil(ticketsTotal / ticketsPageSize));
+  const paginatedTickets = tickets.slice(
+    (ticketsPage - 1) * ticketsPageSize,
+    ticketsPage * ticketsPageSize,
+  );
+
+  const [notifsPage, setNotifsPage] = useState(1);
+  const [notifsPageSize, setNotifsPageSize] = useState(10);
+  const notifsTotal = notifications.length;
+  const notifsTotalPages = Math.max(1, Math.ceil(notifsTotal / notifsPageSize));
+  const paginatedNotifications = notifications.slice(
+    (notifsPage - 1) * notifsPageSize,
+    notifsPage * notifsPageSize,
+  );
+
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditPageSize, setAuditPageSize] = useState(15);
+  const auditTotal = auditLogs.length;
+  const auditTotalPages = Math.max(1, Math.ceil(auditTotal / auditPageSize));
+  const paginatedAuditLogs = auditLogs.slice(
+    (auditPage - 1) * auditPageSize,
+    auditPage * auditPageSize,
+  );
 
   return (
     <div className="flex min-h-screen bg-background text-slate-800 dark:text-slate-100 transition-colors">
@@ -426,10 +684,11 @@ export function AdminDashboardClient({
 
       {/* ─────────────────── LEFT SIDEBAR ─────────────────── */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-[#132238] bg-[#0A192F] text-slate-300 transition-transform duration-300 ease-in-out lg:translate-x-0 ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
+        className={`dashboard-sidebar fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-slate-200 bg-background text-foreground transition-transform duration-300 ease-in-out dark:border-slate-800 lg:translate-x-0 ${
+          mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
       >
-        <div className="flex h-16 items-center justify-between px-6 border-b border-[#132644]">
+        <div className="flex h-16 items-center justify-between px-6 border-b border-slate-200 dark:border-slate-800">
           <ETHomeLogo dark size="md" href="/admin" />
           <button
             type="button"
@@ -441,200 +700,249 @@ export function AdminDashboardClient({
         </div>
 
         <div className="flex flex-1 flex-col justify-between overflow-y-auto px-4 py-4">
-          <nav className="space-y-0.5 text-xs">
-            <Link
-              href="/"
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium text-slate-400 transition-all hover:bg-[#12233f] hover:text-white"
-            >
-              <Home size={16} />
-              <span>Home Page</span>
-            </Link>
-
-            <button
-              onClick={() => selectTab("dashboard")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "dashboard"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-                }`}
-            >
-              <LayoutDashboard size={16} />
-              <span>Executive Overview</span>
-            </button>
-
-            <button
-              onClick={() => selectTab("users")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "users"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-                }`}
-            >
-              <div className="flex items-center gap-3">
-                <Users size={16} />
-                <span>Manage Users</span>
+          <nav className="space-y-4 text-xs">
+            <div className="space-y-1">
+              <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Overview
               </div>
-              <span className="rounded-full bg-slate-700/50 px-2 py-0.5 text-[10px] text-slate-300">
-                {usersList.length}
-              </span>
-            </button>
+              <Link
+                href="/"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium text-slate-400 transition-all hover:bg-[#12233f] hover:text-white"
+              >
+                <Home size={16} />
+                <span>Home Page</span>
+              </Link>
 
-            <button
-              onClick={() => selectTab("kyc")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "kyc"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+              <button
+                onClick={() => selectTab("dashboard")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "dashboard"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
                 }`}
-            >
-              <div className="flex items-center gap-3">
-                <ShieldCheck size={16} />
-                <span>Verify Sellers</span>
+              >
+                <LayoutDashboard size={16} />
+                <span>Executive Overview</span>
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Platform Ops
               </div>
-              {pendingKyc.length > 0 && (
-                <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
-                  {pendingKyc.length}
+              <button
+                onClick={() => selectTab("users")}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "users"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Users size={16} />
+                  <span>Manage Users</span>
+                </div>
+                <span className="rounded-full bg-slate-700/50 px-2 py-0.5 text-[10px] text-slate-300">
+                  {usersList.length}
                 </span>
-              )}
-            </button>
+              </button>
 
-            <button
-              onClick={() => selectTab("listings")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "listings"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+              <button
+                onClick={() => selectTab("sellers")}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "sellers"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
                 }`}
-            >
-              <div className="flex items-center gap-3">
-                <PackageCheck size={16} />
-                <span>Approve Listings</span>
+              >
+                <div className="flex items-center gap-3">
+                  <ShieldCheck size={16} />
+                  <span>Review Sellers</span>
+                </div>
+                {pendingSellerProfiles.length > 0 && (
+                  <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                    {pendingSellerProfiles.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => selectTab("buyers")}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "buyers"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Users size={16} />
+                  <span>Approve Buyers</span>
+                </div>
+                {pendingBuyerRegistrations.length > 0 && (
+                  <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                    {pendingBuyerRegistrations.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => selectTab("listings")}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "listings"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <PackageCheck size={16} />
+                  <span>Approve Listings</span>
+                </div>
+                {pendingListings.length > 0 && (
+                  <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-bold text-blue-300">
+                    {pendingListings.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => selectTab("auctions")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "auctions"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <Gavel size={16} />
+                <span>Approve Auctions</span>
+              </button>
+
+              <button
+                onClick={() => selectTab("bids")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "bids"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <TrendingUp size={16} />
+                <span>Monitor Live Bids</span>
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Finance & System
               </div>
-              {pendingListings.length > 0 && (
-                <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-bold text-blue-300">
-                  {pendingListings.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => selectTab("auctions")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "auctions"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+              <button
+                onClick={() => selectTab("payments")}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "payments"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
                 }`}
-            >
-              <Gavel size={16} />
-              <span>Approve Auctions</span>
-            </button>
+              >
+                <div className="flex items-center gap-3">
+                  <CreditCard size={16} />
+                  <span>Manage Payments</span>
+                </div>
+              </button>
 
-            <button
-              onClick={() => selectTab("bids")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "bids"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+              <button
+                onClick={() => selectTab("tickets")}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "tickets"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
                 }`}
-            >
-              <TrendingUp size={16} />
-              <span>Monitor Live Bids</span>
-            </button>
+              >
+                <div className="flex items-center gap-3">
+                  <MessageSquareWarning size={16} />
+                  <span>Complaints & Disputes</span>
+                </div>
+                {tickets.filter((t) => t.status === "OPEN").length > 0 && (
+                  <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold text-rose-300">
+                    {tickets.filter((t) => t.status === "OPEN").length}
+                  </span>
+                )}
+              </button>
 
-            <button
-              onClick={() => selectTab("payments")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "payments"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+              <button
+                onClick={() => selectTab("reports")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "reports"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
                 }`}
-            >
-              <div className="flex items-center gap-3">
-                <CreditCard size={16} />
-                <span>Manage Payments</span>
+              >
+                <BarChart3 size={16} />
+                <span>Reports & GMV</span>
+              </button>
+
+              <button
+                onClick={() => selectTab("categories")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "categories"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <Tags size={16} />
+                <span>Categories</span>
+              </button>
+
+              <button
+                onClick={() => selectTab("settings")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "settings"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <Settings size={16} />
+                <span>System Settings</span>
+              </button>
+
+              <button
+                onClick={() => selectTab("audit")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "audit"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <History size={16} />
+                <span>Audit Logs</span>
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Account
               </div>
-              {payments.filter((p) => p.status === "PENDING").length + pendingBuyerRegistrations.length > 0 && (
-                <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
-                  {payments.filter((p) => p.status === "PENDING").length + pendingBuyerRegistrations.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => selectTab("tickets")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "tickets"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+              <button
+                onClick={() => selectTab("notifications")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "notifications"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
                 }`}
-            >
-              <div className="flex items-center gap-3">
-                <MessageSquareWarning size={16} />
-                <span>Complaints & Disputes</span>
-              </div>
-              {tickets.filter((t) => t.status === "OPEN").length > 0 && (
-                <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold text-rose-300">
-                  {tickets.filter((t) => t.status === "OPEN").length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => selectTab("reports")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "reports"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+              >
+                <Bell size={16} />
+                <span>Notifications</span>
+              </button>
+              <button
+                onClick={() => selectTab("account")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "account"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
                 }`}
-            >
-              <BarChart3 size={16} />
-              <span>Reports & GMV</span>
-            </button>
-
-            <button
-              onClick={() => selectTab("categories")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "categories"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-                }`}
-            >
-              <Tags size={16} />
-              <span>Categories</span>
-            </button>
-
-            <button
-              onClick={() => selectTab("settings")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "settings"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-                }`}
-            >
-              <Settings size={16} />
-              <span>System Settings</span>
-            </button>
-
-            <button
-              onClick={() => selectTab("audit")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "audit"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-                }`}
-            >
-              <History size={16} />
-              <span>Audit Logs</span>
-            </button>
-            <button
-              onClick={() => selectTab("notifications")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "notifications"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-                }`}
-            >
-              <Bell size={16} />
-              <span>Notifications</span>
-            </button>
-            <button
-              onClick={() => selectTab("account")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "account"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-                }`}
-            >
-              <User size={16} />
-              <span>Manage Account</span>
-            </button>
+              >
+                <User size={16} />
+                <span>Manage Account</span>
+              </button>
+            </div>
           </nav>
 
           <Link
@@ -646,7 +954,7 @@ export function AdminDashboardClient({
             <span>Branding</span>
           </Link>
 
-          <div className="border-t border-[#132644] pt-3">
+          <div className="border-t border-slate-200 pt-3 dark:border-slate-800">
             <LogoutButton className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2 text-xs font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors" />
           </div>
         </div>
@@ -672,7 +980,6 @@ export function AdminDashboardClient({
               {activeTab === "dashboard" &&
                 "Platform Operations & Intelligence"}
               {activeTab === "users" && "User Directory & Access Control"}
-              {activeTab === "kyc" && "Seller Verification Queue"}
               {activeTab === "listings" && "Auction Listing Approvals"}
               {activeTab === "auctions" && "Auction Moderation"}
               {activeTab === "bids" && "Global Live Bidding Stream"}
@@ -689,16 +996,46 @@ export function AdminDashboardClient({
 
           <div className="flex items-center gap-4">
             <ThemeToggle />
-            <div className="flex items-center gap-3 border-l border-slate-200 dark:border-slate-700 pl-4">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 font-bold text-white text-sm">
-                AD
-              </div>
-              <div className="text-left text-xs">
-                <div className="font-bold text-slate-900 dark:text-white leading-tight">
-                  {user.name}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setProfileMenuOpen((current) => !current)}
+                className="flex items-center gap-3 border-l border-slate-200 dark:border-slate-700 pl-4 text-left transition-colors hover:text-slate-700"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 font-bold text-white text-sm">
+                  AD
                 </div>
-                <div className="text-slate-500 dark:text-slate-400">System Administrator</div>
-              </div>
+                <div className="text-left text-xs">
+                  <div className="font-bold text-slate-900 dark:text-white leading-tight">
+                    {user.name}
+                  </div>
+                  <div className="text-slate-500 dark:text-slate-400">
+                    System Administrator
+                  </div>
+                </div>
+              </button>
+
+              {profileMenuOpen && (
+                <div className="absolute right-0 top-full z-30 mt-2 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                  <button
+                    type="button"
+                    onClick={() => selectTab("account")}
+                    className="block w-full px-4 py-3 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    Manage Account
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectTab("settings")}
+                    className="block w-full px-4 py-3 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    Platform Settings
+                  </button>
+                  <div className="border-t border-slate-200 dark:border-slate-700">
+                    <LogoutButton className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium text-rose-500 transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/30" />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>
@@ -707,10 +1044,11 @@ export function AdminDashboardClient({
         {actionMsg && (
           <div className="mx-4 sm:mx-8 mt-6">
             <div
-              className={`flex items-center justify-between rounded-xl p-4 text-xs ${actionMsg.error
-                ? "bg-rose-50 text-rose-700 border border-rose-200"
-                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                }`}
+              className={`flex items-center justify-between rounded-xl p-4 text-xs ${
+                actionMsg.error
+                  ? "bg-rose-50 text-rose-700 border border-rose-200"
+                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+              }`}
             >
               <span>
                 {actionMsg.error ||
@@ -725,142 +1063,96 @@ export function AdminDashboardClient({
         )}
 
         {/* Content Body */}
-        <main className="flex-1 p-4 sm:p-8 space-y-8">
+        <main className="mx-auto flex w-full max-w-[1800px] flex-1 flex-col p-4 sm:p-6 lg:p-8 xl:px-10 space-y-8">
           {/* ══════════════════ TAB 1: EXECUTIVE OVERVIEW ══════════════════ */}
           {activeTab === "dashboard" && (
-            <div className="space-y-8">
+            <div className="space-y-6">
               {/* 5 Stats Cards */}
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between text-blue-600">
                     <Users size={20} />
                     <span className="text-[11px] text-slate-400">Total</span>
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-3">
                     <div className="text-xs text-slate-500 font-medium">
                       Registered Users
                     </div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                    <div className="text-xl font-bold text-slate-900 mt-1">
                       {stats.totalUsers}
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between text-amber-600">
-                    <ShieldCheck size={20} />
+                    <Layers size={20} />
                     <span className="text-[11px] text-amber-600 font-semibold">
-                      Queue
+                      Review
                     </span>
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-3">
                     <div className="text-xs text-slate-500 font-medium">
-                      Pending KYC
+                      Pending Listings
                     </div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">
-                      {stats.pendingKycCount}
+                    <div className="text-xl font-bold text-slate-900 mt-1">
+                      {stats.pendingListingsCount}
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between text-emerald-600">
                     <Gavel size={20} />
                     <span className="text-[11px] text-emerald-600 font-semibold">
                       Active
                     </span>
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-3">
                     <div className="text-xs text-slate-500 font-medium">
                       Live Auctions
                     </div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                    <div className="text-xl font-bold text-slate-900 mt-1">
                       {stats.activeAuctionsCount}
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between text-purple-600">
                     <DollarSign size={20} />
                     <span className="text-[11px] text-slate-400">GMV</span>
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-3">
                     <div className="text-xs text-slate-500 font-medium">
                       Platform Volume
                     </div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                    <div className="text-xl font-bold text-slate-900 mt-1">
                       {stats.totalVolume.toLocaleString()} ETB
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between text-rose-600">
                     <MessageSquareWarning size={20} />
                     <span className="text-[11px] text-rose-600 font-semibold">
                       Action
                     </span>
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-3">
                     <div className="text-xs text-slate-500 font-medium">
                       Open Disputes
                     </div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                    <div className="text-xl font-bold text-slate-900 mt-1">
                       {stats.openTicketsCount}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Action Queues: KYC & Listing Approvals */}
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                {/* Pending KYC Reviews */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-slate-900 text-sm">
-                      Seller Verification Queue ({pendingKyc.length})
-                    </h3>
-                    <button
-                      onClick={() => setActiveTab("kyc")}
-                      className="text-xs text-blue-600 font-semibold hover:underline"
-                    >
-                      View all &rarr;
-                    </button>
-                  </div>
-
-                  {pendingKyc.length === 0 ? (
-                    <div className="rounded-xl bg-slate-50 p-6 text-center text-xs text-slate-400">
-                      All seller verification applications have been reviewed.
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {pendingKyc.slice(0, 3).map((k) => (
-                        <div
-                          key={k.id}
-                          className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-slate-200 text-xs"
-                        >
-                          <div>
-                            <span className="font-semibold text-slate-900 block">
-                              {k.user.name}
-                            </span>
-                            <span className="text-slate-400">
-                              ID: {k.nationalIdNumber} •{" "}
-                              {k.businessName || "Individual"}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => setReviewingKyc(k)}
-                            className="rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-700"
-                          >
-                            Review
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
+              {/* Action Queues: Listing Approvals */}
+              <div className="grid grid-cols-1 gap-6">
                 {/* Pending Listing Reviews */}
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
                   <div className="flex items-center justify-between">
@@ -895,7 +1187,10 @@ export function AdminDashboardClient({
                             </span>
                           </div>
                           <button
-                            onClick={() => setReviewingListing(l)}
+                            onClick={() => {
+                              setReviewingListing(l);
+                              setActiveTab("listings");
+                            }}
                             className="rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-700"
                           >
                             Inspect
@@ -997,7 +1292,7 @@ export function AdminDashboardClient({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredUsers.map((u) => (
+                    {paginatedUsers.map((u) => (
                       <tr key={u.id} className="hover:bg-slate-50">
                         <td className="py-3 font-semibold text-slate-900">
                           {u.name}
@@ -1010,10 +1305,11 @@ export function AdminDashboardClient({
                         </td>
                         <td className="py-3">
                           <span
-                            className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${u.status === "ACTIVE"
-                              ? "bg-emerald-50 text-emerald-700"
-                              : "bg-rose-50 text-rose-700"
-                              }`}
+                            className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                              u.status === "ACTIVE"
+                                ? "bg-emerald-50 text-emerald-700"
+                                : "bg-rose-50 text-rose-700"
+                            }`}
                           >
                             {u.status}
                           </span>
@@ -1053,62 +1349,518 @@ export function AdminDashboardClient({
             </div>
           )}
 
-          {/* ══════════════════ TAB 3: VERIFY SELLERS (KYC) ══════════════════ */}
-          {activeTab === "kyc" && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
+          {activeTab === "sellers" && (
+            <div className="space-y-5">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
-                  Seller Identity Verification Queue
+                  Seller List &amp; Verification Reviews
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Inspect National ID, Business registration, Tax Identification
-                  Numbers, and approve credentials.
+                  View all seller profiles and their verification status.
+                  Pending sellers can be reviewed and approved or rejected.
                 </p>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-slate-400">
-                      <th className="pb-3 font-semibold">Seller</th>
-                      <th className="pb-3 font-semibold">National ID</th>
-                      <th className="pb-3 font-semibold">Business Name</th>
-                      <th className="pb-3 font-semibold">TIN</th>
-                      <th className="pb-3 font-semibold">Status</th>
-                      <th className="pb-3 font-semibold text-right">Review</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {pendingKyc.map((k) => (
-                      <tr key={k.id} className="hover:bg-slate-50">
-                        <td className="py-3 font-semibold text-slate-900">
-                          {k.user.name}
-                        </td>
-                        <td className="py-3 font-mono">{k.nationalIdNumber}</td>
-                        <td className="py-3 text-slate-600">
-                          {k.businessName || "N/A"}
-                        </td>
-                        <td className="py-3 text-slate-600">
-                          {k.taxId || "N/A"}
-                        </td>
-                        <td className="py-3">
-                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
-                            {k.status}
-                          </span>
-                        </td>
-                        <td className="py-3 text-right">
+              {sellerProfiles.length === 0 ? (
+                <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
+                  No seller profiles found.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {sellerProfiles.map((seller) => (
+                    <section
+                      key={seller.id}
+                      className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                    >
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="space-y-3">
+                          <div>
+                            <h3 className="font-semibold text-slate-900">
+                              {seller.businessName || seller.user.name}
+                            </h3>
+                            <p className="text-xs text-slate-500">
+                              {seller.user.name} · {seller.user.email}
+                              {seller.user.phone ? ` · ${seller.user.phone}` : ""}
+                            </p>
+                            <span
+                              className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                                seller.status === "APPROVED"
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : seller.status === "REJECTED"
+                                    ? "bg-rose-50 text-rose-700"
+                                    : "bg-amber-50 text-amber-700"
+                              }`}
+                            >
+                              {seller.status}
+                            </span>
+                          </div>
+                          <div className="grid gap-x-8 gap-y-2 text-xs text-slate-600 sm:grid-cols-2">
+                            <p>
+                              <span className="font-semibold">National ID:</span>{" "}
+                              {seller.nationalIdNumber}
+                            </p>
+                            <p>
+                              <span className="font-semibold">Tax ID:</span>{" "}
+                              {seller.taxId || "Not provided"}
+                            </p>
+                            <p>
+                              <span className="font-semibold">Address:</span>{" "}
+                              {seller.address}
+                            </p>
+                            <p>
+                              <span className="font-semibold">Submitted:</span>{" "}
+                              {new Date(seller.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                          {seller.idDocumentUrl && (
+                            <a
+                              href={seller.idDocumentUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 underline"
+                            >
+                              View identity document <ExternalLink size={12} />
+                            </a>
+                          )}
+                          {(seller.status === "PENDING" ||
+                            seller.status === "UNDER_REVIEW") && (
+                            <label className="block text-xs font-medium text-slate-600">
+                              Review note
+                              <textarea
+                                value={sellerReviewNotes[seller.id] || ""}
+                                maxLength={500}
+                                onChange={(event) =>
+                                  setSellerReviewNotes((previous) => ({
+                                    ...previous,
+                                    [seller.id]: event.target.value,
+                                  }))
+                                }
+                                placeholder="Optional note, or explain what needs correction if rejecting"
+                                className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                                rows={2}
+                              />
+                            </label>
+                          )}
+                        </div>
+
+                        {(seller.status === "PENDING" ||
+                          seller.status === "UNDER_REVIEW") && (
+                        <div className="flex shrink-0 gap-2">
                           <button
-                            onClick={() => setReviewingKyc(k)}
-                            className="rounded-lg bg-blue-600 px-3 py-1 font-semibold text-white hover:bg-blue-700"
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => {
+                              const formData = new FormData();
+                              formData.append("sellerProfileId", seller.id);
+                              formData.append("status", "REJECTED");
+                              formData.append(
+                                "reviewNote",
+                                sellerReviewNotes[seller.id] || "",
+                              );
+                              startTransition(async () => {
+                                const result = await verifySellerKycAction(formData);
+                                setActionMsg(result);
+                                if (result.success) router.refresh();
+                              });
+                            }}
+                            className="rounded-lg border border-rose-200 px-4 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
                           >
-                            Review
+                            Reject
                           </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => {
+                              const formData = new FormData();
+                              formData.append("sellerProfileId", seller.id);
+                              formData.append("status", "APPROVED");
+                              formData.append(
+                                "reviewNote",
+                                sellerReviewNotes[seller.id] || "",
+                              );
+                              startTransition(async () => {
+                                const result = await verifySellerKycAction(formData);
+                                setActionMsg(result);
+                                if (result.success) router.refresh();
+                              });
+                            }}
+                            className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            Approve Seller
+                          </button>
+                        </div>
+                        )}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "buyers" && (
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Buyer Registration List
+                </h2>
+                <p className="text-xs text-slate-500">
+                  View buyer registrations and their entry-fee approval status.
+                  Pending records can be reviewed and decided here.
+                </p>
               </div>
+
+              {buyerRegistrations.length === 0 ? (
+                <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
+                  No buyer registrations found.
+                </p>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-400">
+                        <th className="p-4 font-semibold">Buyer</th>
+                        <th className="p-4 font-semibold">Auction</th>
+                        <th className="p-4 font-semibold">Entry fee</th>
+                        <th className="p-4 font-semibold">Status</th>
+                        <th className="p-4 font-semibold">Submitted</th>
+                        <th className="p-4 text-right font-semibold">Details</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {buyerRegistrations.map((registration) => (
+                        <tr
+                          key={registration.id}
+                          className="hover:bg-slate-50"
+                        >
+                          <td className="p-4">
+                            <div className="font-semibold text-slate-900">
+                              {registration.buyer.name}
+                            </div>
+                            <div className="text-slate-500">
+                              {registration.buyer.email}
+                            </div>
+                          </td>
+                          <td className="p-4 text-slate-700">
+                            {registration.auction.listing.title}
+                          </td>
+                          <td className="p-4 font-semibold text-slate-900">
+                            {Number(registration.feeAmount).toLocaleString()}{" "}
+                            {registration.currency}
+                          </td>
+                          <td className="p-4">
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                                registration.status === "PAID" ||
+                                registration.status === "WAIVED"
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : registration.status === "REJECTED"
+                                    ? "bg-rose-50 text-rose-700"
+                                    : "bg-amber-50 text-amber-700"
+                              }`}
+                            >
+                              {registration.status}
+                            </span>
+                          </td>
+                          <td className="p-4 text-slate-600">
+                            {new Date(
+                              registration.createdAt,
+                            ).toLocaleDateString()}
+                          </td>
+                          <td className="p-4 text-right">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBuyerReviewNote("");
+                                setSelectedBuyerRegistration(registration);
+                              }}
+                              className="rounded-lg bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700"
+                            >
+                              {registration.status === "PENDING"
+                                ? "Review Buyer"
+                                : "View Details"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {selectedBuyerRegistration && (
+                <div
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+                  role="presentation"
+                  onMouseDown={(event) => {
+                    if (event.target === event.currentTarget) {
+                      setSelectedBuyerRegistration(null);
+                    }
+                  }}
+                >
+                  <section
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="buyer-review-title"
+                    className="max-h-[90vh] w-full max-w-2xl space-y-5 overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+                  >
+                    <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+                      <div>
+                        <h3
+                          id="buyer-review-title"
+                          className="text-lg font-bold text-slate-900"
+                        >
+                          Review Buyer Application
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Check the buyer profile and payment evidence before
+                          making a decision.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBuyerRegistration(null)}
+                        aria-label="Close buyer review"
+                        className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="rounded-xl border border-slate-200 p-4">
+                        <h4 className="mb-3 text-sm font-bold text-slate-900">
+                          Buyer information
+                        </h4>
+                        <dl className="space-y-2 text-xs">
+                          <div>
+                            <dt className="text-slate-500">Full name</dt>
+                            <dd className="font-semibold text-slate-900">
+                              {selectedBuyerRegistration.buyer.name}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Email</dt>
+                            <dd className="font-semibold text-slate-900">
+                              {selectedBuyerRegistration.buyer.email}
+                              {selectedBuyerRegistration.buyer.emailVerifiedAt
+                                ? " (verified)"
+                                : " (not verified)"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Phone</dt>
+                            <dd className="text-slate-900">
+                              {selectedBuyerRegistration.buyer.phone ||
+                                "Not provided"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Address</dt>
+                            <dd className="text-slate-900">
+                              {selectedBuyerRegistration.buyer.buyerProfile
+                                ?.address || "Not provided"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">
+                              Preferred location
+                            </dt>
+                            <dd className="text-slate-900">
+                              {selectedBuyerRegistration.buyer.buyerProfile
+                                ?.preferredLocation || "Not provided"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Account status</dt>
+                            <dd className="text-slate-900">
+                              {selectedBuyerRegistration.buyer.status}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Registered</dt>
+                            <dd className="text-slate-900">
+                              {new Date(
+                                selectedBuyerRegistration.buyer.createdAt,
+                              ).toLocaleString()}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Buyer profile</dt>
+                            <dd className="text-slate-900">
+                              {selectedBuyerRegistration.buyer.buyerProfile
+                                ?.isVerified
+                                ? "Verified"
+                                : "Not verified"}
+                            </dd>
+                          </div>
+                        </dl>
+                        {selectedBuyerRegistration.buyer.buyerProfile
+                          ?.idDocumentUrl && (
+                          <a
+                            href={
+                              selectedBuyerRegistration.buyer.buyerProfile
+                                .idDocumentUrl
+                            }
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 underline"
+                          >
+                            View buyer ID document <ExternalLink size={12} />
+                          </a>
+                        )}
+                      </div>
+
+                      <div className="rounded-xl border border-slate-200 p-4">
+                        <h4 className="mb-3 text-sm font-bold text-slate-900">
+                          Entry-fee payment
+                        </h4>
+                        <dl className="space-y-2 text-xs">
+                          <div>
+                            <dt className="text-slate-500">Auction / listing</dt>
+                            <dd className="font-semibold text-slate-900">
+                              {selectedBuyerRegistration.auction.listing.title}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Fee amount</dt>
+                            <dd className="font-semibold text-slate-900">
+                              {Number(
+                                selectedBuyerRegistration.feeAmount,
+                              ).toLocaleString()}{" "}
+                              {selectedBuyerRegistration.currency}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Status</dt>
+                            <dd className="font-semibold text-amber-700">
+                              {selectedBuyerRegistration.status}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Payment method</dt>
+                            <dd className="text-slate-900">
+                              {selectedBuyerRegistration.paymentMethod ||
+                                "Not provided"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">
+                              Transaction reference
+                            </dt>
+                            <dd className="break-all font-mono text-slate-900">
+                              {selectedBuyerRegistration.txRef ||
+                                "Not provided"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Submitted</dt>
+                            <dd className="text-slate-900">
+                              {new Date(
+                                selectedBuyerRegistration.createdAt,
+                              ).toLocaleString()}
+                            </dd>
+                          </div>
+                        </dl>
+                        {selectedBuyerRegistration.paymentProofUrl ? (
+                          <a
+                            href={selectedBuyerRegistration.paymentProofUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-3 inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 underline"
+                          >
+                            Open transaction evidence{" "}
+                            <ExternalLink size={12} />
+                          </a>
+                        ) : (
+                          <p className="mt-3 rounded-lg bg-rose-50 p-3 text-xs font-semibold text-rose-700">
+                            No transaction evidence was submitted. Approval is
+                            unavailable until valid evidence is provided.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {selectedBuyerRegistration.status === "PENDING" ? (
+                      <>
+                        <label className="block text-xs font-medium text-slate-600">
+                          Review note
+                          <textarea
+                            value={buyerReviewNote}
+                            onChange={(event) =>
+                              setBuyerReviewNote(event.target.value)
+                            }
+                            maxLength={500}
+                            placeholder="Optional note, or explain what needs correction if rejecting"
+                            className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                            rows={2}
+                          />
+                        </label>
+
+                        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => {
+                              startTransition(async () => {
+                                const result =
+                                  await adminConfirmBuyerRegistrationAction(
+                                    selectedBuyerRegistration.id,
+                                    "REJECTED",
+                                    buyerReviewNote,
+                                  );
+                                setActionMsg(result);
+                                if (result.success) {
+                                  setSelectedBuyerRegistration(null);
+                                  router.refresh();
+                                }
+                              });
+                            }}
+                            className="rounded-lg border border-rose-200 px-4 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                          >
+                            Reject Buyer
+                          </button>
+                          <button
+                            type="button"
+                            disabled={
+                              isPending ||
+                              !selectedBuyerRegistration.paymentMethod ||
+                              !selectedBuyerRegistration.paymentProofUrl ||
+                              !selectedBuyerRegistration.txRef ||
+                              Number(selectedBuyerRegistration.feeAmount) <= 0
+                            }
+                            onClick={() => {
+                              startTransition(async () => {
+                                const result =
+                                  await adminConfirmBuyerRegistrationAction(
+                                    selectedBuyerRegistration.id,
+                                    "PAID",
+                                    buyerReviewNote,
+                                  );
+                                setActionMsg(result);
+                                if (result.success) {
+                                  setSelectedBuyerRegistration(null);
+                                  router.refresh();
+                                }
+                              });
+                            }}
+                            className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Approve Buyer
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex justify-end border-t border-slate-100 pt-4">
+                        <span className="text-xs font-semibold text-slate-600">
+                          Registration status:{" "}
+                          {selectedBuyerRegistration.status}
+                        </span>
+                      </div>
+                    )}
+                  </section>
+                </div>
+              )}
             </div>
           )}
 
@@ -1160,8 +1912,10 @@ export function AdminDashboardClient({
                     </div>
 
                     <div className="p-4 pt-0 border-t border-slate-100 mt-3 flex items-center justify-between text-xs">
-                      <span className="rounded bg-amber-50 px-2 py-0.5 font-bold text-amber-700">
-                        {l.status}
+                      <span
+                        className={`rounded px-2 py-0.5 font-bold ${getListingStatusClasses(l.status)}`}
+                      >
+                        {getListingStatusLabel(l.status)}
                       </span>
                       <div className="flex items-center gap-2">
                         <button
@@ -1194,7 +1948,9 @@ export function AdminDashboardClient({
                                   return;
                                 }
                                 startTransition(async () => {
-                                  const result = await deleteListingAction(l.id);
+                                  const result = await deleteListingAction(
+                                    l.id,
+                                  );
                                   setActionMsg(result);
                                   if (result.success) router.refresh();
                                 });
@@ -1205,7 +1961,10 @@ export function AdminDashboardClient({
                             </button>
                           )}
                         <button
-                          onClick={() => setReviewingListing(l)}
+                          onClick={() => {
+                            setReviewingListing(l);
+                            setRejectionReason("");
+                          }}
                           className="rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-700"
                         >
                           Inspect & Approve
@@ -1215,6 +1974,17 @@ export function AdminDashboardClient({
                   </div>
                 ))}
               </div>
+              <Pagination
+                currentPage={listingsPage}
+                totalPages={listingsTotalPages}
+                totalItems={listingsTotal}
+                pageSize={listingsPageSize}
+                onPageChange={setListingsPage}
+                onPageSizeChange={setListingsPageSize}
+                pageSizeOptions={[6, 12, 24]}
+                itemName="listings"
+                className="mt-6 pt-4 border-t border-slate-100"
+              />
             </div>
           )}
 
@@ -1245,7 +2015,7 @@ export function AdminDashboardClient({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {allAuctions.map((a) => (
+                    {paginatedAuctions.map((a) => (
                       <tr key={a.id} className="hover:bg-slate-50">
                         <td className="py-3 font-semibold text-slate-900">
                           {a.listing.title}
@@ -1300,6 +2070,17 @@ export function AdminDashboardClient({
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                currentPage={auctionsPage}
+                totalPages={auctionsTotalPages}
+                totalItems={auctionsTotal}
+                pageSize={auctionsPageSize}
+                onPageChange={setAuctionsPage}
+                onPageSizeChange={setAuctionsPageSize}
+                pageSizeOptions={[10, 25, 50]}
+                itemName="auctions"
+                className="mt-4 pt-3 border-t border-slate-100"
+              />
             </div>
           )}
 
@@ -1330,7 +2111,7 @@ export function AdminDashboardClient({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {allBids.map((b) => (
+                    {paginatedBids.map((b) => (
                       <tr key={b.id} className="hover:bg-slate-50">
                         <td className="py-3 font-semibold text-slate-900">
                           {b.auction?.listing?.title}
@@ -1355,7 +2136,10 @@ export function AdminDashboardClient({
                         <td className="py-3 text-right">
                           <button
                             type="button"
-                            onClick={() => setSelectedBid(b)}
+                            onClick={() => {
+                              setSelectedBid(b);
+                              setActiveTab("bids");
+                            }}
                             className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-3 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-50"
                           >
                             <Eye size={13} /> View details
@@ -1365,7 +2149,10 @@ export function AdminDashboardClient({
                     ))}
                     {allBids.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="py-8 text-center text-sm text-slate-500">
+                        <td
+                          colSpan={7}
+                          className="py-8 text-center text-sm text-slate-500"
+                        >
                           No bids have been submitted yet.
                         </td>
                       </tr>
@@ -1382,194 +2169,489 @@ export function AdminDashboardClient({
               <section className="space-y-4">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">
-                    Buyer Entrance Fee Reviews
+                    Buyer &amp; Seller Entry Fee Payers
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Check the buyer&apos;s transaction reference and receipt before granting bid access.
+                    All buyer and seller entry-fee records, including unpaid,
+                    pending, and confirmed payments.
                   </p>
                 </div>
-                {pendingBuyerRegistrations.length === 0 ? (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                  {[
+                    { label: "Total records", value: entryFeePayments.length },
+                    { label: "Buyer records", value: buyerEntryFeeCount },
+                    { label: "Seller records", value: sellerEntryFeeCount },
+                    ...entryFeeStatusCounts.map(({ status, count }) => ({
+                      label: status,
+                      value: count,
+                    })),
+                  ].map((stat) => (
+                    <div
+                      key={stat.label}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <p className="text-xs font-medium text-slate-500">
+                        {stat.label}
+                      </p>
+                      <p className="mt-1 text-xl font-bold text-slate-900">
+                        {stat.value.toLocaleString()}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <form
+                  onSubmit={(event) => event.preventDefault()}
+                  className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2 xl:grid-cols-5"
+                  aria-label="Filter entry-fee records"
+                >
+                  <label className="space-y-1 text-xs font-medium text-slate-600">
+                    Search payer, email, listing, or reference
+                    <div className="relative">
+                      <Search
+                        size={15}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                      />
+                      <input
+                        type="search"
+                        value={entryFeeSearch}
+                        onChange={(event) => {
+                          setEntryFeeSearch(event.target.value);
+                          setEntryFeePage(1);
+                        }}
+                        placeholder="Type to search..."
+                        className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm font-normal text-slate-900 outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </label>
+                  <label className="space-y-1 text-xs font-medium text-slate-600">
+                    Payer type
+                    <select
+                      value={entryFeeRoleFilter}
+                      onChange={(event) => {
+                        setEntryFeeRoleFilter(
+                          event.target.value as "ALL" | AdminEntryFee["role"],
+                        );
+                        setEntryFeePage(1);
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500"
+                    >
+                      <option value="ALL">All payers</option>
+                      <option value="BUYER">Buyers ({buyerEntryFeeCount})</option>
+                      <option value="SELLER">
+                        Sellers ({sellerEntryFeeCount})
+                      </option>
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-xs font-medium text-slate-600">
+                    Payment status
+                    <select
+                      value={entryFeeStatusFilter}
+                      onChange={(event) => {
+                        setEntryFeeStatusFilter(event.target.value);
+                        setEntryFeePage(1);
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500"
+                    >
+                      <option value="ALL">All statuses</option>
+                      {entryFeeStatusCounts.map(({ status, count }) => (
+                        <option key={status} value={status}>
+                          {status} ({count})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-xs font-medium text-slate-600">
+                    Payment method
+                    <select
+                      value={entryFeeMethodFilter}
+                      onChange={(event) => {
+                        setEntryFeeMethodFilter(event.target.value);
+                        setEntryFeePage(1);
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500"
+                    >
+                      <option value="ALL">All methods</option>
+                      {entryFeeMethods.map((method) => (
+                        <option key={method} value={method}>
+                          {method}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={resetEntryFeeFilters}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                    >
+                      Reset filters
+                    </button>
+                  </div>
+                </form>
+
+                {filteredEntryFeePayments.length === 0 ? (
                   <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
-                    No buyer entrance fee payments are waiting for review.
+                    No entry-fee records found for this selection.
                   </p>
                 ) : (
-                  <div className="space-y-3">
-                    {pendingBuyerRegistrations.map((registration) => (
-                      <div
-                        key={registration.id}
-                        className="flex flex-col gap-4 rounded-xl border border-amber-200 bg-amber-50/50 p-4 lg:flex-row lg:items-center lg:justify-between"
-                      >
-                        <div className="space-y-1 text-sm">
-                          <p className="font-semibold text-slate-900">
-                            {registration.buyer.name} · {registration.auction.listing.title}
-                          </p>
-                          <p className="text-slate-600">{registration.buyer.email}</p>
-                          <p className="text-slate-600">
-                            {registration.currency} {Number(registration.feeAmount).toLocaleString()} · {registration.paymentMethod || "Payment method unavailable"}
-                          </p>
-                          <p className="font-mono text-xs text-slate-500">
-                            Reference: {registration.txRef || "—"} · Submitted {new Date(registration.createdAt).toLocaleString()}
-                          </p>
-                          {registration.paymentProofUrl ? (
-                            <a
-                              href={registration.paymentProofUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 font-semibold text-blue-600 underline"
-                            >
-                              Open payment receipt <ExternalLink size={13} />
-                            </a>
-                          ) : (
-                            <p className="font-semibold text-rose-600">No payment receipt link was submitted.</p>
-                          )}
-                          <input
-                            value={buyerRegistrationNotes[registration.id] || ""}
-                            maxLength={500}
-                            onChange={(event) => {
-                              setBuyerRegistrationNotes((previous) => ({
-                                ...previous,
-                                [registration.id]: event.target.value,
-                              }));
-                            }}
-                            placeholder="Optional note if rejecting"
-                            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
-                          />
-                        </div>
-                        <div className="flex shrink-0 gap-2">
-                          <button
-                            disabled={isPending}
-                            onClick={() => {
-                              startTransition(async () => {
-                                const result = await adminConfirmBuyerRegistrationAction(
-                                  registration.id,
-                                  "REJECTED",
-                                  buyerRegistrationNotes[registration.id] || "",
-                                );
-                                setActionMsg(result);
-                                if (result.success) router.refresh();
-                              });
-                            }}
-                            className="rounded-lg border border-rose-200 px-4 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
-                          >
-                            Reject
-                          </button>
-                          <button
-                            disabled={isPending || !registration.paymentProofUrl}
-                            onClick={() => {
-                              startTransition(async () => {
-                                const result = await adminConfirmBuyerRegistrationAction(registration.id, "PAID");
-                                setActionMsg(result);
-                                if (result.success) router.refresh();
-                              });
-                            }}
-                            className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                          >
-                            Approve & enable bidding
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-400">
+                          <th className="pb-3 font-semibold">Payer</th>
+                          <th className="pb-3 font-semibold">Auction / Listing</th>
+                          <th className="pb-3 font-semibold">Amount</th>
+                          <th className="pb-3 font-semibold">Method</th>
+                          <th className="pb-3 font-semibold">Status</th>
+                          <th className="pb-3 font-semibold">Date</th>
+                          <th className="pb-3 font-semibold">Proof</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {paginatedEntryFeePayments.map((fee) => (
+                          <tr key={`${fee.role}-${fee.id}`} className="hover:bg-slate-50">
+                            <td className="py-3">
+                              <span
+                                className={`mb-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                  fee.role === "BUYER"
+                                    ? "bg-blue-50 text-blue-700"
+                                    : "bg-violet-50 text-violet-700"
+                                }`}
+                              >
+                                {fee.role}
+                              </span>
+                              <div className="font-medium text-slate-900">
+                                {fee.payer.name}
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                {fee.payer.email}
+                              </div>
+                            </td>
+                            <td className="py-3 text-slate-700">
+                              {fee.auctionTitle}
+                            </td>
+                            <td className="py-3 font-semibold text-slate-900">
+                              {fee.amount.toLocaleString()} {fee.currency}
+                            </td>
+                            <td className="py-3 text-slate-600">
+                              {fee.method || "—"}
+                            </td>
+                            <td className="py-3">
+                              <span
+                                className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                                  fee.status === "CONFIRMED" ||
+                                  fee.status === "PAID"
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : fee.status === "FAILED"
+                                      ? "bg-rose-50 text-rose-700"
+                                      : fee.status === "UNPAID"
+                                        ? "bg-slate-100 text-slate-700"
+                                        : fee.status === "SUPERSEDED"
+                                          ? "bg-violet-50 text-violet-700"
+                                              : fee.status === "REJECTED"
+                                                ? "bg-rose-50 text-rose-700"
+                                                  : fee.status === "WAIVED"
+                                                    ? "bg-blue-50 text-blue-700"
+                                                    : "bg-amber-50 text-amber-700"
+                                }`}
+                              >
+                                {fee.status}
+                              </span>
+                            </td>
+                            <td className="py-3 text-slate-600">
+                              {new Date(fee.confirmedAt || fee.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="py-3">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedEntryFee(fee)}
+                                className="inline-flex items-center gap-1 font-semibold text-blue-600 underline"
+                              >
+                                View <ExternalLink size={12} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
+                <Pagination
+                  currentPage={entryFeePage}
+                  totalPages={entryFeeTotalPages}
+                  totalItems={filteredEntryFeePayments.length}
+                  pageSize={entryFeePageSize}
+                  onPageChange={setEntryFeePage}
+                  onPageSizeChange={setEntryFeePageSize}
+                  pageSizeOptions={[10, 25, 50]}
+                  itemName="entry-fee records"
+                  className="pt-2 border-t border-slate-100"
+                />
               </section>
 
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">
-                  Escrow Deposit & Settlement Verification
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Verify bank wire receipts, approve escrow funds, and mark
-                  conveyances as settled.
-                </p>
-              </div>
+              {selectedEntryFee && (
+                <div
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+                  role="presentation"
+                  onMouseDown={(event) => {
+                    if (event.target === event.currentTarget) {
+                      setSelectedEntryFee(null);
+                    }
+                  }}
+                >
+                  <section
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="entry-fee-details-title"
+                    className="max-h-[90vh] w-full max-w-3xl space-y-5 overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+                  >
+                    <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+                      <div>
+                        <div
+                          className={`mb-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            selectedEntryFee.role === "BUYER"
+                              ? "bg-blue-50 text-blue-700"
+                              : "bg-violet-50 text-violet-700"
+                          }`}
+                        >
+                          {selectedEntryFee.role}
+                        </div>
+                        <h3
+                          id="entry-fee-details-title"
+                          className="text-lg font-bold text-slate-900"
+                        >
+                          {selectedEntryFee.payer.name}
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Complete payer and entry-fee details
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedEntryFee(null)}
+                        aria-label="Close payment details"
+                        className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
 
-              {payments.length === 0 ? (
-                <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
-                  No escrow deposit payments recorded yet.
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-slate-400">
-                        <th className="pb-3 font-semibold">Reference</th>
-                        <th className="pb-3 font-semibold">Property / Auction</th>
-                        <th className="pb-3 font-semibold">Payer</th>
-                        <th className="pb-3 font-semibold">Amount</th>
-                        <th className="pb-3 font-semibold">Proof / Slip</th>
-                        <th className="pb-3 font-semibold">Status</th>
-                        <th className="pb-3 font-semibold text-right">
-                          Verification
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {payments.map((p) => (
-                        <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-3 font-mono font-semibold text-slate-900">
-                            <div>{p.transactionRef ?? "—"}</div>
-                            {p.createdAt && (
-                              <div className="text-[10px] text-slate-400 font-normal">
-                                {new Date(p.createdAt).toLocaleDateString()}
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <section className="rounded-xl border border-slate-200 p-4">
+                        <h4 className="mb-3 text-sm font-bold text-slate-900">
+                          Payer information
+                        </h4>
+                        <dl className="space-y-2 text-xs">
+                          <div>
+                            <dt className="text-slate-500">Full name</dt>
+                            <dd className="font-semibold text-slate-900">
+                              {selectedEntryFee.payer.name}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Email</dt>
+                            <dd className="break-all text-slate-900">
+                              {selectedEntryFee.payer.email}
+                              {selectedEntryFee.role === "BUYER"
+                                ? selectedEntryFee.payerDetails.emailVerified
+                                  ? " (verified)"
+                                  : " (not verified)"
+                                : ""}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Phone</dt>
+                            <dd className="text-slate-900">
+                              {selectedEntryFee.payerDetails.phone ||
+                                "Not provided"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Account status</dt>
+                            <dd className="text-slate-900">
+                              {selectedEntryFee.payerDetails.accountStatus}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Account created</dt>
+                            <dd className="text-slate-900">
+                              {new Date(
+                                selectedEntryFee.payerDetails.joinedAt,
+                              ).toLocaleString()}
+                            </dd>
+                          </div>
+                          {selectedEntryFee.role === "BUYER" ? (
+                            <>
+                              <div>
+                                <dt className="text-slate-500">Address</dt>
+                                <dd className="text-slate-900">
+                                  {selectedEntryFee.payerDetails.address ||
+                                    "Not provided"}
+                                </dd>
                               </div>
-                            )}
-                          </td>
-                          <td className="py-3 text-slate-700 max-w-xs truncate font-medium">
-                            {p.auctionResult?.auction.listing.title || "Auction Settlement"}
-                          </td>
-                          <td className="py-3 text-slate-600">
-                            <div className="font-medium text-slate-900">{p.payer?.name ?? "—"}</div>
-                            <div className="text-[10px] text-slate-400">{p.payer?.email}</div>
-                          </td>
-                          <td className="py-3 font-bold text-slate-900">
-                            {Number(p.amount).toLocaleString()} {p.currency || "ETB"}
-                          </td>
-                          <td className="py-3">
-                            {p.receiptUrl ? (
-                              <a
-                                href={p.receiptUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-700 underline"
-                              >
-                                View slip <ExternalLink size={12} />
-                              </a>
-                            ) : (
-                              <span className="text-slate-400 italic">None</span>
-                            )}
-                          </td>
-                          <td className="py-3">
-                            <span
-                              className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${p.status === "PAID"
-                                ? "bg-emerald-50 text-emerald-700"
-                                : p.status === "FAILED"
-                                  ? "bg-rose-50 text-rose-700"
-                                  : "bg-amber-50 text-amber-700"
-                                }`}
-                            >
-                              {p.status}
-                            </span>
-                          </td>
-                          <td className="py-3 text-right">
-                            {p.status !== "PAID" ? (
-                              <button
-                                onClick={() => setVerifyingPayment(p)}
-                                className="rounded-lg bg-blue-600 px-3 py-1 font-semibold text-white hover:bg-blue-700 shadow-sm"
-                              >
-                                Verify Deposit
-                              </button>
-                            ) : (
-                              <span className="text-emerald-600 font-semibold inline-flex items-center gap-1">
-                                ✓ Verified
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                              <div>
+                                <dt className="text-slate-500">
+                                  Preferred location
+                                </dt>
+                                <dd className="text-slate-900">
+                                  {selectedEntryFee.payerDetails
+                                    .preferredLocation || "Not provided"}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-slate-500">
+                                  Buyer profile verification
+                                </dt>
+                                <dd className="text-slate-900">
+                                  {selectedEntryFee.payerDetails.isVerified
+                                    ? "Verified"
+                                    : "Not verified"}
+                                </dd>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div>
+                                <dt className="text-slate-500">Business name</dt>
+                                <dd className="text-slate-900">
+                                  {selectedEntryFee.payerDetails.businessName ||
+                                    "Not provided"}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-slate-500">National ID</dt>
+                                <dd className="text-slate-900">
+                                  {selectedEntryFee.payerDetails.nationalIdNumber ||
+                                    "Not provided"}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-slate-500">Tax ID</dt>
+                                <dd className="text-slate-900">
+                                  {selectedEntryFee.payerDetails.taxId ||
+                                    "Not provided"}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-slate-500">
+                                  Seller address
+                                </dt>
+                                <dd className="text-slate-900">
+                                  {selectedEntryFee.payerDetails.identityAddress ||
+                                    "Not provided"}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-slate-500">
+                                  Seller verification
+                                </dt>
+                                <dd className="text-slate-900">
+                                  {selectedEntryFee.payerDetails
+                                    .verificationStatus || "No profile"}
+                                </dd>
+                              </div>
+                            </>
+                          )}
+                        </dl>
+                        {selectedEntryFee.payerDetails.idDocumentUrl ? (
+                          <a
+                            href={selectedEntryFee.payerDetails.idDocumentUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-4 inline-flex items-center gap-1 rounded-lg bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 underline"
+                          >
+                            Open identification document{" "}
+                            <ExternalLink size={12} />
+                          </a>
+                        ) : (
+                          <p className="mt-4 text-xs text-slate-400">
+                            No identification document available.
+                          </p>
+                        )}
+                      </section>
+
+                      <section className="rounded-xl border border-slate-200 p-4">
+                        <h4 className="mb-3 text-sm font-bold text-slate-900">
+                          Entry-fee payment details
+                        </h4>
+                        <dl className="space-y-2 text-xs">
+                          <div>
+                            <dt className="text-slate-500">Auction / listing</dt>
+                            <dd className="font-semibold text-slate-900">
+                              {selectedEntryFee.auctionTitle}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Amount</dt>
+                            <dd className="font-semibold text-slate-900">
+                              {selectedEntryFee.amount.toLocaleString()}{" "}
+                              {selectedEntryFee.currency}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Payment status</dt>
+                            <dd className="font-semibold text-slate-900">
+                              {selectedEntryFee.status}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Payment method</dt>
+                            <dd className="text-slate-900">
+                              {selectedEntryFee.method || "Not provided"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">
+                              Transaction reference
+                            </dt>
+                            <dd className="break-all font-mono text-slate-900">
+                              {selectedEntryFee.transactionRef}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">Submitted</dt>
+                            <dd className="text-slate-900">
+                              {new Date(
+                                selectedEntryFee.createdAt,
+                              ).toLocaleString()}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-slate-500">
+                              Confirmed / paid at
+                            </dt>
+                            <dd className="text-slate-900">
+                              {selectedEntryFee.confirmedAt
+                                ? new Date(
+                                    selectedEntryFee.confirmedAt,
+                                  ).toLocaleString()
+                                : "Not confirmed"}
+                            </dd>
+                          </div>
+                        </dl>
+                        {selectedEntryFee.transactionUrl ? (
+                          <a
+                            href={selectedEntryFee.transactionUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-4 inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 underline"
+                          >
+                            Open transaction evidence{" "}
+                            <ExternalLink size={12} />
+                          </a>
+                        ) : (
+                          <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+                            No transaction evidence link is available for this
+                            payment record.
+                          </p>
+                        )}
+                      </section>
+                    </div>
+                  </section>
                 </div>
               )}
+
             </div>
           )}
 
@@ -1587,7 +2669,7 @@ export function AdminDashboardClient({
               </div>
 
               <div className="space-y-4">
-                {tickets.map((t) => (
+                {paginatedTickets.map((t) => (
                   <div
                     key={t.id}
                     className="rounded-2xl border border-slate-200 p-5 space-y-3 text-xs"
@@ -1605,10 +2687,11 @@ export function AdminDashboardClient({
                         </h4>
                       </div>
                       <span
-                        className={`rounded-full px-2.5 py-0.5 font-bold ${t.status === "RESOLVED"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "bg-amber-50 text-amber-700"
-                          }`}
+                        className={`rounded-full px-2.5 py-0.5 font-bold ${
+                          t.status === "RESOLVED"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-amber-50 text-amber-700"
+                        }`}
                       >
                         {t.status}
                       </span>
@@ -1637,6 +2720,17 @@ export function AdminDashboardClient({
                   </div>
                 ))}
               </div>
+              <Pagination
+                currentPage={ticketsPage}
+                totalPages={ticketsTotalPages}
+                totalItems={ticketsTotal}
+                pageSize={ticketsPageSize}
+                onPageChange={setTicketsPage}
+                onPageSizeChange={setTicketsPageSize}
+                pageSizeOptions={[10, 20, 50]}
+                itemName="tickets"
+                className="mt-6 pt-4 border-t border-slate-100"
+              />
             </div>
           )}
 
@@ -1849,7 +2943,8 @@ export function AdminDashboardClient({
                   Admin notifications
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Delete a notification from your account. This does not delete its related inquiry or other users&apos; notifications.
+                  Delete a notification from your account. This does not delete
+                  its related inquiry or other users&apos; notifications.
                 </p>
               </div>
               {notifications.length === 0 ? (
@@ -1864,13 +2959,14 @@ export function AdminDashboardClient({
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {notifications.map((notification) => (
+                  {paginatedNotifications.map((notification) => (
                     <article
                       key={notification.id}
-                      className={`flex items-start justify-between gap-4 rounded-xl border p-4 ${notification.readAt
-                        ? "border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/50"
-                        : "border-blue-100 bg-blue-50/60 dark:border-blue-900 dark:bg-blue-950/30"
-                        }`}
+                      className={`flex items-start justify-between gap-4 rounded-xl border p-4 ${
+                        notification.readAt
+                          ? "border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/50"
+                          : "border-blue-100 bg-blue-50/60 dark:border-blue-900 dark:bg-blue-950/30"
+                      }`}
                     >
                       <div className="flex min-w-0 items-start gap-3">
                         <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
@@ -1903,7 +2999,12 @@ export function AdminDashboardClient({
                         type="button"
                         disabled={isPending}
                         onClick={() => {
-                          if (!window.confirm("Delete this notification? This will not delete the inquiry or other users’ copies.")) return;
+                          if (
+                            !window.confirm(
+                              "Delete this notification? This will not delete the inquiry or other users’ copies.",
+                            )
+                          )
+                            return;
                           startTransition(async () => {
                             await deleteNotificationAction(notification.id);
                           });
@@ -1917,6 +3018,17 @@ export function AdminDashboardClient({
                   ))}
                 </div>
               )}
+              <Pagination
+                currentPage={notifsPage}
+                totalPages={notifsTotalPages}
+                totalItems={notifsTotal}
+                pageSize={notifsPageSize}
+                onPageChange={setNotifsPage}
+                onPageSizeChange={setNotifsPageSize}
+                pageSizeOptions={[5, 10, 20]}
+                itemName="notifications"
+                className="mt-6 pt-4 border-t border-slate-100"
+              />
             </section>
           )}
 
@@ -1955,7 +3067,7 @@ export function AdminDashboardClient({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {auditLogs.map((a) => (
+                    {paginatedAuditLogs.map((a) => (
                       <tr key={a.id} className="hover:bg-slate-50">
                         <td className="py-3 font-mono font-bold text-slate-900">
                           {a.action}
@@ -1979,602 +3091,552 @@ export function AdminDashboardClient({
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                currentPage={auditPage}
+                totalPages={auditTotalPages}
+                totalItems={auditTotal}
+                pageSize={auditPageSize}
+                onPageChange={setAuditPage}
+                onPageSizeChange={setAuditPageSize}
+                pageSizeOptions={[10, 25, 50]}
+                itemName="audit records"
+                className="mt-4 pt-3 border-t border-slate-100"
+              />
             </div>
           )}
         </main>
       </div>
 
-      {/* ─────────────────── MODAL: REVIEW KYC ─────────────────── */}
-      {reviewingKyc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-5 animate-in fade-in">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <span className="font-bold text-blue-600">
-                Review Seller Verification
-              </span>
-              <button onClick={() => setReviewingKyc(null)}>
-                <X size={18} />
-              </button>
-            </div>
+      {/* ─────────────────── FULL-PAGE LISTING REVIEW ─────────────────── */}
+      {reviewingListing &&
+        (() => {
+          const auc = reviewingListing.auctions?.[0];
+          const fee = reviewingListing.entryFees?.[0] || auc?.entryFees?.[0];
+          const profile = reviewingListing.seller.sellerProfile;
+          const nationalId =
+            reviewingListing.ownerNationalId || profile?.nationalIdNumber;
 
-            <div className="space-y-2 text-xs">
-              <div>
-                <span className="text-slate-400 block">Seller Name</span>
-                <strong className="text-sm text-slate-900">
-                  {reviewingKyc.user.name}
-                </strong>
-              </div>
-              <div>
-                <span className="text-slate-400 block">National ID Number</span>
-                <span className="font-mono text-slate-800">
-                  {reviewingKyc.nationalIdNumber}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-400 block">Business Name</span>
-                <span>{reviewingKyc.businessName || "Individual Owner"}</span>
-              </div>
-              <div>
-                <span className="text-slate-400 block">Address</span>
-                <span>{reviewingKyc.address}</span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Review Feedback Note
-              </label>
-              <textarea
-                value={kycNote}
-                onChange={(e) => setKycNote(e.target.value)}
-                placeholder="Optional feedback..."
-                className="w-full rounded-xl border border-slate-200 p-2.5 text-xs outline-none focus:border-blue-600"
-              />
-            </div>
-
-            <div className="flex items-center gap-3 pt-2 text-xs">
-              <button
-                onClick={() => {
-                  const formData = new FormData();
-                  formData.append("sellerProfileId", reviewingKyc.id);
-                  formData.append("status", "REJECTED");
-                  formData.append("reviewNote", kycNote);
-                  startTransition(async () => {
-                    const res = await verifySellerKycAction(formData);
-                    setActionMsg(res);
-                    setReviewingKyc(null);
-                  });
-                }}
-                className="flex-1 rounded-xl border border-rose-200 py-2.5 font-bold text-rose-600 hover:bg-rose-50"
-              >
-                Reject KYC
-              </button>
-              <button
-                onClick={() => {
-                  const formData = new FormData();
-                  formData.append("sellerProfileId", reviewingKyc.id);
-                  formData.append("status", "APPROVED");
-                  formData.append("reviewNote", kycNote);
-                  startTransition(async () => {
-                    const res = await verifySellerKycAction(formData);
-                    setActionMsg(res);
-                    setReviewingKyc(null);
-                  });
-                }}
-                className="flex-1 rounded-xl bg-blue-600 py-2.5 font-bold text-white hover:bg-blue-700"
-              >
-                Approve Seller
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─────────────────── MODAL: FULL INSPECTION & LIVE APPROVAL ─────────────────── */}
-      {reviewingListing && (() => {
-        const auc = reviewingListing.auctions?.[0];
-        const fee = reviewingListing.entryFees?.[0] || auc?.entryFees?.[0];
-        const profile = reviewingListing.seller.sellerProfile;
-        const nationalId =
-          reviewingListing.ownerNationalId || profile?.nationalIdNumber;
-
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-            <div className="w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl space-y-6 animate-in fade-in text-xs">
-              {/* Header */}
-              <div className="flex items-start justify-between border-b border-slate-100 pb-4">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="rounded-full bg-blue-100 px-3 py-0.5 font-bold text-blue-700 text-[11px]">
-                      {reviewingListing.category.name}
-                    </span>
-                    <span className="rounded-full bg-amber-100 px-3 py-0.5 font-bold text-amber-800 text-[11px]">
-                      STATUS: {reviewingListing.status}
-                    </span>
-                    {reviewingListing.referenceNumber && (
-                      <span className="text-slate-400 font-mono">
-                        Ref: {reviewingListing.referenceNumber}
+          return (
+            <div className="fixed inset-0 z-40 overflow-y-auto bg-background text-slate-800 dark:text-slate-100 lg:pl-64">
+              <div className="mx-auto min-h-screen w-full max-w-[1800px] p-4 sm:p-6 lg:p-8 xl:px-10">
+                <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-5 text-xs shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:p-7">
+                {/* Header */}
+                <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="rounded-full bg-blue-100 px-3 py-0.5 font-bold text-blue-700 text-[11px]">
+                        {reviewingListing.category.name}
                       </span>
-                    )}
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-900">
-                    {reviewingListing.title}
-                  </h3>
-                  <p className="text-slate-500">
-                    {reviewingListing.city}
-                    {reviewingListing.region ? `, ${reviewingListing.region}` : ""}
-                    {reviewingListing.address ? ` • ${reviewingListing.address}` : ""}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setReviewingListing(null)}
-                  className="rounded-full bg-slate-100 p-2 text-slate-500 hover:bg-slate-200"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* 2-Column Details Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Left Column: Owner & Document Identity */}
-                <div className="space-y-4">
-                  {/* Owner Info Card */}
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
-                    <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-slate-800 font-bold text-sm">
-                      <User size={16} className="text-blue-600" />
-                      <h4>Owner & Seller Information</h4>
+                      <span
+                        className={`rounded-full px-3 py-0.5 font-bold text-[11px] ${getListingStatusClasses(reviewingListing.status)}`}
+                      >
+                        STATUS: {getListingStatusLabel(reviewingListing.status)}
+                      </span>
+                      {reviewingListing.referenceNumber && (
+                        <span className="text-slate-400 font-mono">
+                          Ref: {reviewingListing.referenceNumber}
+                        </span>
+                      )}
                     </div>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Full Name</span>
-                        <strong className="text-slate-900">
-                          {reviewingListing.seller.name}
-                        </strong>
+                    <h3 className="text-xl font-bold text-slate-900">
+                      {reviewingListing.title}
+                    </h3>
+                    <p className="text-slate-500">
+                      {reviewingListing.city}
+                      {reviewingListing.region
+                        ? `, ${reviewingListing.region}`
+                        : ""}
+                      {reviewingListing.address
+                        ? ` • ${reviewingListing.address}`
+                        : ""}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setReviewingListing(null);
+                      setRejectionReason("");
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    <X size={16} />
+                    Back to listings
+                  </button>
+                </div>
+
+                {/* 2-Column Details Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Left Column: Owner & Document Identity */}
+                  <div className="space-y-4">
+                    {/* Owner Info Card */}
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
+                      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-slate-800 font-bold text-sm">
+                        <User size={16} className="text-blue-600" />
+                        <h4>Owner & Seller Information</h4>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Email</span>
-                        <span className="font-mono text-slate-700">
-                          {reviewingListing.seller.email}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Phone</span>
-                        <span className="font-medium text-slate-800">
-                          {reviewingListing.seller.phone || "Not specified"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Business / Trade Name</span>
-                        <span className="text-slate-800">
-                          {profile?.businessName || "Individual Owner"}
-                        </span>
-                      </div>
-                      {profile?.taxId && (
+                      <div className="space-y-1.5">
                         <div className="flex justify-between">
-                          <span className="text-slate-500">Tax ID (TIN)</span>
+                          <span className="text-slate-500">Full Name</span>
+                          <strong className="text-slate-900">
+                            {reviewingListing.seller.name}
+                          </strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Email</span>
                           <span className="font-mono text-slate-700">
-                            {profile.taxId}
+                            {reviewingListing.seller.email}
                           </span>
                         </div>
-                      )}
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Registered Address</span>
-                        <span className="text-slate-700 text-right max-w-[200px] truncate">
-                          {profile?.address || reviewingListing.address || "—"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center pt-1 border-t border-slate-200">
-                        <span className="text-slate-500">Seller KYC Status</span>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${profile?.status === "APPROVED"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : "bg-amber-100 text-amber-800"
-                            }`}
-                        >
-                          {profile?.status || "PENDING"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Documents & Verification Card */}
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
-                    <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-slate-800 font-bold text-sm">
-                      <ShieldCheck size={16} className="text-emerald-600" />
-                      <h4>Identity & Legal Documentation</h4>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-500">National ID Number</span>
-                        <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
-                          {nationalId || "Not recorded"}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-500">National ID Document</span>
-                        {reviewingListing.idDocumentMediaId ? (
-                          <a
-                            href={`/api/media/${reviewingListing.idDocumentMediaId}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-1 font-bold text-blue-600 hover:underline bg-white px-2.5 py-1 rounded-lg border border-blue-200"
-                          >
-                            <FileText size={13} /> View ID Document
-                          </a>
-                        ) : profile?.idDocumentUrl ? (
-                          <a
-                            href={profile.idDocumentUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-1 font-bold text-blue-600 hover:underline bg-white px-2.5 py-1 rounded-lg border border-blue-200"
-                          >
-                            <FileText size={13} /> View KYC Document
-                          </a>
-                        ) : (
-                          <span className="text-rose-500 font-semibold">
-                            Not uploaded
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Phone</span>
+                          <span className="font-medium text-slate-800">
+                            {reviewingListing.seller.phone || "Not specified"}
                           </span>
-                        )}
-                      </div>
-
-                      {/* Title Deed / Ownership Documents */}
-                      <div className="space-y-1.5 pt-1 border-t border-slate-200">
-                        <span className="text-slate-500 font-semibold block">
-                          Legal Deeds & Ownership Certificates
-                        </span>
-                        {reviewingListing.documents &&
-                          reviewingListing.documents.length > 0 ? (
-                          <div className="space-y-1">
-                            {reviewingListing.documents.map((doc) => (
-                              <div
-                                key={doc.id}
-                                className="flex items-center justify-between rounded-lg bg-white p-2 border border-slate-200"
-                              >
-                                <div>
-                                  <p className="font-bold text-slate-900">
-                                    {doc.title}
-                                  </p>
-                                  <p className="text-[10px] text-slate-400 uppercase">
-                                    {doc.documentType}
-                                  </p>
-                                </div>
-                                <a
-                                  href={doc.fileUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="font-bold text-blue-600 hover:underline flex items-center gap-1 text-[11px]"
-                                >
-                                  <ExternalLink size={12} /> Open File
-                                </a>
-                              </div>
-                            ))}
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">
+                            Business / Trade Name
+                          </span>
+                          <span className="text-slate-800">
+                            {profile?.businessName || "Individual Owner"}
+                          </span>
+                        </div>
+                        {profile?.taxId && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Tax ID (TIN)</span>
+                            <span className="font-mono text-slate-700">
+                              {profile.taxId}
+                            </span>
                           </div>
-                        ) : (
-                          <p className="text-rose-600 text-[11px]">
-                            No ownership documents attached.
-                          </p>
                         )}
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">
+                            Registered Address
+                          </span>
+                          <span className="text-slate-700 text-right max-w-[200px] truncate">
+                            {profile?.address ||
+                              reviewingListing.address ||
+                              "—"}
+                          </span>
+                        </div>
+
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Documents & Verification Card */}
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
+                      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-slate-800 font-bold text-sm">
+                        <ShieldCheck size={16} className="text-emerald-600" />
+                        <h4>Identity & Legal Documentation</h4>
                       </div>
 
-                      {/* Biometric Verification */}
-                      <div className="pt-1 border-t border-slate-200">
-                        {reviewingListing.biometricVerification ? (
-                          <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-2 text-emerald-800 border border-emerald-200">
-                            <Fingerprint size={18} className="text-emerald-600" />
-                            <div>
-                              <p className="font-bold">
-                                Passkey Fingerprint Signed on Device
-                              </p>
-                              <p className="text-[10px] text-emerald-600">
-                                Method:{" "}
-                                {reviewingListing.biometricVerification.method ||
-                                  "WebAuthn"}{" "}
-                                ·{" "}
-                                {new Date(
-                                  reviewingListing.biometricVerification.createdAt!,
-                                ).toLocaleString()}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500">
+                            National ID Number
+                          </span>
+                          <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
+                            {nationalId || "Not recorded"}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500">
+                            National ID Document
+                          </span>
+                          {reviewingListing.idDocumentMediaId ? (
+                            <a
+                              href={`/api/media/${reviewingListing.idDocumentMediaId}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-1 font-bold text-blue-600 hover:underline bg-white px-2.5 py-1 rounded-lg border border-blue-200"
+                            >
+                              <FileText size={13} /> View ID Document
+                            </a>
+                          )  : (
+                            <span className="text-rose-500 font-semibold">
+                              Not uploaded
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Title Deed / Ownership Documents */}
+                        <div className="space-y-1.5 pt-1 border-t border-slate-200">
+                          <span className="text-slate-500 font-semibold block">
+                            Legal Deeds & Ownership Certificates
+                          </span>
+                          {reviewingListing.documents &&
+                          reviewingListing.documents.length > 0 ? (
+                            <div className="space-y-1">
+                              {reviewingListing.documents.map((doc) => (
+                                <div
+                                  key={doc.id}
+                                  className="flex items-center justify-between rounded-lg bg-white p-2 border border-slate-200"
+                                >
+                                  <div>
+                                    <p className="font-bold text-slate-900">
+                                      {doc.title}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 uppercase">
+                                      {doc.documentType}
+                                    </p>
+                                  </div>
+                                  <a
+                                    href={doc.fileUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="font-bold text-blue-600 hover:underline flex items-center gap-1 text-[11px]"
+                                  >
+                                    <ExternalLink size={12} /> Open File
+                                  </a>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-rose-600 text-[11px]">
+                              No ownership documents attached.
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Biometric Verification */}
+                        <div className="pt-1 border-t border-slate-200">
+                          {reviewingListing.biometricVerification ? (
+                            <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-2 text-emerald-800 border border-emerald-200">
+                              <Fingerprint
+                                size={18}
+                                className="text-emerald-600"
+                              />
+                              <div>
+                                <p className="font-bold">
+                                  Passkey Fingerprint Signed on Device
+                                </p>
+                                <p className="text-[10px] text-emerald-600">
+                                  Method:{" "}
+                                  {reviewingListing.biometricVerification
+                                    .method || "WebAuthn"}{" "}
+                                  ·{" "}
+                                  {new Date(
+                                    reviewingListing.biometricVerification
+                                      .createdAt!,
+                                  ).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 rounded-lg bg-amber-50 p-2 text-amber-800 border border-amber-200">
+                              <ShieldCheck
+                                size={18}
+                                className="text-amber-600"
+                              />
+                              <p className="text-[11px]">
+                                Standard authenticated session (No device
+                                passkey)
                               </p>
                             </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 rounded-lg bg-amber-50 p-2 text-amber-800 border border-amber-200">
-                            <ShieldCheck size={18} className="text-amber-600" />
-                            <p className="text-[11px]">
-                              Standard authenticated session (No device passkey)
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right Column: Auction Terms, Entry Fee, & Photos */}
-                <div className="space-y-4">
-                  {/* Auction Terms Card */}
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
-                    <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-slate-800 font-bold text-sm">
-                      <Gavel size={16} className="text-blue-600" />
-                      <h4>Auction Pricing & Schedule</h4>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Starting Price</span>
-                        <strong className="text-base text-slate-900 font-black">
-                          {auc
-                            ? `${Number(auc.startingPrice).toLocaleString()} ETB`
-                            : "Not scheduled yet"}
-                        </strong>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Reserve Price</span>
-                        <span className="font-semibold text-slate-800">
-                          {auc?.reservePrice
-                            ? `${Number(auc.reservePrice).toLocaleString()} ETB`
-                            : "None (No Reserve)"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Min Bid Increment</span>
-                        <span className="font-semibold text-slate-800">
-                          {auc
-                            ? `${Number(auc.minBidIncrement).toLocaleString()} ETB`
-                            : "—"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Scheduled Starts At</span>
-                        <span className="font-medium text-slate-800">
-                          {auc ? new Date(auc.startAt).toLocaleString() : "—"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Scheduled Ends At</span>
-                        <span className="font-medium text-slate-800">
-                          {auc ? new Date(auc.endAt).toLocaleString() : "—"}
-                        </span>
-                      </div>
-                      {auc?.terms && (
-                        <div className="border-t border-slate-200 pt-1 text-slate-600 text-[11px]">
-                          <strong>Seller Terms:</strong> {auc.terms}
+                          )}
                         </div>
-                      )}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Entry Fee Payment Card */}
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                      <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
-                        <CreditCard size={16} className="text-emerald-600" />
-                        <h4>Listing Entry Fee Verification</h4>
+                  {/* Right Column: Auction Terms, Entry Fee, & Photos */}
+                  <div className="space-y-4">
+                    {/* Auction Terms Card */}
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
+                      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-slate-800 font-bold text-sm">
+                        <Gavel size={16} className="text-blue-600" />
+                        <h4>Auction Pricing & Schedule</h4>
                       </div>
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${fee?.status === "CONFIRMED" ||
-                          reviewingListing.entryFeeStatus === "CONFIRMED"
-                          ? "bg-emerald-100 text-emerald-800"
-                          : "bg-amber-100 text-amber-800"
-                          }`}
-                      >
-                        {fee?.status ||
-                          reviewingListing.entryFeeStatus ||
-                          "UNPAID"}
-                      </span>
-                    </div>
 
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Fee Amount</span>
-                        <strong className="text-sm font-bold text-emerald-700">
-                          {fee
-                            ? `${Number(fee.amount).toLocaleString()} ${fee.currency || "ETB"}`
-                            : "Pending quotation"}
-                        </strong>
-                      </div>
-                      {fee?.ratePercent && (
+                      <div className="space-y-1.5">
                         <div className="flex justify-between">
-                          <span className="text-slate-500">Fee Rate</span>
-                          <span className="text-slate-700">
-                            {fee.ratePercent}% of starting price
+                          <span className="text-slate-500">Starting Price</span>
+                          <strong className="text-base text-slate-900 font-black">
+                            {auc
+                              ? `${Number(auc.startingPrice).toLocaleString()} ETB`
+                              : "Not scheduled yet"}
+                          </strong>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Reserve Price</span>
+                          <span className="font-semibold text-slate-800">
+                            {auc?.reservePrice
+                              ? `${Number(auc.reservePrice).toLocaleString()} ETB`
+                              : "None (No Reserve)"}
                           </span>
                         </div>
-                      )}
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Payment Method</span>
-                        <span className="font-semibold text-slate-800">
-                          {fee?.method || "BANK_TRANSFER"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-500">
-                          Bank / Transaction Reference
-                        </span>
-                        <span className="font-mono font-bold bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-900">
-                          {fee?.bankReference || fee?.txRef || "—"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center gap-3">
-                        <span className="text-slate-500">Transaction Link</span>
-                        <span className="max-w-[65%] truncate font-semibold bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-900">
-                          {fee?.transactionUrl ? (
-                            <a
-                              href={fee.transactionUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              aria-label="Open submitted transaction link"
-                              className="inline-flex items-center gap-1 text-blue-700 underline decoration-dotted underline-offset-2 hover:text-blue-800"
-                            >
-                              Open transaction details
-                              <ExternalLink size={12} />
-                            </a>
-                          ) : fee?.paymentProofMediaId ? (
-                            <a
-                              href={`/api/media/${encodeURIComponent(fee.paymentProofMediaId)}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              aria-label="Open legacy uploaded payment receipt"
-                              className="inline-flex items-center gap-1 text-blue-700 underline decoration-dotted underline-offset-2 hover:text-blue-800"
-                            >
-                              Open previous receipt
-                              <ExternalLink size={12} />
-                            </a>
-                          ) : (
-                            "—"
-                          )}
-                        </span>
-                      </div>
-                      {!fee?.transactionUrl &&
-                        !fee?.paymentProofMediaId &&
-                        fee?.method === "CHAPA" ? (
-                        <p className="text-[11px] text-emerald-700">
-                          Online payment is verified through Chapa.
-                        </p>
-                      ) : !fee?.transactionUrl && !fee?.paymentProofMediaId ? (
-                        <p className="text-[11px] text-amber-700">
-                          No transaction link was submitted.
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {/* Photos & Video Preview */}
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2">
-                    <h4 className="font-bold text-slate-800">
-                      Uploaded Photos & Media ({reviewingListing.images?.length || 0})
-                    </h4>
-                    {reviewingListing.images &&
-                      reviewingListing.images.length > 0 ? (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        {reviewingListing.images.map((img, idx) => (
-                          <a
-                            key={idx}
-                            href={img.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="aspect-square rounded-lg overflow-hidden border border-slate-200 bg-white"
-                          >
-                            <img
-                              src={img.url}
-                              alt="Item"
-                              className="w-full h-full object-cover hover:scale-105 transition"
-                            />
-                          </a>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-slate-400 text-[11px]">No photos uploaded.</p>
-                    )}
-
-                    {reviewingListing.videoUrl && (
-                      <div className="pt-2">
-                        <p className="font-bold text-slate-700 mb-1 flex items-center gap-1">
-                          <Video size={14} /> Item Video Post:
-                        </p>
-                        {reviewingListing.videoUrl.startsWith("/") ? (
-                          <video
-                            src={reviewingListing.videoUrl}
-                            controls
-                            preload="metadata"
-                            className="w-full max-h-40 rounded-xl bg-black"
-                          />
-                        ) : (
-                          <a
-                            href={reviewingListing.videoUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-                          >
-                            Open original social-media video post
-                            <ExternalLink size={14} />
-                          </a>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">
+                            Min Bid Increment
+                          </span>
+                          <span className="font-semibold text-slate-800">
+                            {auc
+                              ? `${Number(auc.minBidIncrement).toLocaleString()} ETB`
+                              : "—"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">
+                            Scheduled Starts At
+                          </span>
+                          <span className="font-medium text-slate-800">
+                            {auc ? new Date(auc.startAt).toLocaleString() : "—"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">
+                            Scheduled Ends At
+                          </span>
+                          <span className="font-medium text-slate-800">
+                            {auc ? new Date(auc.endAt).toLocaleString() : "—"}
+                          </span>
+                        </div>
+                        {auc?.terms && (
+                          <div className="border-t border-slate-200 pt-1 text-slate-600 text-[11px]">
+                            <strong>Seller Terms:</strong> {auc.terms}
+                          </div>
                         )}
                       </div>
-                    )}
+                    </div>
+
+                    {/* Entry Fee Payment Card */}
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                        <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
+                          <CreditCard size={16} className="text-emerald-600" />
+                          <h4>Listing Entry Fee Verification</h4>
+                        </div>
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+                            fee?.status === "CONFIRMED" ||
+                            reviewingListing.entryFeeStatus === "CONFIRMED"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {fee?.status ||
+                            reviewingListing.entryFeeStatus ||
+                            "UNPAID"}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Fee Amount</span>
+                          <strong className="text-sm font-bold text-emerald-700">
+                            {fee
+                              ? `${Number(fee.amount).toLocaleString()} ${fee.currency || "ETB"}`
+                              : "Pending quotation"}
+                          </strong>
+                        </div>
+                        {fee?.ratePercent && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Fee Rate</span>
+                            <span className="text-slate-700">
+                              {fee.ratePercent}% of starting price
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Payment Method</span>
+                          <span className="font-semibold text-slate-800">
+                            {fee?.method || "BANK_TRANSFER"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500">
+                            Bank / Transaction Reference
+                          </span>
+                          <span className="font-mono font-bold bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-900">
+                            {fee?.bankReference || fee?.txRef || "—"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center gap-3">
+                          <span className="text-slate-500">
+                            Transaction Link
+                          </span>
+                          <span className="max-w-[65%] truncate font-semibold bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-900">
+                            {fee?.transactionUrl ? (
+                              <a
+                                href={fee.transactionUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                aria-label="Open submitted transaction link"
+                                className="inline-flex items-center gap-1 text-blue-700 underline decoration-dotted underline-offset-2 hover:text-blue-800"
+                              >
+                                Open transaction details
+                                <ExternalLink size={12} />
+                              </a>
+                            ) : fee?.paymentProofMediaId ? (
+                              <a
+                                href={`/api/media/${encodeURIComponent(fee.paymentProofMediaId)}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                aria-label="Open legacy uploaded payment receipt"
+                                className="inline-flex items-center gap-1 text-blue-700 underline decoration-dotted underline-offset-2 hover:text-blue-800"
+                              >
+                                Open previous receipt
+                                <ExternalLink size={12} />
+                              </a>
+                            ) : (
+                              "—"
+                            )}
+                          </span>
+                        </div>
+                        {!fee?.transactionUrl &&
+                        !fee?.paymentProofMediaId &&
+                        fee?.method === "CHAPA" ? (
+                          <p className="text-[11px] text-emerald-700">
+                            Online payment is verified through Chapa.
+                          </p>
+                        ) : !fee?.transactionUrl &&
+                          !fee?.paymentProofMediaId ? (
+                          <p className="text-[11px] text-amber-700">
+                            No transaction link was submitted.
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {/* Photos & Video Preview */}
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2">
+                      <h4 className="font-bold text-slate-800">
+                        Uploaded Photos & Media (
+                        {reviewingListing.images?.length || 0})
+                      </h4>
+                      {reviewingListing.images &&
+                      reviewingListing.images.length > 0 ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {reviewingListing.images.map((img, idx) => (
+                            <a
+                              key={idx}
+                              href={img.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="aspect-square rounded-lg overflow-hidden border border-slate-200 bg-white"
+                            >
+                              <img
+                                src={img.url}
+                                alt="Item"
+                                className="w-full h-full object-cover hover:scale-105 transition"
+                              />
+                            </a>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-slate-400 text-[11px]">
+                          No photos uploaded.
+                        </p>
+                      )}
+
+                      {reviewingListing.videoUrl && (
+                        <div className="pt-2">
+                          <p className="font-bold text-slate-700 mb-1 flex items-center gap-1">
+                            <Video size={14} /> Item Video Post:
+                          </p>
+                          {reviewingListing.videoUrl.startsWith("/") ? (
+                            <video
+                              src={reviewingListing.videoUrl}
+                              controls
+                              preload="metadata"
+                              className="w-full max-h-40 rounded-xl bg-black"
+                            />
+                          ) : (
+                            <a
+                              href={reviewingListing.videoUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                            >
+                              Open original social-media video post
+                              <ExternalLink size={14} />
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Item Description & Features */}
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
-                <h4 className="font-bold text-slate-800">Item Description</h4>
-                <p className="text-slate-600 whitespace-pre-line leading-relaxed">
-                  {reviewingListing.description}
-                </p>
-                {reviewingListing.features &&
-                  reviewingListing.features.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-2">
-                      {reviewingListing.features.map((f, i) => (
-                        <span
-                          key={i}
-                          className="rounded-full bg-white border border-slate-200 px-2.5 py-0.5 text-[10px] font-medium text-slate-700"
-                        >
-                          {f}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-              </div>
-
-              {/* Rejection Note & Actions */}
-              <div className="border-t border-slate-200 pt-4 space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Rejection Reason (Required only if rejecting this listing)
-                  </label>
-                  <input
-                    value={rejectionReason}
-                    onChange={(e) => setRejectionReason(e.target.value)}
-                    placeholder="e.g. Unclear ownership deed, invalid national ID number, missing video..."
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs outline-none focus:border-blue-600"
-                  />
+                {/* Item Description & Features */}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
+                  <h4 className="font-bold text-slate-800">Item Description</h4>
+                  <p className="text-slate-600 whitespace-pre-line leading-relaxed">
+                    {reviewingListing.description}
+                  </p>
+                  {reviewingListing.features &&
+                    reviewingListing.features.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-2">
+                        {reviewingListing.features.map((f, i) => (
+                          <span
+                            key={i}
+                            className="rounded-full bg-white border border-slate-200 px-2.5 py-0.5 text-[10px] font-medium text-slate-700"
+                          >
+                            {f}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => {
-                      if (!rejectionReason.trim()) {
-                        alert("Please specify a reason for rejection.");
-                        return;
-                      }
-                      const formData = new FormData();
-                      formData.append("listingId", reviewingListing.id);
-                      formData.append("status", "REJECTED");
-                      formData.append("rejectionReason", rejectionReason);
-                      startTransition(async () => {
-                        const res = await reviewListingAction(formData);
-                        setActionMsg(res);
-                        setReviewingListing(null);
-                      });
-                    }}
-                    className="flex-1 rounded-xl border border-rose-200 py-3 font-bold text-rose-600 hover:bg-rose-50 transition"
-                  >
-                    Reject Listing
-                  </button>
-                  <button
-                    onClick={() => {
-                      const formData = new FormData();
-                      formData.append("listingId", reviewingListing.id);
-                      formData.append("status", "APPROVED");
-                      startTransition(async () => {
-                        const res = await reviewListingAction(formData);
-                        setActionMsg(res);
-                        setReviewingListing(null);
-                      });
-                    }}
-                    className="flex-2 rounded-xl bg-emerald-600 py-3 px-6 font-bold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition flex items-center justify-center gap-2"
-                  >
-                    <Gavel size={16} />
-                    Approve Full Listing & Launch to Live Bid
-                  </button>
+                {/* Rejection Note & Actions */}
+                <div className="border-t border-slate-200 pt-4 space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Rejection Reason (Required only if rejecting this listing)
+                    </label>
+                    <input
+                      value={rejectionReason}
+                      onChange={(e) => setRejectionReason(e.target.value)}
+                      placeholder="e.g. Unclear ownership deed, invalid national ID number, missing video..."
+                      className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs outline-none focus:border-blue-600"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => {
+                        if (!rejectionReason.trim()) {
+                          alert("Please specify a reason for rejection.");
+                          return;
+                        }
+                        const formData = new FormData();
+                        formData.append("listingId", reviewingListing.id);
+                        formData.append("status", "REJECTED");
+                        formData.append("rejectionReason", rejectionReason);
+                        startTransition(async () => {
+                          const res = await reviewListingAction(formData);
+                          setActionMsg(res);
+                          setReviewingListing(null);
+                        });
+                      }}
+                      className="flex-1 rounded-xl border border-rose-200 py-3 font-bold text-rose-600 hover:bg-rose-50 transition"
+                    >
+                      Reject Listing
+                    </button>
+                    <button
+                      onClick={() => {
+                        const formData = new FormData();
+                        formData.append("listingId", reviewingListing.id);
+                        formData.append("status", "APPROVED");
+                        startTransition(async () => {
+                          const res = await reviewListingAction(formData);
+                          setActionMsg(res);
+                          setReviewingListing(null);
+                        });
+                      }}
+                      className="flex-2 rounded-xl bg-emerald-600 py-3 px-6 font-bold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition flex items-center justify-center gap-2"
+                    >
+                      <Gavel size={16} />
+                      Approve Full Listing & Launch to Live Bid
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
 
       {/* Edit Listing Modal */}
       {showEditListingModal && selectedListingForEdit && (
@@ -2597,31 +3659,46 @@ export function AdminDashboardClient({
             <div className="p-6 space-y-4">
               {editListingMessage && (
                 <div
-                  className={`rounded-lg p-3 text-sm ${editListingMessage.error
-                    ? "bg-rose-50 text-rose-700"
-                    : "bg-emerald-50 text-emerald-700"
-                    }`}
+                  className={`rounded-lg p-3 text-sm ${
+                    editListingMessage.error
+                      ? "bg-rose-50 text-rose-700"
+                      : "bg-emerald-50 text-emerald-700"
+                  }`}
                 >
                   {editListingMessage.error || editListingMessage.message}
                 </div>
               )}
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1 text-xs">Title</label>
+                <label className="block font-semibold text-slate-700 mb-1 text-xs">
+                  Title
+                </label>
                 <input
                   type="text"
                   value={editListingForm.title}
-                  onChange={(e) => setEditListingForm({ ...editListingForm, title: e.target.value })}
+                  onChange={(e) =>
+                    setEditListingForm({
+                      ...editListingForm,
+                      title: e.target.value,
+                    })
+                  }
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
                   placeholder="Enter listing title"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1 text-xs">Description</label>
+                <label className="block font-semibold text-slate-700 mb-1 text-xs">
+                  Description
+                </label>
                 <textarea
                   value={editListingForm.description}
-                  onChange={(e) => setEditListingForm({ ...editListingForm, description: e.target.value })}
+                  onChange={(e) =>
+                    setEditListingForm({
+                      ...editListingForm,
+                      description: e.target.value,
+                    })
+                  }
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white min-h-[120px]"
                   placeholder="Enter detailed description"
                   rows={4}
@@ -2630,21 +3707,35 @@ export function AdminDashboardClient({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1 text-xs">City</label>
+                  <label className="block font-semibold text-slate-700 mb-1 text-xs">
+                    City
+                  </label>
                   <input
                     type="text"
                     value={editListingForm.city}
-                    onChange={(e) => setEditListingForm({ ...editListingForm, city: e.target.value })}
+                    onChange={(e) =>
+                      setEditListingForm({
+                        ...editListingForm,
+                        city: e.target.value,
+                      })
+                    }
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
                     placeholder="City"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1 text-xs">Region</label>
+                  <label className="block font-semibold text-slate-700 mb-1 text-xs">
+                    Region
+                  </label>
                   <input
                     type="text"
                     value={editListingForm.region}
-                    onChange={(e) => setEditListingForm({ ...editListingForm, region: e.target.value })}
+                    onChange={(e) =>
+                      setEditListingForm({
+                        ...editListingForm,
+                        region: e.target.value,
+                      })
+                    }
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
                     placeholder="Region"
                   />
@@ -2652,25 +3743,37 @@ export function AdminDashboardClient({
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1 text-xs">Address</label>
+                <label className="block font-semibold text-slate-700 mb-1 text-xs">
+                  Address
+                </label>
                 <input
                   type="text"
                   value={editListingForm.address}
-                  onChange={(e) => setEditListingForm({ ...editListingForm, address: e.target.value })}
+                  onChange={(e) =>
+                    setEditListingForm({
+                      ...editListingForm,
+                      address: e.target.value,
+                    })
+                  }
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
                   placeholder="Full address"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1 text-xs">Features (comma-separated)</label>
+                <label className="block font-semibold text-slate-700 mb-1 text-xs">
+                  Features (comma-separated)
+                </label>
                 <input
                   type="text"
                   value={editListingForm.features.join(", ")}
                   onChange={(e) =>
                     setEditListingForm({
                       ...editListingForm,
-                      features: e.target.value.split(",").map((f) => f.trim()).filter(Boolean),
+                      features: e.target.value
+                        .split(",")
+                        .map((f) => f.trim())
+                        .filter(Boolean),
                     })
                   }
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
@@ -2693,16 +3796,19 @@ export function AdminDashboardClient({
                   disabled={isPending}
                   onClick={() => {
                     startTransition(async () => {
-                      const result = await updateListingAction(selectedListingForEdit.id, editListingForm);
+                      const result = await updateListingAction(
+                        selectedListingForEdit.id,
+                        editListingForm,
+                      );
                       setEditListingMessage(result);
                       if (result.success) {
                         // Update local state instead of full page refresh
-                        setLocalListings(prevListings =>
-                          prevListings.map(l =>
+                        setLocalListings((prevListings) =>
+                          prevListings.map((l) =>
                             l.id === selectedListingForEdit.id
                               ? { ...l, ...editListingForm }
-                              : l
-                          )
+                              : l,
+                          ),
                         );
                         setTimeout(() => {
                           setShowEditListingModal(false);
@@ -2721,116 +3827,6 @@ export function AdminDashboardClient({
           </div>
         </div>
       )}
-      {/* ─────────────────── MODAL: VERIFY PAYMENT ─────────────────── */}
-      {verifyingPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-5 animate-in fade-in">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <span className="font-bold text-blue-600">
-                Verify Escrow Payment
-              </span>
-              <button onClick={() => setVerifyingPayment(null)}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              {verifyingPayment.auctionResult?.auction.listing.title && (
-                <div>
-                  <span className="text-slate-400 block">Property / Auction</span>
-                  <strong className="text-slate-900">
-                    {verifyingPayment.auctionResult.auction.listing.title}
-                  </strong>
-                </div>
-              )}
-              <div>
-                <span className="text-slate-400 block">Payer</span>
-                <strong className="text-slate-900">{verifyingPayment.payer?.name ?? "—"}</strong>
-                {verifyingPayment.payer?.email && (
-                  <span className="text-slate-500 block text-[11px]">{verifyingPayment.payer.email}</span>
-                )}
-              </div>
-              <div>
-                <span className="text-slate-400 block">Reference No.</span>
-                <span className="font-mono text-sm font-bold text-slate-800">
-                  {verifyingPayment.transactionRef || "—"}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-400 block">Deposit Amount</span>
-                <span className="text-base font-bold text-emerald-600">
-                  {Number(verifyingPayment.amount).toLocaleString()} {verifyingPayment.currency || "ETB"}
-                </span>
-              </div>
-              {verifyingPayment.receiptUrl && (
-                <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3">
-                  <span className="text-blue-900 font-semibold block mb-1">Bank Wire Slip / Receipt</span>
-                  <a
-                    href={verifyingPayment.receiptUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 font-bold text-blue-600 hover:text-blue-700 underline text-xs"
-                  >
-                    Open payment slip in new tab <ExternalLink size={13} />
-                  </a>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Verification Notes
-              </label>
-              <input
-                value={paymentNote}
-                onChange={(e) => setPaymentNote(e.target.value)}
-                placeholder="Confirmed into bank escrow (e.g. CBE, Telebirr, Awash)..."
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none focus:border-blue-600"
-              />
-            </div>
-
-            <div className="flex items-center gap-3 pt-2 text-xs">
-              <button
-                disabled={isPending}
-                onClick={() => {
-                  const formData = new FormData();
-                  formData.append("paymentId", verifyingPayment.id);
-                  formData.append("status", "FAILED");
-                  formData.append("notes", paymentNote);
-                  startTransition(async () => {
-                    const res = await verifyPaymentAction(formData);
-                    setActionMsg(res);
-                    if (res.success) router.refresh();
-                    setVerifyingPayment(null);
-                  });
-                }}
-                className="flex-1 rounded-xl border border-rose-200 py-2.5 font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-              >
-                Mark Failed
-              </button>
-              <button
-                disabled={isPending}
-                onClick={() => {
-                  const formData = new FormData();
-                  formData.append("paymentId", verifyingPayment.id);
-                  formData.append("status", "PAID");
-                  formData.append("notes", paymentNote);
-                  startTransition(async () => {
-                    const res = await verifyPaymentAction(formData);
-                    setActionMsg(res);
-                    if (res.success) router.refresh();
-                    setVerifyingPayment(null);
-                  });
-                }}
-                className="flex-1 rounded-xl bg-blue-600 py-2.5 font-bold text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                Confirm Escrow (PAID)
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ─────────────────── MODAL: RESOLVE TICKET ─────────────────── */}
       {resolvingTicket && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
@@ -2897,59 +3893,96 @@ export function AdminDashboardClient({
 
       {selectedBid && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setSelectedBid(null);
-          }}
+          className="fixed inset-0 z-40 overflow-y-auto bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 lg:pl-64"
         >
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="admin-bid-details-title"
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-900"
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Bid record</p>
-                <h2 id="admin-bid-details-title" className="mt-1 text-xl font-bold text-slate-900 dark:text-white">
-                  {selectedBid.auction?.listing?.title || "Auction bid"}
-                </h2>
+          <div className="mx-auto min-h-screen w-full max-w-[1800px] p-4 sm:p-6 lg:p-8 xl:px-10">
+            <section
+              aria-labelledby="admin-bid-details-title"
+              className="space-y-6"
+            >
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-7">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBid(null)}
+                      className="mb-4 inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      <span aria-hidden="true">←</span>
+                      Back to live bids
+                    </button>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">
+                      Live bid review
+                    </p>
+                    <h1
+                      id="admin-bid-details-title"
+                      className="mt-1 text-2xl font-bold text-slate-900 dark:text-white"
+                    >
+                      {selectedBid.auction?.listing?.title || "Auction bid"}
+                    </h1>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Review bidder, auction, listing, seller, and payment
+                      information.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+                        selectedBid.status === "APPROVED"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : selectedBid.status === "REJECTED"
+                            ? "bg-rose-50 text-rose-700"
+                            : "bg-amber-50 text-amber-700"
+                      }`}
+                    >
+                      {selectedBid.status}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBid(null)}
+                      className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800"
+                      aria-label="Close bid details and return to live bids"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedBid(null)}
-                aria-label="Close bid details"
-                className="rounded-full bg-slate-100 p-2 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
-              >
-                <X size={18} />
-              </button>
-            </div>
 
-            <dl className="mt-5 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
+            <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <dt className="text-xs text-slate-500">Bid amount</dt>
-                <dd className="mt-1 text-lg font-bold text-slate-900 dark:text-white">{Number(selectedBid.amount).toLocaleString()} ETB</dd>
-              </div>
-              <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
-                <dt className="text-xs text-slate-500">Bid status</dt>
-                <dd className="mt-1 font-semibold text-slate-900 dark:text-white">{selectedBid.status}</dd>
-              </div>
-              <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
-                <dt className="text-xs text-slate-500">Submitted</dt>
-                <dd className="mt-1 text-sm font-medium text-slate-900 dark:text-white">{new Date(selectedBid.createdAt).toLocaleString()}</dd>
-              </div>
-              <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
-                <dt className="text-xs text-slate-500">Approved</dt>
-                <dd className="mt-1 text-sm font-medium text-slate-900 dark:text-white">
-                  {selectedBid.approvedAt ? new Date(selectedBid.approvedAt).toLocaleString() : "Not approved"}
+                <dd className="mt-1 text-lg font-bold text-slate-900 dark:text-white">
+                  {Number(selectedBid.amount).toLocaleString()} ETB
                 </dd>
               </div>
-              <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
-                <dt className="text-xs text-slate-500">Auction status</dt>
-                <dd className="mt-1 text-sm font-medium text-slate-900 dark:text-white">{selectedBid.auction?.status || "Unknown"}</dd>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <dt className="text-xs text-slate-500">Bid status</dt>
+                <dd className="mt-1 font-semibold text-slate-900 dark:text-white">
+                  {selectedBid.status}
+                </dd>
               </div>
-              <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <dt className="text-xs text-slate-500">Submitted</dt>
+                <dd className="mt-1 text-sm font-medium text-slate-900 dark:text-white">
+                  {new Date(selectedBid.createdAt).toLocaleString()}
+                </dd>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <dt className="text-xs text-slate-500">Approved</dt>
+                <dd className="mt-1 text-sm font-medium text-slate-900 dark:text-white">
+                  {selectedBid.approvedAt
+                    ? new Date(selectedBid.approvedAt).toLocaleString()
+                    : "Not approved"}
+                </dd>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <dt className="text-xs text-slate-500">Auction status</dt>
+                <dd className="mt-1 text-sm font-medium text-slate-900 dark:text-white">
+                  {selectedBid.auction?.status || "Unknown"}
+                </dd>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <dt className="text-xs text-slate-500">Auction schedule</dt>
                 <dd className="mt-1 text-sm text-slate-900 dark:text-white">
                   {selectedBid.auction
@@ -2959,61 +3992,436 @@ export function AdminDashboardClient({
               </div>
             </dl>
 
-            <div className="mt-5 rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
-              <h3 className="font-semibold text-slate-900 dark:text-white">Bidder account</h3>
+            <div className="grid gap-5 xl:grid-cols-2">
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                <h3 className="font-semibold text-slate-900 dark:text-white">
+                  Listing details
+                </h3>
+                {selectedBidListing ? (
+                  <div className="mt-3 space-y-4">
+                    <dl className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <dt className="text-xs text-slate-500">Category</dt>
+                        <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                          {selectedBidListing.category.name}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-slate-500">Listing status</dt>
+                        <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                          {selectedBidListing.status}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-slate-500">Condition</dt>
+                        <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                          {selectedBidListing.condition}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-slate-500">Reference</dt>
+                        <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                          {selectedBidListing.referenceNumber || "Not provided"}
+                        </dd>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <dt className="text-xs text-slate-500">Location</dt>
+                        <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                          {[
+                            selectedBidListing.address,
+                            selectedBidListing.city,
+                            selectedBidListing.region,
+                            selectedBidListing.postalCode,
+                            selectedBidListing.country,
+                          ]
+                            .filter(Boolean)
+                            .join(", ") || "Not provided"}
+                        </dd>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <dt className="text-xs text-slate-500">Description</dt>
+                        <dd className="mt-1 whitespace-pre-wrap text-sm text-slate-800 dark:text-slate-200">
+                          {selectedBidListing.description}
+                        </dd>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <dt className="text-xs text-slate-500">Features</dt>
+                        <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                          {selectedBidListing.features.length
+                            ? selectedBidListing.features.join(", ")
+                            : "None provided"}
+                        </dd>
+                      </div>
+                      {selectedBidListing.attributes &&
+                        Object.keys(selectedBidListing.attributes).length >
+                          0 && (
+                          <div className="sm:col-span-2">
+                            <dt className="text-xs text-slate-500">
+                              Additional listing information
+                            </dt>
+                            <dd className="mt-1 grid gap-2 sm:grid-cols-2">
+                              {Object.entries(
+                                selectedBidListing.attributes,
+                              ).map(([key, value]) => (
+                                <div
+                                  key={key}
+                                  className="rounded-lg bg-slate-50 p-2 text-xs dark:bg-slate-800"
+                                >
+                                  <span className="font-semibold text-slate-600 dark:text-slate-300">
+                                    {key}:{" "}
+                                  </span>
+                                  <span className="text-slate-800 dark:text-slate-200">
+                                    {typeof value === "string" ||
+                                    typeof value === "number" ||
+                                    typeof value === "boolean"
+                                      ? String(value)
+                                      : JSON.stringify(value)}
+                                  </span>
+                                </div>
+                              ))}
+                            </dd>
+                          </div>
+                        )}
+                    </dl>
+
+                    <div>
+                      <h4 className="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Listing photos ({selectedBidListing.images.length})
+                      </h4>
+                      {selectedBidListing.images.length ? (
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          {selectedBidListing.images.map((image) => (
+                            <a
+                              key={image.id}
+                              href={image.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="relative aspect-square overflow-hidden rounded-lg border border-slate-200"
+                            >
+                              <img
+                                src={image.url}
+                                alt={`${selectedBidListing.title} listing`}
+                                className="h-full w-full object-cover"
+                              />
+                              {image.isPrimary && (
+                                <span className="absolute left-1 top-1 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-800">
+                                  Primary
+                                </span>
+                              )}
+                            </a>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-500">
+                          No listing photos were uploaded.
+                        </p>
+                      )}
+                    </div>
+
+                    {selectedBidListing.videoUrl && (
+                      <div>
+                        <h4 className="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          Listing video
+                        </h4>
+                        {selectedBidListing.videoUrl.startsWith("/") ? (
+                          <video
+                            src={selectedBidListing.videoUrl}
+                            controls
+                            preload="metadata"
+                            className="max-h-72 w-full rounded-lg bg-black"
+                          />
+                        ) : (
+                          <a
+                            href={selectedBidListing.videoUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sm font-semibold text-blue-700 underline dark:text-blue-300"
+                          >
+                            Open listing video
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    <div>
+                      <h4 className="mb-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Ownership and listing documents
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedBidListing.idDocumentMediaId && (
+                          <a
+                            href={`/api/media/${encodeURIComponent(selectedBidListing.idDocumentMediaId)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sm font-semibold text-blue-700 underline dark:text-blue-300"
+                          >
+                            Open listing ID document
+                          </a>
+                        )}
+                        {selectedBidListing.documents.map((document) => (
+                          <a
+                            key={document.id}
+                            href={document.fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sm font-semibold text-blue-700 underline dark:text-blue-300"
+                          >
+                            {document.title} ({document.documentType})
+                            {document.isVerified ? " · Verified" : ""}
+                          </a>
+                        ))}
+                        {!selectedBidListing.idDocumentMediaId &&
+                          selectedBidListing.documents.length === 0 && (
+                            <span className="text-sm text-slate-500">
+                              No documents available.
+                            </span>
+                          )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-500">
+                    Listing details are unavailable for this bid.
+                  </p>
+                )}
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                <h3 className="font-semibold text-slate-900 dark:text-white">
+                  Seller identity and contact
+                </h3>
+                {selectedBidSeller ? (
+                  <>
+                    <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <dt className="text-xs text-slate-500">Full name</dt>
+                        <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                          {selectedBidSeller.name}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-slate-500">Email</dt>
+                        <dd className="mt-1 break-all text-sm text-slate-800 dark:text-slate-200">
+                          {selectedBidSeller.email}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-slate-500">Phone</dt>
+                        <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                          {selectedBidSeller.phone || "Not provided"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-slate-500">Account status</dt>
+                        <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                          {selectedBidSeller.status}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-slate-500">Business name</dt>
+                        <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                          {selectedBidSeller.sellerProfile?.businessName ||
+                            "Not provided"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-slate-500">National ID</dt>
+                        <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                          {selectedBidListing?.ownerNationalId ||
+                            selectedBidSeller.sellerProfile?.nationalIdNumber ||
+                            "Not provided"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-slate-500">Tax ID</dt>
+                        <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                          {selectedBidSeller.sellerProfile?.taxId ||
+                            "Not provided"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-slate-500">Seller KYC status</dt>
+                        <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                          {selectedBidSeller.sellerProfile?.status ||
+                            "No seller profile"}
+                        </dd>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <dt className="text-xs text-slate-500">
+                          Registered / business address
+                        </dt>
+                        <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                          {selectedBidSeller.sellerProfile?.address ||
+                            selectedBidListing?.address ||
+                            "Not provided"}
+                        </dd>
+                      </div>
+                    </dl>
+                    {selectedBidSeller.sellerProfile?.idDocumentUrl && (
+                      <a
+                        href={selectedBidSeller.sellerProfile.idDocumentUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-4 inline-block text-sm font-semibold text-blue-700 underline dark:text-blue-300"
+                      >
+                        Open seller identity document
+                      </a>
+                    )}
+                  </>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-500">
+                    Seller details are unavailable for this auction.
+                  </p>
+                )}
+              </section>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+              <h3 className="font-semibold text-slate-900 dark:text-white">
+                Bidder account
+              </h3>
               <dl className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div>
                   <dt className="text-xs text-slate-500">Name</dt>
-                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">{selectedBid.bidder?.name || "Unavailable"}</dd>
+                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {selectedBid.bidder?.name || "Unavailable"}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs text-slate-500">Email</dt>
-                  <dd className="mt-1 break-all text-sm font-medium text-slate-800 dark:text-slate-200">{selectedBid.bidder?.email || "Unavailable"}</dd>
+                  <dd className="mt-1 break-all text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {selectedBid.bidder?.email || "Unavailable"}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs text-slate-500">Role</dt>
-                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">{selectedBid.bidder?.role || "Unknown"}</dd>
+                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {selectedBid.bidder?.role || "Unknown"}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs text-slate-500">Account status</dt>
-                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">{selectedBid.bidder?.status || "Unknown"}</dd>
+                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {selectedBid.bidder?.status || "Unknown"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Phone</dt>
+                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {selectedBid.bidder?.phone || "Not provided"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Email verification</dt>
+                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {selectedBid.bidder?.emailVerifiedAt
+                      ? "Verified"
+                      : "Not verified"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Account created</dt>
+                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {selectedBid.bidder?.createdAt
+                      ? new Date(
+                          selectedBid.bidder.createdAt,
+                        ).toLocaleString()
+                      : "Unavailable"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Address</dt>
+                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {selectedBid.bidder?.buyerProfile?.address ||
+                      "Not provided"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Preferred location</dt>
+                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {selectedBid.bidder?.buyerProfile?.preferredLocation ||
+                      "Not provided"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Buyer verification</dt>
+                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {selectedBid.bidder?.buyerProfile?.isVerified
+                      ? "Verified"
+                      : "Not verified"}
+                  </dd>
                 </div>
                 <div className="sm:col-span-2">
                   <dt className="text-xs text-slate-500">Bidder ID</dt>
-                  <dd className="mt-1 break-all font-mono text-xs text-slate-600 dark:text-slate-300">{selectedBid.bidderId || "Unavailable"}</dd>
+                  <dd className="mt-1 break-all font-mono text-xs text-slate-600 dark:text-slate-300">
+                    {selectedBid.bidderId || "Unavailable"}
+                  </dd>
                 </div>
               </dl>
+              {selectedBid.bidder?.buyerProfile?.idDocumentUrl && (
+                <a
+                  href={selectedBid.bidder.buyerProfile.idDocumentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-4 inline-block text-sm font-semibold text-blue-700 underline dark:text-blue-300"
+                >
+                  Open bidder identification document
+                </a>
+              )}
             </div>
 
-            <div className="mt-5 rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
-              <h3 className="font-semibold text-slate-900 dark:text-white">Bid payment</h3>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+              <h3 className="font-semibold text-slate-900 dark:text-white">
+                Bid payment
+              </h3>
               {selectedBid.payment ? (
                 <>
                   <dl className="mt-3 grid gap-3 sm:grid-cols-2">
                     <div>
                       <dt className="text-xs text-slate-500">Payment status</dt>
-                      <dd className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedBid.payment.status}</dd>
+                      <dd className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        {selectedBid.payment.status}
+                      </dd>
                     </div>
                     <div>
                       <dt className="text-xs text-slate-500">Payment amount</dt>
-                      <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">{Number(selectedBid.payment.amount).toLocaleString()} {selectedBid.payment.currency}</dd>
+                      <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                        {Number(selectedBid.payment.amount).toLocaleString()}{" "}
+                        {selectedBid.payment.currency}
+                      </dd>
                     </div>
                     <div>
                       <dt className="text-xs text-slate-500">Payment method</dt>
-                      <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">{selectedBid.payment.method}</dd>
+                      <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
+                        {selectedBid.payment.method}
+                      </dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-slate-500">Transaction reference</dt>
-                      <dd className="mt-1 break-all font-mono text-xs text-slate-700 dark:text-slate-300">{selectedBid.payment.transactionRef || "Not provided"}</dd>
+                      <dt className="text-xs text-slate-500">
+                        Transaction reference
+                      </dt>
+                      <dd className="mt-1 break-all font-mono text-xs text-slate-700 dark:text-slate-300">
+                        {selectedBid.payment.transactionRef || "Not provided"}
+                      </dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-slate-500">Payment submitted</dt>
-                      <dd className="mt-1 text-sm text-slate-700 dark:text-slate-300">{new Date(selectedBid.payment.createdAt).toLocaleString()}</dd>
+                      <dt className="text-xs text-slate-500">
+                        Payment submitted
+                      </dt>
+                      <dd className="mt-1 text-sm text-slate-700 dark:text-slate-300">
+                        {new Date(
+                          selectedBid.payment.createdAt,
+                        ).toLocaleString()}
+                      </dd>
                     </div>
                     {selectedBid.payment.verifiedAt && (
                       <div>
                         <dt className="text-xs text-slate-500">Verified</dt>
-                        <dd className="mt-1 text-sm text-slate-700 dark:text-slate-300">{new Date(selectedBid.payment.verifiedAt).toLocaleString()}</dd>
+                        <dd className="mt-1 text-sm text-slate-700 dark:text-slate-300">
+                          {new Date(
+                            selectedBid.payment.verifiedAt,
+                          ).toLocaleString()}
+                        </dd>
                       </div>
                     )}
                   </dl>
@@ -3022,15 +4430,26 @@ export function AdminDashboardClient({
                       Rejection reason: {selectedBid.payment.rejectionReason}
                     </p>
                   )}
-                  {(selectedBid.payment.receiptUrl || selectedBid.payment.bankReferenceUrl) && (
+                  {(selectedBid.payment.receiptUrl ||
+                    selectedBid.payment.bankReferenceUrl) && (
                     <div className="mt-4 flex flex-wrap gap-3">
                       {selectedBid.payment.receiptUrl && (
-                        <a href={selectedBid.payment.receiptUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-blue-700 underline dark:text-blue-300">
+                        <a
+                          href={selectedBid.payment.receiptUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-semibold text-blue-700 underline dark:text-blue-300"
+                        >
                           Open receipt
                         </a>
                       )}
                       {selectedBid.payment.bankReferenceUrl && (
-                        <a href={selectedBid.payment.bankReferenceUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-blue-700 underline dark:text-blue-300">
+                        <a
+                          href={selectedBid.payment.bankReferenceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-semibold text-blue-700 underline dark:text-blue-300"
+                        >
                           Open payment evidence
                         </a>
                       )}
@@ -3038,10 +4457,13 @@ export function AdminDashboardClient({
                   )}
                 </>
               ) : (
-                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">No bid payment record has been submitted.</p>
+                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                  No bid payment record has been submitted.
+                </p>
               )}
             </div>
-          </section>
+            </section>
+          </div>
         </div>
       )}
 

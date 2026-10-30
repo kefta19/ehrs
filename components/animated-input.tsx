@@ -16,6 +16,7 @@ interface AnimatedInputProps {
   validate?: (value: string) => { valid: boolean; message?: string };
   disabled?: boolean;
   name?: string;
+  showCounter?: boolean;
 }
 
 export function AnimatedInput({
@@ -31,6 +32,7 @@ export function AnimatedInput({
   validate,
   disabled = false,
   name,
+  showCounter = true,
 }: AnimatedInputProps) {
   const [touched, setTouched] = useState(false);
   const [isValid, setIsValid] = useState<boolean | null>(null);
@@ -128,7 +130,9 @@ export function AnimatedInput({
         {touched && value.length > 0 && (
           <div className="absolute right-3 top-1/2 -translate-y-1/2 transition-all duration-300">
             {isValid === true ? (
-              <div className={`flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white ${showSuccess ? "scale-125" : "scale-100"} transition-transform duration-300`}>
+              <div
+                className={`flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white ${showSuccess ? "scale-125" : "scale-100"} transition-transform duration-300`}
+              >
                 <Check size={12} />
               </div>
             ) : isValid === false ? (
@@ -158,7 +162,7 @@ export function AnimatedInput({
       )}
 
       {/* Character Counter */}
-      {maxLength && (
+      {showCounter && maxLength && (
         <div className="mt-1 text-[10px] text-slate-400 text-right">
           {value.length} / {maxLength}
         </div>

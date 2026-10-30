@@ -15,7 +15,8 @@ export default async function CustomerPage({
 } = {}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "BUYER" && user.role !== "ADMIN") redirect(roleHome(user.role));
+  if (user.role !== "BUYER" && user.role !== "ADMIN")
+    redirect(roleHome(user.role));
 
   const resolvedParams = searchParams ? await searchParams : {};
   const initialTab = resolvedParams?.tab || "dashboard";
@@ -33,8 +34,8 @@ export default async function CustomerPage({
           status: "APPROVED",
           ...(user.tenantId
             ? {
-              OR: [{ tenantId: user.tenantId }, { tenantId: null }],
-            }
+                OR: [{ tenantId: user.tenantId }, { tenantId: null }],
+              }
             : {}),
         },
       },
@@ -187,15 +188,30 @@ export default async function CustomerPage({
   const auctionIds = auctions.map((a) => a.id);
   const [bidRegistrations, buyerEntryFees] = auctionIds.length
     ? await Promise.all([
-      prisma.buyerBidRegistration.findMany({
-        where: { auctionId: { in: auctionIds }, buyerId: user.id },
-        select: { auctionId: true, status: true },
-      }),
-      prisma.buyerAuctionEntryFee.findMany({
-        where: { auctionId: { in: auctionIds }, buyerId: user.id },
-        select: { auctionId: true, status: true, amount: true, id: true, txRef: true, method: true },
-      }),
-    ])
+        prisma.buyerBidRegistration.findMany({
+          where: { auctionId: { in: auctionIds }, buyerId: user.id },
+          select: {
+            id: true,
+            auctionId: true,
+            status: true,
+            paymentMethod: true,
+            paymentProofUrl: true,
+            txRef: true,
+            note: true,
+          },
+        }),
+        prisma.buyerAuctionEntryFee.findMany({
+          where: { auctionId: { in: auctionIds }, buyerId: user.id },
+          select: {
+            auctionId: true,
+            status: true,
+            amount: true,
+            id: true,
+            txRef: true,
+            method: true,
+          },
+        }),
+      ])
     : [[], []];
 
   const paidEntranceFeeAuctionIds = Array.from(
@@ -206,7 +222,7 @@ export default async function CustomerPage({
       ...buyerEntryFees
         .filter((f) => f.status === "CONFIRMED")
         .map((f) => f.auctionId),
-    ])
+    ]),
   );
 
   const dashboardUser = {
@@ -217,10 +233,10 @@ export default async function CustomerPage({
     avatarUrl: userProfile?.avatarUrl ?? user.avatarUrl,
     buyerProfile: userProfile?.buyerProfile
       ? {
-        address: userProfile.buyerProfile.address ?? undefined,
-        preferredLocation:
-          userProfile.buyerProfile.preferredLocation ?? undefined,
-      }
+          address: userProfile.buyerProfile.address ?? undefined,
+          preferredLocation:
+            userProfile.buyerProfile.preferredLocation ?? undefined,
+        }
       : undefined,
   };
 
@@ -231,6 +247,9 @@ export default async function CustomerPage({
       isGoogleOnlyAccount={googleOnlyAccount}
       initialTab={initialTab}
       paidEntranceFeeAuctionIds={paidEntranceFeeAuctionIds}
+      entranceFeeRegistrations={bidRegistrations.map(
+        ({ auctionId, ...registration }) => ({ auctionId, registration }),
+      )}
       auctions={JSON.parse(JSON.stringify(auctions))}
       myBids={JSON.parse(JSON.stringify(myBids))}
       wonAuctions={JSON.parse(JSON.stringify(wonAuctions))}

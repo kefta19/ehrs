@@ -3,8 +3,16 @@
 import { useBranding } from "./branding-provider";
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import {
+  UserRound,
+  Building2,
+  Mail,
+  Lock,
+  Phone,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import { ETHomeLogo } from "./ethome-brand";
-import { AnimatedInput } from "./animated-input";
 
 type Mode = "login" | "register";
 
@@ -30,16 +38,16 @@ export function AuthForm({
   redirectUrl?: string;
   googleError?: string;
 }) {
+  const [role, setRole] = useState<"BUYER" | "SELLER">("BUYER");
   const [form, setForm] = useState({
     name: "",
     email: "",
     password: "",
     phone: "",
-    role: "BUYER",
     businessName: "",
   });
-  //inside componnent change the useBranding to get the companyName
-
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const { companyName } = useBranding();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(
@@ -55,7 +63,7 @@ export function AuthForm({
     setLoading(true);
     setError(null);
     const params = new URLSearchParams({ mode });
-    if (mode === "register") params.set("role", form.role);
+    if (mode === "register") params.set("role", role);
     window.location.assign(
       new URL(
         `/api/auth/google/start?${params.toString()}`,
@@ -73,14 +81,13 @@ export function AuthForm({
       mode === "login"
         ? { email: form.email, password: form.password }
         : {
-          name: form.name,
-          email: form.email,
-          password: form.password,
-          phone: form.phone,
-          role: form.role,
-          businessName:
-            form.role === "SELLER" ? form.businessName : undefined,
-        };
+            name: form.name,
+            email: form.email,
+            password: form.password,
+            phone: form.phone,
+            role,
+            businessName: role === "SELLER" ? form.businessName : undefined,
+          };
 
     try {
       const res = await fetch(`/api/auth/${mode}`, {
@@ -95,11 +102,10 @@ export function AuthForm({
           data.details && typeof data.details === "object"
             ? (Object.values(data.details).flat()[0] as string | undefined)
             : undefined;
-        setError(first ?? data.error ?? "Request failed");
+        setError(first ?? data.error ?? "Authentication failed");
         setLoading(false);
         return;
       }
-      // Immediate redirect for faster perceived performance
       window.location.href = data.redirectTo ?? redirectUrl ?? "/dashboard";
     } catch {
       setError("Network error. Please try again.");
@@ -107,125 +113,304 @@ export function AuthForm({
     }
   }
 
-  const inputClass =
-    "mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-sm text-slate-900 dark:text-white outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 placeholder:text-slate-400 dark:placeholder:text-slate-500";
-
-  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const phonePattern = /^\+?[1-9]\d{1,14}$/;
-
   return (
-    <div className="space-y-6">
-      <form
-        onSubmit={onSubmit}
-        className="space-y-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-slate-950 p-8 shadow-xl text-slate-800 dark:text-slate-100 transition-colors"
-      >
-        {mode === "register" && (
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white font-bold text-sm">1</div>
-                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Account Setup</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-bold text-sm">2</div>
-                <span className="text-sm font-semibold text-slate-400 dark:text-slate-500">KYC Verification</span>
-              </div>
-            </div>
-            <div className="h-1 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full w-1/2 bg-blue-600 rounded-full transition-all duration-500"></div>
-            </div>
-          </div>
-        )}
-
-        <div className="text-center pb-2">
-          <div className="flex justify-center mb-3">
-            <ETHomeLogo size="md" href="/" />
-          </div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            {mode === "login"
-              ? `Sign in to ${companyName}`
-              : "Create your account"}
-          </h2>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            {mode === "login"
-              ? "Access your live auctions, bid progression, and escrow payments."
-              : "Register as a buyer to bid or a seller to list property auctions."}
-          </p>
+    <div className="w-full rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-5 sm:p-6 shadow-2xl text-slate-800 dark:text-slate-100 transition-colors">
+      {/* Brand Header */}
+      <div className="text-center pb-1">
+        <div className="flex justify-center mb-1.5">
+          <ETHomeLogo size="sm" href="/" showTagline={false} />
         </div>
+        <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+          {mode === "login"
+            ? `Sign in to ${companyName}`
+            : "Create your account"}
+        </h2>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+          {mode === "login"
+            ? "Enter your credentials to access your dashboard"
+            : "Select your role and enter your details to get started"}
+        </p>
+      </div>
 
-        {mode === "register" && (
-          <>
-            <label className="block text-xs font-semibold text-slate-700">
-              I want to participate as
-              <select
-                value={form.role}
-                onChange={(e) => set("role", e.target.value)}
-                className={inputClass}
-              >
-                <option value="BUYER">
-                  Customer / Buyer (Place bids on properties & assets)
-                </option>
-                <option value="SELLER">
-                  Seller / Auction Owner (List items and host auctions)
-                </option>
-              </select>
-            </label>
+      {/* Role-Based System Selector (Register only) */}
+      {mode === "register" && (
+        <div className="mt-2.5 mb-3.5">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Account Role
+            </span>
+            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">
+              {role === "BUYER" ? "Tenant / Buyer" : "Landlord / Owner"}
+            </span>
+          </div>
 
-            <AnimatedInput
-              label="Full Name"
-              placeholder="Getachew Abebe"
-              value={form.name}
-              onChange={(v) => set("name", v)}
-              required
-              minLength={2}
-              maxLength={100}
-            />
+          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60">
+            {/* Tenant / Buyer Tab */}
+            <button
+              type="button"
+              onClick={() => setRole("BUYER")}
+              className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl text-xs font-semibold transition-all ${
+                role === "BUYER"
+                  ? "bg-white text-blue-700 shadow-sm border border-blue-200/80 dark:bg-blue-600 dark:text-white dark:border-blue-500"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+              }`}
+            >
+              <UserRound size={14} />
+              <span>Tenant</span>
+            </button>
 
-            {form.role === "SELLER" && (
-              <AnimatedInput
-                label="Business / Company Name (Optional)"
-                placeholder="Prime Real Estate LLC"
-                value={form.businessName}
-                onChange={(v) => set("businessName", v)}
-                maxLength={100}
-              />
+            {/* Landlord / Seller Tab */}
+            <button
+              type="button"
+              onClick={() => setRole("SELLER")}
+              className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl text-xs font-semibold transition-all ${
+                role === "SELLER"
+                  ? "bg-white text-blue-700 shadow-sm border border-blue-200/80 dark:bg-blue-600 dark:text-white dark:border-blue-500"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+              }`}
+            >
+              <Building2 size={14} />
+              <span>Landlord</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Form Fields */}
+      <form onSubmit={onSubmit} className="space-y-2.5 sm:space-y-3">
+        {mode === "register" ? (
+          <div className="space-y-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Full Name */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-0.5">
+                  Full Name
+                </label>
+                <div className="relative flex items-center">
+                  <UserRound
+                    size={15}
+                    className="absolute left-3 text-slate-400 pointer-events-none"
+                  />
+                  <input
+                    type="text"
+                    required
+                    value={form.name}
+                    onChange={(e) => set("name", e.target.value)}
+                    placeholder="Getachew Abebe"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
+                  />
+                </div>
+              </div>
+
+              {/* Phone Number */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-0.5">
+                  Phone Number
+                </label>
+                <div className="relative flex items-center">
+                  <Phone
+                    size={15}
+                    className="absolute left-3 text-slate-400 pointer-events-none"
+                  />
+                  <input
+                    type="tel"
+                    value={form.phone}
+                    onChange={(e) => set("phone", e.target.value)}
+                    placeholder="+251 91 122 3344"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Landlord-specific business name field */}
+            {role === "SELLER" && (
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-0.5">
+                  Agency / Property Business Name (Optional)
+                </label>
+                <div className="relative flex items-center">
+                  <Building2
+                    size={15}
+                    className="absolute left-3 text-slate-400 pointer-events-none"
+                  />
+                  <input
+                    type="text"
+                    value={form.businessName}
+                    onChange={(e) => set("businessName", e.target.value)}
+                    placeholder="Prime Real Estate LLC"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
+                  />
+                </div>
+              </div>
             )}
 
-            <AnimatedInput
-              label="Phone Number"
-              placeholder="+251 91 122 3344"
-              value={form.phone}
-              onChange={(v) => set("phone", v)}
-              required
-              pattern={phonePattern}
-              validate={(v) => {
-                if (!v.startsWith("+")) {
-                  return { valid: false, message: "Include country code (e.g., +251)" };
-                }
-                return { valid: true };
-              }}
-            />
-          </>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Email Address */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-0.5">
+                  Email Address
+                </label>
+                <div className="relative flex items-center">
+                  <Mail
+                    size={15}
+                    className="absolute left-3 text-slate-400 pointer-events-none"
+                  />
+                  <input
+                    type="email"
+                    required
+                    value={form.email}
+                    onChange={(e) => set("email", e.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
+                  />
+                </div>
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-0.5">
+                  Password
+                </label>
+                <div className="relative flex items-center">
+                  <Lock
+                    size={15}
+                    className="absolute left-3 text-slate-400 pointer-events-none"
+                  />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    minLength={8}
+                    value={form.password}
+                    onChange={(e) => set("password", e.target.value)}
+                    placeholder="Min. 8 characters"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-9 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    className="absolute right-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  >
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Login Fields (Direct Email & Password - No Role Selector) */
+          <div className="space-y-2.5">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-0.5">
+                Email Address
+              </label>
+              <div className="relative flex items-center">
+                <Mail
+                  size={15}
+                  className="absolute left-3 text-slate-400 pointer-events-none"
+                />
+                <input
+                  type="email"
+                  required
+                  value={form.email}
+                  onChange={(e) => set("email", e.target.value)}
+                  placeholder="Enter your registered email"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-0.5">
+                Password
+              </label>
+              <div className="relative flex items-center">
+                <Lock
+                  size={15}
+                  className="absolute left-3 text-slate-400 pointer-events-none"
+                />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={form.password}
+                  onChange={(e) => set("password", e.target.value)}
+                  placeholder="Enter your password"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-9 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute right-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-xs pt-0.5">
+              <label className="flex items-center gap-1.5 cursor-pointer text-slate-600 dark:text-slate-400 text-[11px]">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span>Remember me</span>
+              </label>
+
+              <Link
+                href="/about#contact"
+                className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline"
+              >
+                Forgot Password?
+              </Link>
+            </div>
+          </div>
         )}
 
-        <div className="space-y-4">
-          <div className="relative flex items-center">
-            <div className="flex-grow border-t border-slate-200 dark:border-slate-700" />
-            <span className="mx-3 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              Or continue with
-            </span>
-            <div className="flex-grow border-t border-slate-200 dark:border-slate-700" />
+        {/* Error Notification */}
+        {error && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200">
+            {error}
           </div>
+        )}
+
+        {/* Primary Action Button */}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white py-2.5 px-4 text-xs sm:text-sm font-bold shadow-md shadow-blue-500/20 transition active:scale-[0.99] disabled:opacity-60 disabled:cursor-wait"
+        >
+          {loading
+            ? "Please wait..."
+            : mode === "login"
+              ? "Sign In"
+              : "Create Account"}
+        </button>
+
+        {/* Google Registration / Sign-in placed UNDER other inputs */}
+        <div>
+          <div className="relative my-2 flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-200 dark:border-slate-800" />
+            </div>
+            <span className="relative bg-white dark:bg-slate-900 px-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              or continue with
+            </span>
+          </div>
+
           <button
             type="button"
             onClick={continueWithGoogle}
             disabled={loading}
-            className="flex w-full items-center justify-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:shadow disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 px-3 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-2xs hover:bg-slate-50 dark:hover:bg-slate-750 transition disabled:cursor-wait disabled:opacity-60"
           >
             <svg
               aria-hidden="true"
               viewBox="0 0 48 48"
-              className="h-[18px] w-[18px]"
+              className="h-4 w-4 shrink-0"
             >
               <path
                 fill="#EA4335"
@@ -244,93 +429,32 @@ export function AuthForm({
                 d="M24 48c6.48 0 11.93-2.13 15.9-5.79l-7.62-5.91c-2.12 1.42-4.83 2.26-8.28 2.26-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48Z"
               />
             </svg>
-            {loading ? "Connecting to Google..." : "Continue with Google"}
+            <span>
+              {mode === "login"
+                ? "Continue with Google"
+                : `Register as ${role === "SELLER" ? "Landlord" : "Tenant"} with Google`}
+            </span>
           </button>
-          {mode === "login" && (
-            <p className="text-center text-xs text-slate-500 dark:text-slate-400">
-              Forgot your Google Account password?{" "}
-              <a
-                href="https://accounts.google.com/signin/recovery"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-semibold text-blue-600 hover:underline dark:text-blue-400"
-              >
-                Recover it with Google
-              </a>
-            </p>
-          )}
         </div>
 
-        <AnimatedInput
-          label="Email Address"
-          type="email"
-          placeholder="you@example.com"
-          value={form.email}
-          onChange={(v) => set("email", v)}
-          required
-          pattern={emailPattern}
-        />
-
-        <AnimatedInput
-          label="Password"
-          type="password"
-          placeholder="••••••••"
-          value={form.password}
-          onChange={(v) => set("password", v)}
-          required
-          minLength={8}
-          maxLength={128}
-          validate={(v) => {
-            if (mode === "register") {
-              const hasUpper = /[A-Z]/.test(v);
-              const hasLower = /[a-z]/.test(v);
-              const hasNumber = /[0-9]/.test(v);
-              if (!hasUpper || !hasLower || !hasNumber) {
-                return {
-                  valid: false,
-                  message: "Must include uppercase, lowercase, and a number",
-                };
-              }
-            }
-            return { valid: true };
-          }}
-        />
-
-        {error && (
-          <p className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs text-rose-700">
-            {error}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-md shadow-blue-500/20 transition hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading
-            ? "Please wait..."
-            : mode === "login"
-              ? "Sign In"
-              : "Create Account"}
-        </button>
-
-        <p className="text-center text-xs text-slate-500 pt-2">
+        {/* Footer Navigation Link */}
+        <p className="pt-1 text-center text-xs text-slate-500 dark:text-slate-400">
           {mode === "login" ? (
             <>
               Don&apos;t have an account?{" "}
               <Link
                 href="/register"
-                className="font-semibold text-blue-600 hover:underline"
+                className="font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline"
               >
                 Register here
               </Link>
             </>
           ) : (
             <>
-              Already registered?{" "}
+              Already have an account?{" "}
               <Link
                 href="/login"
-                className="font-semibold text-blue-600 hover:underline"
+                className="font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline"
               >
                 Sign in
               </Link>
@@ -338,7 +462,6 @@ export function AuthForm({
           )}
         </p>
       </form>
-
     </div>
   );
 }

@@ -9,6 +9,8 @@ import {
   type GoogleOAuthRole,
 } from "@/lib/google-oauth";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   const requestedMode = request.nextUrl.searchParams.get("mode");
   const mode: GoogleOAuthMode =
@@ -16,7 +18,8 @@ export async function GET(request: NextRequest) {
   const pagePath = mode === "register" ? "/register" : "/login";
 
   try {
-    if (!getGoogleOAuthConfig()) {
+    const config = getGoogleOAuthConfig();
+    if (!config) {
       return NextResponse.redirect(
         new URL(`${pagePath}?error=google_not_configured`, request.url),
       );

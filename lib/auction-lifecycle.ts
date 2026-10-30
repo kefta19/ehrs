@@ -2,37 +2,48 @@ import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notify";
 import { notifyAuctionParticipant } from "@/lib/auction-notifications";
 import { logAudit } from "@/lib/security";
-
 import { deleteFile } from "@/lib/storage";
 
 const SETTLEMENT_WINDOW_MS = 72 * 60 * 60 * 1000;
+
+// In-process lock to prevent overlapping sweep runs
+let isSyncing = false;
 
 /**
  * SCHEDULED --(startAt reached)--> ACTIVE
  * ACTIVE    --(endAt reached)----> CLOSED (+ AuctionResult if there are bids)
  */
 export async function syncAuctionStatuses(now: Date = new Date()) {
-  const activated = await prisma.auction.updateMany({
-    where: { status: "SCHEDULED", startAt: { lte: now } },
-    data: { status: "ACTIVE" },
-  });
-
-  const due = await prisma.auction.findMany({
-    where: { status: "ACTIVE", endAt: { lte: now } },
-    select: { id: true },
-    take: 100,
-  });
-
-  let closed = 0;
-  for (const { id } of due) {
-    try {
-      if (await closeAuction(id, now)) closed++;
-    } catch (err) {
-      console.error(`[auction-lifecycle] failed to close ${id}`, err);
-    }
+  if (isSyncing) {
+    return { activated: 0, closed: 0, reminders24h: 0, deadlineReminders: 0 };
   }
-  const reminders = await sendSettlementReminders(now);
-  return { activated: activated.count, closed, ...reminders };
+  isSyncing = true;
+
+  try {
+    const activated = await prisma.auction.updateMany({
+      where: { status: "SCHEDULED", startAt: { lte: now } },
+      data: { status: "ACTIVE" },
+    });
+
+    const due = await prisma.auction.findMany({
+      where: { status: "ACTIVE", endAt: { lte: now } },
+      select: { id: true },
+      take: 100,
+    });
+
+    let closed = 0;
+    for (const { id } of due) {
+      try {
+        if (await closeAuction(id, now)) closed++;
+      } catch (err) {
+        console.error(`[auction-lifecycle] failed to close ${id}`, err);
+      }
+    }
+    const reminders = await sendSettlementReminders(now);
+    return { activated: activated.count, closed, ...reminders };
+  } finally {
+    isSyncing = false;
+  }
 }
 
 async function sendSettlementReminders(now: Date) {
@@ -120,98 +131,155 @@ async function sendSettlementReminders(now: Date) {
 }
 
 async function closeAuction(auctionId: string, now: Date) {
-  const outcome = await prisma.$transaction(async (tx) => {
-    const claimed = await tx.auction.updateMany({
-      where: { id: auctionId, status: "ACTIVE", endAt: { lte: now } },
-      data: { status: "CLOSED" },
-    });
-    if (claimed.count !== 1) return null;
+  try {
+    const outcome = await prisma.$transaction(async (tx) => {
+      // 1. Check if an AuctionResult record already exists for this auction
+      const existingResult = await tx.auctionResult.findUnique({
+        where: { auctionId },
+        include: {
+          auction: {
+            include: { listing: { select: { id: true, title: true } } },
+          },
+        },
+      });
 
-    const auction = await tx.auction.findUniqueOrThrow({
-      where: { id: auctionId },
-      include: { listing: { select: { id: true, title: true } } },
-    });
+      if (existingResult) {
+        // Result already exists. Ensure auction status is CLOSED to maintain consistency.
+        await tx.auction.updateMany({
+          where: { id: auctionId, status: { not: "CLOSED" } },
+          data: { status: "CLOSED" },
+        });
+        return {
+          auction: existingResult.auction,
+          winnerId: existingResult.winningBidderId,
+          amount: existingResult.winningAmount.toString(),
+          reserveMet: existingResult.reserveMet,
+          alreadyExisted: true,
+        };
+      }
 
-    const top = await tx.bid.findFirst({
-      where: { auctionId },
-      orderBy: [{ amount: "desc" }, { createdAt: "asc" }],
-    });
-    if (!top)
+      // 2. Atomically claim the auction closing
+      const claimed = await tx.auction.updateMany({
+        where: { id: auctionId, status: "ACTIVE", endAt: { lte: now } },
+        data: { status: "CLOSED" },
+      });
+      if (claimed.count !== 1) return null;
+
+      const auction = await tx.auction.findUniqueOrThrow({
+        where: { id: auctionId },
+        include: { listing: { select: { id: true, title: true } } },
+      });
+
+      // 3. Find the winning top bid
+      const top = await tx.bid.findFirst({
+        where: { auctionId },
+        orderBy: [{ amount: "desc" }, { createdAt: "asc" }],
+      });
+
+      if (!top) {
+        return {
+          auction,
+          winnerId: null as string | null,
+          amount: "0",
+          reserveMet: false,
+          alreadyExisted: false,
+        };
+      }
+
+      const reserveMet =
+        auction.reservePrice === null || top.amount.gte(auction.reservePrice);
+
+      const setting = await tx.systemSetting.findUnique({
+        where: { key: "auction.depositPercent" },
+      });
+      const pctRaw = Number(setting?.value ?? 10);
+      const pct = Number.isFinite(pctRaw) && pctRaw > 0 ? pctRaw : 10;
+      const depositDue = top.amount.mul(pct).div(100);
+
+      // 4. Idempotently create the AuctionResult (using upsert ensures no P2002 collision)
+      await tx.auctionResult.upsert({
+        where: { auctionId },
+        create: {
+          auctionId,
+          winningBidderId: top.bidderId,
+          winningAmount: top.amount,
+          reserveMet,
+          depositDue,
+          settlementDeadline: new Date(now.getTime() + SETTLEMENT_WINDOW_MS),
+        },
+        update: {},
+      });
+
+      await tx.auction.update({
+        where: { id: auctionId },
+        data: { highestBidderId: top.bidderId, currentHighestBid: top.amount },
+      });
+
+      if (reserveMet) {
+        await tx.listing.update({
+          where: { id: auction.listingId },
+          data: { status: "AUCTIONED" },
+        });
+      }
+
       return {
         auction,
-        winnerId: null as string | null,
-        amount: "0",
-        reserveMet: false,
-      };
-
-    const reserveMet =
-      auction.reservePrice === null || top.amount.gte(auction.reservePrice);
-    const setting = await tx.systemSetting.findUnique({
-      where: { key: "auction.depositPercent" },
-    });
-    const pctRaw = Number(setting?.value ?? 10);
-    const pct = Number.isFinite(pctRaw) && pctRaw > 0 ? pctRaw : 10;
-
-    await tx.auctionResult.create({
-      data: {
-        auctionId,
-        winningBidderId: top.bidderId,
-        winningAmount: top.amount,
+        winnerId: top.bidderId as string | null,
+        amount: top.amount.toString(),
         reserveMet,
-        depositDue: top.amount.mul(pct).div(100),
-        settlementDeadline: new Date(now.getTime() + SETTLEMENT_WINDOW_MS),
-      },
+        alreadyExisted: false,
+      };
     });
-    await tx.auction.update({
-      where: { id: auctionId },
-      data: { highestBidderId: top.bidderId, currentHighestBid: top.amount },
+
+    if (!outcome || outcome.alreadyExisted) return false;
+
+    const { auction, winnerId, amount, reserveMet } = outcome;
+    const title = auction.listing.title;
+
+    await logAudit({
+      action: "AUCTION_CLOSED",
+      module: "AUCTIONS",
+      entityType: "Auction",
+      entityId: auctionId,
+      newValue: { winnerId, amount, reserveMet },
     });
-    if (reserveMet) {
-      await tx.listing.update({
-        where: { id: auction.listingId },
-        data: { status: "AUCTIONED" },
+
+    await notify(auction.sellerId, {
+      type: "AUCTION_CLOSED",
+      title: "Auction closed",
+      body: !winnerId
+        ? `Bidding on "${title}" has ended with no bids.`
+        : reserveMet
+          ? `Bidding on "${title}" has ended. Winning bid: ${amount}.`
+          : `Bidding on "${title}" has ended. The highest bid (${amount}) did not meet your reserve price.`,
+      link: "/seller",
+    });
+
+    if (winnerId && reserveMet) {
+      await notifyAuctionParticipant(winnerId, {
+        type: "AUCTION_WON",
+        title: "You won the auction!",
+        body: `Your bid of ${amount} on "${title}" won. Complete the deposit within 72 hours.`,
+        link: "/buyer?tab=payments",
       });
     }
-    return {
-      auction,
-      winnerId: top.bidderId as string | null,
-      amount: top.amount.toString(),
-      reserveMet,
-    };
-  });
 
-  if (!outcome) return false;
-  const { auction, winnerId, amount, reserveMet } = outcome;
-  const title = auction.listing.title;
-
-  await logAudit({
-    action: "AUCTION_CLOSED",
-    module: "AUCTIONS",
-    entityType: "Auction",
-    entityId: auctionId,
-    newValue: { winnerId, amount, reserveMet },
-  });
-
-  await notify(auction.sellerId, {
-    type: "AUCTION_CLOSED",
-    title: "Auction closed",
-    body: !winnerId
-      ? `Bidding on "${title}" has ended with no bids.`
-      : reserveMet
-        ? `Bidding on "${title}" has ended. Winning bid: ${amount}.`
-        : `Bidding on "${title}" has ended. The highest bid (${amount}) did not meet your reserve price.`,
-    link: "/seller",
-  });
-
-  if (winnerId && reserveMet) {
-    await notifyAuctionParticipant(winnerId, {
-      type: "AUCTION_WON",
-      title: "You won the auction!",
-      body: `Your bid of ${amount} on "${title}" won. Complete the deposit within 72 hours.`,
-      link: "/buyer?tab=payments",
-    });
+    return true;
+  } catch (err: unknown) {
+    // Gracefully catch Prisma P2002 unique constraint violations if a concurrent process completed in parallel
+    if (
+      err &&
+      typeof err === "object" &&
+      "code" in err &&
+      (err as { code: string }).code === "P2002"
+    ) {
+      console.warn(
+        `[auction-lifecycle] Auction ${auctionId} result already created by concurrent process. Handled idempotently.`,
+      );
+      return false;
+    }
+    throw err;
   }
-  return true;
 }
 
 export async function purgeOrphanMedia(olderThanMs = 24 * 60 * 60 * 1000) {

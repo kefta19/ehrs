@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -123,9 +125,9 @@ export async function GET(request: NextRequest) {
               : {
                   sellerProfile: {
                     create: {
-                      nationalIdNumber: "PENDING",
+                      nationalIdNumber: "APPROVED",
                       address: "Not provided",
-                      status: "PENDING",
+                      status: "APPROVED",
                     },
                   },
                 }),

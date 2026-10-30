@@ -29,8 +29,21 @@
   --color-foreground: var(--foreground);
   --color-primary: var(--primary-color);
   --color-secondary: var(--secondary-color);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-plus-jakarta-sans);
   --font-mono: var(--font-geist-mono);
+  --text-xs: 0.875rem;
+  --text-sm: 1rem;
+  --text-base: 1.125rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.125rem;
+  --text-4xl: 2.5rem;
+  --text-5xl: 3.25rem;
+  --text-6xl: 4.125rem;
+  --text-7xl: 5rem;
+  --text-8xl: 6.5rem;
+  --text-9xl: 8.75rem;
 }
 
 html[data-theme="dark"],
@@ -89,10 +102,7 @@ html[data-theme="warm"] :is(.bg-white, .bg-gray-50) {
 }
 
 html[data-theme="dark"] :is([class~="bg-white/95"], [class~="bg-white/90"]),
-html[data-theme="midnight"] :is(
-    [class~="bg-white/95"],
-    [class~="bg-white/90"]
-  ),
+html[data-theme="midnight"] :is([class~="bg-white/95"], [class~="bg-white/90"]),
 html[data-theme="warm"] :is([class~="bg-white/95"], [class~="bg-white/90"]) {
   background-color: color-mix(in srgb, var(--theme-surface) 95%, transparent);
 }
@@ -103,28 +113,35 @@ html[data-theme="warm"] :is(.bg-slate-50, .bg-gray-100) {
   background-color: var(--theme-surface-muted);
 }
 
-html[data-theme="dark"] :is(
+html[data-theme="dark"]
+  :is(
     [class~="bg-slate-50/95"],
     [class~="bg-slate-50/80"],
     [class~="bg-slate-50/70"],
     [class~="bg-slate-50/60"],
     [class~="bg-slate-50/50"]
   ),
-html[data-theme="midnight"] :is(
+html[data-theme="midnight"]
+  :is(
     [class~="bg-slate-50/95"],
     [class~="bg-slate-50/80"],
     [class~="bg-slate-50/70"],
     [class~="bg-slate-50/60"],
     [class~="bg-slate-50/50"]
   ),
-html[data-theme="warm"] :is(
+html[data-theme="warm"]
+  :is(
     [class~="bg-slate-50/95"],
     [class~="bg-slate-50/80"],
     [class~="bg-slate-50/70"],
     [class~="bg-slate-50/60"],
     [class~="bg-slate-50/50"]
   ) {
-  background-color: color-mix(in srgb, var(--theme-surface-muted) 90%, transparent);
+  background-color: color-mix(
+    in srgb,
+    var(--theme-surface-muted) 90%,
+    transparent
+  );
 }
 
 html[data-theme="dark"] :is(.bg-slate-100, .bg-slate-200, .bg-gray-200),
@@ -134,58 +151,93 @@ html[data-theme="warm"] :is(.bg-slate-100, .bg-slate-200, .bg-gray-200) {
 }
 
 html[data-theme="dark"] :is(.text-slate-900, .text-slate-800, .text-gray-900),
-html[data-theme="midnight"] :is(
-    .text-slate-900,
-    .text-slate-800,
-    .text-gray-900
-  ),
+html[data-theme="midnight"]
+  :is(.text-slate-900, .text-slate-800, .text-gray-900),
 html[data-theme="warm"] :is(.text-slate-900, .text-slate-800, .text-gray-900) {
   color: var(--theme-text-strong);
 }
 
 html[data-theme="dark"] :is(.text-slate-700, .text-slate-600, .text-gray-700),
-html[data-theme="midnight"] :is(
-    .text-slate-700,
-    .text-slate-600,
-    .text-gray-700
-  ),
+html[data-theme="midnight"]
+  :is(.text-slate-700, .text-slate-600, .text-gray-700),
 html[data-theme="warm"] :is(.text-slate-700, .text-slate-600, .text-gray-700) {
   color: var(--theme-text);
 }
 
 html[data-theme="dark"] :is(.text-slate-500, .text-slate-400, .text-gray-500),
-html[data-theme="midnight"] :is(
-    .text-slate-500,
-    .text-slate-400,
-    .text-gray-500
-  ),
+html[data-theme="midnight"]
+  :is(.text-slate-500, .text-slate-400, .text-gray-500),
 html[data-theme="warm"] :is(.text-slate-500, .text-slate-400, .text-gray-500) {
   color: var(--theme-text-muted);
 }
 
-html[data-theme="dark"] :is(.border-slate-100, .border-slate-200, .border-gray-200),
-html[data-theme="midnight"] :is(
-    .border-slate-100,
-    .border-slate-200,
-    .border-gray-200
-  ),
-html[data-theme="warm"] :is(
-    .border-slate-100,
-    .border-slate-200,
-    .border-gray-200
-  ) {
+html[data-theme="dark"]
+  :is(.border-slate-100, .border-slate-200, .border-gray-200),
+html[data-theme="midnight"]
+  :is(.border-slate-100, .border-slate-200, .border-gray-200),
+html[data-theme="warm"]
+  :is(.border-slate-100, .border-slate-200, .border-gray-200) {
   border-color: var(--theme-border);
 }
 
-html {
-  scroll-behavior: smooth;
+.dashboard-sidebar :is(button, a):not([class*="bg-blue-600"]) {
+  color: var(--foreground);
+}
+
+.dashboard-sidebar nav {
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+.dashboard-sidebar nav :is(button, a) {
+  font-size: inherit;
+  font-weight: 500;
+}
+
+.dashboard-sidebar nav :is(button, a)[class*="bg-blue-600"] {
+  font-weight: 600;
+}
+
+.dashboard-sidebar nav > div > div:first-child {
+  font-size: 0.75rem !important;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+}
+
+.dashboard-sidebar nav button span.rounded-full {
+  font-size: 0.75rem !important;
+  font-weight: 600;
+}
+
+.dashboard-sidebar :is(button, a):not([class*="bg-blue-600"]):hover {
+  background-color: color-mix(in srgb, var(--foreground) 8%, transparent);
+  color: var(--foreground);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:has(:target) {
+    scroll-behavior: smooth;
+  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, sans-serif;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  font-family: var(--font-plus-jakarta-sans), Arial, sans-serif;
+  font-size: 1.125rem;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+body :is(
+  [class~="text-[10px]"],
+  [class~="text-[11px]"],
+  [class~="text-[12px]"],
+  [class~="text-[13px]"]
+) {
+  font-size: 0.875rem !important;
 }
 
 * {

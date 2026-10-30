@@ -40,6 +40,11 @@ import {
 } from "@/app/actions/buyer";
 import { checkEntranceFeeStatusAction } from "@/app/actions/payment";
 import { AccountManagement } from "@/components/account-management";
+import {
+  EntryFeePaymentClient,
+  type ExistingRegistration,
+} from "./entry-fee-payment-client";
+import { Pagination } from "./pagination";
 
 type DashboardUser = {
   id: string;
@@ -149,6 +154,7 @@ export function CustomerDashboardClient({
   isGoogleOnlyAccount,
   initialTab,
   paidEntranceFeeAuctionIds = [],
+  entranceFeeRegistrations = [],
   auctions,
   myBids,
   wonAuctions,
@@ -162,6 +168,10 @@ export function CustomerDashboardClient({
   isGoogleOnlyAccount: boolean;
   initialTab?: string;
   paidEntranceFeeAuctionIds?: string[];
+  entranceFeeRegistrations?: Array<{
+    auctionId: string;
+    registration: ExistingRegistration;
+  }>;
   auctions: DashboardAuction[];
   myBids: DashboardBid[];
   wonAuctions: WonAuctionResult[];
@@ -183,6 +193,7 @@ export function CustomerDashboardClient({
     | "profile"
     | "account"
     | "notifications"
+    | "entry-fee"
   >(() => {
     const validTabs = [
       "dashboard",
@@ -195,6 +206,7 @@ export function CustomerDashboardClient({
       "profile",
       "account",
       "notifications",
+      "entry-fee",
     ] as const;
     if (initialTab && (validTabs as readonly string[]).includes(initialTab)) {
       return initialTab as (typeof validTabs)[number];
@@ -203,10 +215,16 @@ export function CustomerDashboardClient({
   });
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const selectTab = (tab: typeof activeTab) => {
     setActiveTab(tab);
     setMobileMenuOpen(false);
+    setProfileMenuOpen(false);
   };
+  const [entryFeeAuction, setEntryFeeAuction] =
+    useState<DashboardAuction | null>(null);
+  const [entryFeeReturnTab, setEntryFeeReturnTab] =
+    useState<typeof activeTab>("browse");
   const [isPending, startTransition] = useTransition();
   const [now, setNow] = useState<number>(() => Date.now());
 
@@ -218,33 +236,59 @@ export function CustomerDashboardClient({
 
   // Entrance Fee & Bidding Access State
   const paidFeeAuctionIds = new Set(paidEntranceFeeAuctionIds);
+  const openEntryFee = (auctionId: string) => {
+    const auction = auctions.find((item) => item.id === auctionId);
+    if (!auction) {
+      router.push(`/payment/entry-fee?auctionId=${auctionId}`);
+      return;
+    }
+    setEntryFeeReturnTab(activeTab === "entry-fee" ? "browse" : activeTab);
+    setEntryFeeAuction(auction);
+    selectTab("entry-fee");
+  };
 
   // Modals
-  const [biddingAuction, setBiddingAuction] = useState<DashboardAuction | null>(null);
+  const [biddingAuction, setBiddingAuction] = useState<DashboardAuction | null>(
+    null,
+  );
   const [bidAmount, setBidAmount] = useState<string>("");
-  const [bidMsg, setBidMsg] = useState<{ error?: string; success?: string } | null>(null);
+  const [bidMsg, setBidMsg] = useState<{
+    error?: string;
+    success?: string;
+  } | null>(null);
 
   // Payment Modal
-  const [payingResult, setPayingResult] = useState<WonAuctionResult | null>(null);
-  const [paymentMsg, setPaymentMsg] = useState<{ error?: string; success?: string } | null>(null);
+  const [payingResult, setPayingResult] = useState<WonAuctionResult | null>(
+    null,
+  );
+  const [paymentMsg, setPaymentMsg] = useState<{
+    error?: string;
+    success?: string;
+  } | null>(null);
 
   // Ticket Modal
   const [showTicketModal, setShowTicketModal] = useState(false);
-  const [ticketMsg, setTicketMsg] = useState<{ error?: string; success?: string } | null>(null);
+  const [ticketMsg, setTicketMsg] = useState<{
+    error?: string;
+    success?: string;
+  } | null>(null);
 
   // Profile Edit
-  const [profileMsg, setProfileMsg] = useState<{ error?: string; success?: string } | null>(null);
+  const [profileMsg, setProfileMsg] = useState<{
+    error?: string;
+    success?: string;
+  } | null>(null);
 
   // Watchlist set
   const [watchedIds, setWatchedIds] = useState<Set<string>>(
-    new Set(watchlist.map((w) => w.auctionId))
+    new Set(watchlist.map((w) => w.auctionId)),
   );
 
   // Handle Bid Now click - check entrance fee before navigation
   const handleBidNowClick = async (auctionId: string) => {
     const result = await checkEntranceFeeStatusAction(auctionId);
     if (result.success && result.redirectUrl) {
-      router.push(result.redirectUrl);
+      openEntryFee(auctionId);
     } else {
       router.push(`/auction/${auctionId}`);
     }
@@ -262,7 +306,7 @@ export function CustomerDashboardClient({
 
   const unreadNotifsCount = notifications.filter((n) => !n.readAt).length;
   const auctionLocations = Array.from(
-    new Set(auctions.map((auc) => auc.listing.city).filter(Boolean))
+    new Set(auctions.map((auc) => auc.listing.city).filter(Boolean)),
   ).sort();
 
   // Filtered auctions
@@ -271,10 +315,12 @@ export function CustomerDashboardClient({
       !searchQuery ||
       auc.listing.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       auc.listing.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (auc.listing.region && auc.listing.region.toLowerCase().includes(searchQuery.toLowerCase()));
+      (auc.listing.region &&
+        auc.listing.region.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const catMatch =
-      selectedCategory === "ALL" || auc.listing.category.slug === selectedCategory;
+      selectedCategory === "ALL" ||
+      auc.listing.category.slug === selectedCategory;
 
     const locMatch =
       selectedLocation === "ALL" || auc.listing.city === selectedLocation;
@@ -286,7 +332,91 @@ export function CustomerDashboardClient({
   });
 
   const upcomingAuctions = auctions.filter(
-    (a) => a.status === "SCHEDULED" || new Date(a.startAt) > new Date()
+    (a) => a.status === "SCHEDULED" || new Date(a.startAt) > new Date(),
+  );
+
+  // Pagination States for Customer Tabs
+  const [browsePage, setBrowsePage] = useState(1);
+  const [browsePageSize, setBrowsePageSize] = useState(6);
+
+  const [bidsPage, setBidsPage] = useState(1);
+  const [bidsPageSize, setBidsPageSize] = useState(10);
+
+  const [wonPage, setWonPage] = useState(1);
+  const [wonPageSize, setWonPageSize] = useState(6);
+
+  const [watchlistPage, setWatchlistPage] = useState(1);
+  const [watchlistPageSize, setWatchlistPageSize] = useState(6);
+
+  const [paymentsPage, setPaymentsPage] = useState(1);
+  const [paymentsPageSize, setPaymentsPageSize] = useState(10);
+
+  const [ticketsPage, setTicketsPage] = useState(1);
+  const [ticketsPageSize, setTicketsPageSize] = useState(10);
+
+  const [notifsPage, setNotifsPage] = useState(1);
+  const [notifsPageSize, setNotifsPageSize] = useState(10);
+
+  // Reset browse page when filters change
+  useEffect(() => {
+    setBrowsePage(1);
+  }, [searchQuery, selectedCategory, selectedLocation, selectedStatus]);
+
+  // Browse Pagination
+  const browseTotal = filteredAuctions.length;
+  const browseTotalPages = Math.max(1, Math.ceil(browseTotal / browsePageSize));
+  const paginatedBrowseAuctions = filteredAuctions.slice(
+    (browsePage - 1) * browsePageSize,
+    browsePage * browsePageSize,
+  );
+
+  // Bids Pagination
+  const bidsTotal = auctions.length;
+  const bidsTotalPages = Math.max(1, Math.ceil(bidsTotal / bidsPageSize));
+  const paginatedBids = auctions.slice(
+    (bidsPage - 1) * bidsPageSize,
+    bidsPage * bidsPageSize,
+  );
+
+  // Won Auctions Pagination
+  const wonTotal = wonAuctions.length;
+  const wonTotalPages = Math.max(1, Math.ceil(wonTotal / wonPageSize));
+  const paginatedWonAuctions = wonAuctions.slice(
+    (wonPage - 1) * wonPageSize,
+    wonPage * wonPageSize,
+  );
+
+  // Watchlist Pagination
+  const watchedAuctionsList = auctions.filter((a) => watchedIds.has(a.id));
+  const watchlistTotal = watchedAuctionsList.length;
+  const watchlistTotalPages = Math.max(1, Math.ceil(watchlistTotal / watchlistPageSize));
+  const paginatedWatchlist = watchedAuctionsList.slice(
+    (watchlistPage - 1) * watchlistPageSize,
+    watchlistPage * watchlistPageSize,
+  );
+
+  // Payments Pagination
+  const paymentsTotal = payments.length;
+  const paymentsTotalPages = Math.max(1, Math.ceil(paymentsTotal / paymentsPageSize));
+  const paginatedPayments = payments.slice(
+    (paymentsPage - 1) * paymentsPageSize,
+    paymentsPage * paymentsPageSize,
+  );
+
+  // Tickets Pagination
+  const ticketsTotal = tickets.length;
+  const ticketsTotalPages = Math.max(1, Math.ceil(ticketsTotal / ticketsPageSize));
+  const paginatedTickets = tickets.slice(
+    (ticketsPage - 1) * ticketsPageSize,
+    ticketsPage * ticketsPageSize,
+  );
+
+  // Notifications Pagination
+  const notifsTotal = notifications.length;
+  const notifsTotalPages = Math.max(1, Math.ceil(notifsTotal / notifsPageSize));
+  const paginatedNotifications = notifications.slice(
+    (notifsPage - 1) * notifsPageSize,
+    notifsPage * notifsPageSize,
   );
 
   // Total spent calculation
@@ -324,7 +454,7 @@ export function CustomerDashboardClient({
   const handleOpenBid = (auction: DashboardAuction) => {
     const isPaid = paidFeeAuctionIds.has(auction.id);
     if (!isPaid) {
-      router.push(`/payment/entry-fee?auctionId=${auction.id}`);
+      openEntryFee(auction.id);
       return;
     }
 
@@ -378,12 +508,12 @@ export function CustomerDashboardClient({
 
       {/* ─────────────────── LEFT SIDEBAR (Matching Image) ─────────────────── */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-[#132238] bg-[#0A192F] text-slate-300 transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`dashboard-sidebar fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-slate-200 bg-background text-foreground transition-transform duration-300 ease-in-out dark:border-slate-800 lg:translate-x-0 ${
           mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {/* Brand */}
-        <div className="flex h-16 items-center justify-between px-6 border-b border-[#132644]">
+        <div className="flex h-16 items-center justify-between px-6 border-b border-slate-200 dark:border-slate-800">
           <ETHomeLogo dark size="md" href="/customer" />
           <button
             type="button"
@@ -396,157 +526,172 @@ export function CustomerDashboardClient({
 
         {/* Navigation Items */}
         <div className="flex flex-1 flex-col justify-between overflow-y-auto px-4 py-4">
-          <nav className="space-y-0.5 text-xs">
-            <button
-              onClick={() => selectTab("dashboard")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "dashboard"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
-            >
-              <LayoutDashboard size={16} />
-              <span>Dashboard</span>
-            </button>
-
-            <button
-              onClick={() => selectTab("browse")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "browse"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
-            >
-              <Compass size={16} />
-              <span>Browse Properties</span>
-            </button>
-
-            <button
-              onClick={() => selectTab("bids")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "bids"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
-            >
-              <div className="flex items-center gap-3.5">
-                <Gavel size={16} />
-                <span>My Bids</span>
+          <nav className="space-y-4 text-xs">
+            <div className="space-y-1">
+              <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Overview
               </div>
-              {myBids.length > 0 && (
-                <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-xs text-blue-300">
-                  {myBids.length}
-                </span>
-              )}
-            </button>
+              <button
+                onClick={() => selectTab("dashboard")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "dashboard"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <LayoutDashboard size={16} />
+                <span>Dashboard</span>
+              </button>
 
-            <button
-              onClick={() => selectTab("won")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "won"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
-            >
-              <div className="flex items-center gap-3.5">
-                <Award size={16} />
-                <span>Won Auctions</span>
+              <button
+                onClick={() => selectTab("browse")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "browse"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <Compass size={16} />
+                <span>Browse Properties</span>
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Buying Activity
               </div>
-              {wonAuctions.length > 0 && (
-                <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs text-amber-300">
-                  {wonAuctions.length}
-                </span>
-              )}
-            </button>
+              <button
+                onClick={() => selectTab("bids")}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "bids"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <div className="flex items-center gap-3.5">
+                  <Gavel size={16} />
+                  <span>My Bids</span>
+                </div>
+                {myBids.length > 0 && (
+                  <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-xs text-blue-300">
+                    {myBids.length}
+                  </span>
+                )}
+              </button>
 
-            <button
-              onClick={() => selectTab("watchlist")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "watchlist"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
-            >
-              <div className="flex items-center gap-3.5">
-                <Bookmark size={16} />
-                <span>Watchlist</span>
+              <button
+                onClick={() => selectTab("won")}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "won"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <div className="flex items-center gap-3.5">
+                  <Award size={16} />
+                  <span>Won Auctions</span>
+                </div>
+                {wonAuctions.length > 0 && (
+                  <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs text-amber-300">
+                    {wonAuctions.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => selectTab("watchlist")}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "watchlist"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <div className="flex items-center gap-3.5">
+                  <Bookmark size={16} />
+                  <span>Watchlist</span>
+                </div>
+                {watchedIds.size > 0 && (
+                  <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">
+                    {watchedIds.size}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Account & Support
               </div>
-              {watchedIds.size > 0 && (
-                <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">
-                  {watchedIds.size}
-                </span>
-              )}
-            </button>
+              <button
+                onClick={() => selectTab("notifications")}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "notifications"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <div className="flex items-center gap-3.5">
+                  <Bell size={16} />
+                  <span>Notifications</span>
+                </div>
+                {unreadNotifsCount > 0 && (
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
+                    {unreadNotifsCount}
+                  </span>
+                )}
+              </button>
 
-            <button
-              onClick={() => selectTab("notifications")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "notifications"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
-            >
-              <div className="flex items-center gap-3.5">
-                <Bell size={16} />
-                <span>Notifications</span>
-              </div>
-              {unreadNotifsCount > 0 && (
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
-                  {unreadNotifsCount}
-                </span>
-              )}
-            </button>
+              <button
+                onClick={() => selectTab("payments")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "payments"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <CreditCard size={16} />
+                <span>Payment History</span>
+              </button>
 
-            <button
-              onClick={() => selectTab("payments")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "payments"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
-            >
-              <CreditCard size={16} />
-              <span>Payment History</span>
-            </button>
+              <button
+                onClick={() => selectTab("tickets")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "tickets"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <MessageSquareWarning size={16} />
+                <span>Complaints & Support</span>
+              </button>
 
-            <button
-              onClick={() => selectTab("tickets")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "tickets"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
-            >
-              <MessageSquareWarning size={16} />
-              <span>Complaints & Support</span>
-            </button>
-
-            <button
-              onClick={() => selectTab("profile")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "profile"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
-            >
-              <User size={16} />
-              <span>Preferences</span>
-            </button>
-            <button
-              onClick={() => selectTab("account")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
-                activeTab === "account"
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-              }`}
-            >
-              <User size={16} />
-              <span>Manage Account</span>
-            </button>
+              <button
+                onClick={() => selectTab("profile")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "profile"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <User size={16} />
+                <span>Preferences</span>
+              </button>
+              <button
+                onClick={() => selectTab("account")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "account"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <User size={16} />
+                <span>Manage Account</span>
+              </button>
+            </div>
           </nav>
 
           {/* Bottom actions */}
-          <div className="border-t border-[#132644] pt-4">
+          <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
             <LogoutButton className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors" />
           </div>
         </div>
@@ -576,6 +721,7 @@ export function CustomerDashboardClient({
               {activeTab === "profile" && "Buyer Preferences"}
               {activeTab === "account" && "Manage Account"}
               {activeTab === "notifications" && "Notification Center"}
+              {activeTab === "entry-fee" && "Pay Entrance Fee"}
             </h1>
           </div>
 
@@ -594,39 +740,93 @@ export function CustomerDashboardClient({
               )}
             </button>
 
-            {/* User Pill (Matching Screenshot: Getachew Abebe | Customer) */}
-            <div className="flex items-center gap-3 border-l border-slate-200 pl-4">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-semibold text-blue-700 text-sm">
-                {user.avatarUrl ? (
-                  <img
-                    src={user.avatarUrl}
-                    alt={user.name}
-                    className="h-9 w-9 rounded-full object-cover"
-                  />
-                ) : (
-                  user.name.charAt(0)
-                )}
-              </div>
-              <div className="text-left">
-                <div className="text-sm font-semibold text-slate-900 leading-tight">
-                  {user.name}
+            {/* User Pill */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setProfileMenuOpen((current) => !current)}
+                className="flex items-center gap-3 border-l border-slate-200 pl-4 text-left transition-colors hover:text-slate-700"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-semibold text-blue-700 text-sm">
+                  {user.avatarUrl ? (
+                    <img
+                      src={user.avatarUrl}
+                      alt={user.name}
+                      className="h-9 w-9 rounded-full object-cover"
+                    />
+                  ) : (
+                    user.name.charAt(0)
+                  )}
                 </div>
-                <div className="text-xs text-slate-500">Customer</div>
-              </div>
+                <div className="text-left">
+                  <div className="text-sm font-semibold text-slate-900 leading-tight">
+                    {user.name}
+                  </div>
+                  <div className="text-xs text-slate-500">Customer</div>
+                </div>
+              </button>
+
+              {profileMenuOpen && (
+                <div className="absolute right-0 top-full z-30 mt-2 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                  <button
+                    type="button"
+                    onClick={() => selectTab("account")}
+                    className="block w-full px-4 py-3 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    Manage Account
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectTab("profile")}
+                    className="block w-full px-4 py-3 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    Preferences
+                  </button>
+                  <div className="border-t border-slate-200 dark:border-slate-700">
+                    <LogoutButton className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium text-rose-500 transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/30" />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>
 
         {/* Content Body */}
-        <main className="flex-1 p-8 space-y-8">
+        <main className="mx-auto flex w-full max-w-[1800px] flex-1 flex-col p-4 sm:p-6 lg:p-8 xl:px-10 space-y-8">
+          {activeTab === "entry-fee" && entryFeeAuction && (
+            <EntryFeePaymentClient
+              auction={{
+                ...entryFeeAuction,
+                listing: {
+                  ...entryFeeAuction.listing,
+                  images: entryFeeAuction.listing.images ?? [],
+                },
+              }}
+              entryFeeAmount={Math.max(
+                100,
+                Math.round(Number(entryFeeAuction.startingPrice) * 0.01),
+              )}
+              existingRegistration={
+                entranceFeeRegistrations.find(
+                  (entry) => entry.auctionId === entryFeeAuction.id,
+                )?.registration ?? null
+              }
+              embedded
+              onCancel={() => {
+                selectTab(entryFeeReturnTab);
+                router.refresh();
+              }}
+            />
+          )}
+
           {/* ══════════════════ TAB 1: DASHBOARD HOME ══════════════════ */}
           {activeTab === "dashboard" && (
-            <div className="space-y-8">
+            <div className="space-y-6">
               {/* Welcome Banner Row (Matching Screenshot) */}
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                <div className="lg:col-span-2 rounded-2xl bg-white border border-slate-200 p-6 shadow-sm flex flex-col justify-between">
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <div className="lg:col-span-2 rounded-2xl bg-white border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                       <User size={26} />
                     </div>
                     <div>
@@ -634,11 +834,12 @@ export function CustomerDashboardClient({
                         Welcome back, {user.name}!
                       </h2>
                       <p className="mt-1 text-sm text-slate-500">
-                        Here&apos;s what&apos;s happening with your auction account today.
+                        Here&apos;s what&apos;s happening with your auction
+                        account today.
                       </p>
                     </div>
                   </div>
-                  <div className="mt-6 flex flex-wrap items-center gap-3 text-xs text-slate-500 pt-4 border-t border-slate-100">
+                  <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500 pt-3 border-t border-slate-100">
                     <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
                       <ShieldCheck size={16} /> Verified Buyer
                     </span>
@@ -650,7 +851,7 @@ export function CustomerDashboardClient({
                 </div>
 
                 {/* Banner Card: Your Next Bidding Opportunity */}
-                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-6 text-white shadow-sm flex flex-col justify-between">
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-5 text-white shadow-sm flex flex-col justify-between">
                   <div>
                     <span className="inline-block rounded-md bg-blue-500/20 px-2.5 py-1 text-xs font-semibold text-blue-300">
                       Marketplace Spotlight
@@ -659,7 +860,8 @@ export function CustomerDashboardClient({
                       Your Next Bidding Opportunity
                     </h3>
                     <p className="mt-1 text-xs text-slate-300">
-                      Explore verified real estate and asset listings with live bidding.
+                      Explore verified real estate and asset listings with live
+                      bidding.
                     </p>
                   </div>
                   <button
@@ -672,11 +874,11 @@ export function CustomerDashboardClient({
               </div>
 
               {/* 4 Stat Cards (Matching Screenshot) */}
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {/* Active Bids */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                       <Gavel size={20} />
                     </div>
                     <button
@@ -686,20 +888,21 @@ export function CustomerDashboardClient({
                       View all &rarr;
                     </button>
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-3">
                     <div className="text-xs font-medium text-slate-500">
                       Active Bids
                     </div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">
-                      {myBids.filter((b) => b.auction?.status === "ACTIVE").length || 5}
+                    <div className="text-xl font-bold text-slate-900 mt-1">
+                      {myBids.filter((b) => b.auction?.status === "ACTIVE")
+                        .length || 5}
                     </div>
                   </div>
                 </div>
 
                 {/* Won Auctions */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
                       <Award size={20} />
                     </div>
                     <button
@@ -709,20 +912,20 @@ export function CustomerDashboardClient({
                       View all &rarr;
                     </button>
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-3">
                     <div className="text-xs font-medium text-slate-500">
                       Won Auctions
                     </div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                    <div className="text-xl font-bold text-slate-900 mt-1">
                       {wonAuctions.length || 2}
                     </div>
                   </div>
                 </div>
 
                 {/* Total Spent */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
                       <DollarSign size={20} />
                     </div>
                     <button
@@ -732,20 +935,20 @@ export function CustomerDashboardClient({
                       View all &rarr;
                     </button>
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-3">
                     <div className="text-xs font-medium text-slate-500">
                       Total Spent
                     </div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                    <div className="text-xl font-bold text-slate-900 mt-1">
                       {totalSpent.toLocaleString()} ETB
                     </div>
                   </div>
                 </div>
 
                 {/* Watchlist */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                       <Bookmark size={20} />
                     </div>
                     <button
@@ -755,11 +958,11 @@ export function CustomerDashboardClient({
                       View all &rarr;
                     </button>
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-3">
                     <div className="text-xs font-medium text-slate-500">
                       Watchlist
                     </div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                    <div className="text-xl font-bold text-slate-900 mt-1">
                       {watchedIds.size}
                     </div>
                   </div>
@@ -790,53 +993,63 @@ export function CustomerDashboardClient({
                 </div>
 
                 <div className="space-y-3">
-                  {auctions.filter(a => a.status === "ACTIVE").slice(0, 6).map((auc) => (
-                    <div
-                      key={auc.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-slate-100 p-3 hover:border-slate-200 transition-colors"
-                    >
-                      <div className="flex items-center gap-3.5">
-                        <img
-                          src={
-                            auc.listing.images?.[0]?.url ||
-                            "https://images.unsplash.com/photo-1594502184342-2e12f877aa73?auto=format&fit=crop&w=300&q=80"
-                          }
-                          alt={auc.listing.title}
-                          className="h-14 w-20 rounded-lg object-cover"
-                        />
-                        <div>
-                          <h4 className="font-semibold text-slate-900 text-sm">
-                            {auc.listing.title}
-                          </h4>
-                          <p className="text-xs text-slate-500">
-                            {auc.listing.category.name} • {auc.listing.city}
-                          </p>
+                  {auctions
+                    .filter((a) => a.status === "ACTIVE")
+                    .slice(0, 6)
+                    .map((auc) => (
+                      <div
+                        key={auc.id}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-slate-100 p-3 hover:border-slate-200 transition-colors"
+                      >
+                        <div className="flex items-center gap-3.5">
+                          <img
+                            src={
+                              auc.listing.images?.[0]?.url ||
+                              "https://images.unsplash.com/photo-1594502184342-2e12f877aa73?auto=format&fit=crop&w=300&q=80"
+                            }
+                            alt={auc.listing.title}
+                            className="h-14 w-20 rounded-lg object-cover"
+                          />
+                          <div>
+                            <h4 className="font-semibold text-slate-900 text-sm">
+                              {auc.listing.title}
+                            </h4>
+                            <p className="text-xs text-slate-500">
+                              {auc.listing.category.name} • {auc.listing.city}
+                            </p>
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="flex items-center gap-6 text-xs">
-                        <div>
-                          <span className="text-slate-400 block">Current Bid</span>
-                          <span className="font-bold text-slate-900">
-                            {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()} ETB
-                          </span>
+                        <div className="flex items-center gap-6 text-xs">
+                          <div>
+                            <span className="text-slate-400 block">
+                              Current Bid
+                            </span>
+                            <span className="font-bold text-slate-900">
+                              {Number(
+                                auc.currentHighestBid || auc.startingPrice,
+                              ).toLocaleString()}{" "}
+                              ETB
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block">
+                              Ends in
+                            </span>
+                            <span className="font-medium text-emerald-600 flex items-center gap-1">
+                              <Clock size={12} />
+                              {formatTimeLeft(auc.endAt)}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleBidNowClick(auc.id)}
+                            className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                          >
+                            Bid Now
+                          </button>
                         </div>
-                        <div>
-                          <span className="text-slate-400 block">Ends in</span>
-                          <span className="font-medium text-emerald-600 flex items-center gap-1">
-                            <Clock size={12} />
-                            {formatTimeLeft(auc.endAt)}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => handleBidNowClick(auc.id)}
-                          className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
-                        >
-                          Bid Now
-                        </button>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               </div>
 
@@ -884,14 +1097,18 @@ export function CustomerDashboardClient({
 
                       <div className="flex items-center gap-6 text-xs">
                         <div>
-                          <span className="text-slate-400 block">Starts in</span>
+                          <span className="text-slate-400 block">
+                            Starts in
+                          </span>
                           <span className="font-medium text-slate-700 flex items-center gap-1">
                             <Clock size={12} className="text-blue-500" />
                             {formatTimeLeft(auc.startAt)}
                           </span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block">Starting from</span>
+                          <span className="text-slate-400 block">
+                            Starting from
+                          </span>
                           <span className="font-bold text-slate-900">
                             {Number(auc.startingPrice).toLocaleString()} ETB
                           </span>
@@ -962,7 +1179,10 @@ export function CustomerDashboardClient({
                                 </div>
                               </td>
                               <td className="py-3 font-bold text-slate-900">
-                                {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()} ETB
+                                {Number(
+                                  auc.currentHighestBid || auc.startingPrice,
+                                ).toLocaleString()}{" "}
+                                ETB
                               </td>
                               <td className="py-3">
                                 {isWinning ? (
@@ -1024,7 +1244,10 @@ export function CustomerDashboardClient({
                               {auc.listing.title}
                             </h5>
                             <span className="font-bold text-slate-800 text-[11px]">
-                              {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()} ETB
+                              {Number(
+                                auc.currentHighestBid || auc.startingPrice,
+                              ).toLocaleString()}{" "}
+                              ETB
                             </span>
                           </div>
                         </div>
@@ -1080,10 +1303,14 @@ export function CustomerDashboardClient({
                         <span className="font-semibold text-slate-800">
                           You placed a bid on Modern Family House
                         </span>
-                        <span className="text-slate-500 ml-1">(320,000 ETB)</span>
+                        <span className="text-slate-500 ml-1">
+                          (320,000 ETB)
+                        </span>
                       </div>
                     </div>
-                    <span className="text-slate-400 text-[11px]">2 hours ago</span>
+                    <span className="text-slate-400 text-[11px]">
+                      2 hours ago
+                    </span>
                   </div>
 
                   <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 text-xs">
@@ -1095,10 +1322,14 @@ export function CustomerDashboardClient({
                         <span className="font-semibold text-slate-800">
                           You were outbid on Toyota Land Cruiser
                         </span>
-                        <span className="text-slate-500 ml-1">(42,000 ETB)</span>
+                        <span className="text-slate-500 ml-1">
+                          (42,000 ETB)
+                        </span>
                       </div>
                     </div>
-                    <span className="text-slate-400 text-[11px]">4 hours ago</span>
+                    <span className="text-slate-400 text-[11px]">
+                      4 hours ago
+                    </span>
                   </div>
 
                   <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 text-xs">
@@ -1110,10 +1341,14 @@ export function CustomerDashboardClient({
                         <span className="font-semibold text-slate-800">
                           You won the auction for Residential Land
                         </span>
-                        <span className="text-slate-500 ml-1">(78,000 ETB)</span>
+                        <span className="text-slate-500 ml-1">
+                          (78,000 ETB)
+                        </span>
                       </div>
                     </div>
-                    <span className="text-slate-400 text-[11px]">1 day ago</span>
+                    <span className="text-slate-400 text-[11px]">
+                      1 day ago
+                    </span>
                   </div>
 
                   <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 text-xs">
@@ -1125,10 +1360,14 @@ export function CustomerDashboardClient({
                         <span className="font-semibold text-slate-800">
                           Payment confirmed for Commercial Building
                         </span>
-                        <span className="text-slate-500 ml-1">(1,150,000 ETB)</span>
+                        <span className="text-slate-500 ml-1">
+                          (1,150,000 ETB)
+                        </span>
                       </div>
                     </div>
-                    <span className="text-slate-400 text-[11px]">3 days ago</span>
+                    <span className="text-slate-400 text-[11px]">
+                      3 days ago
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1142,7 +1381,8 @@ export function CustomerDashboardClient({
                   <div>
                     <h4 className="font-bold text-slate-900">Need Help?</h4>
                     <p className="text-xs text-slate-600 mt-0.5">
-                      Our support team is ready to assist you with bidding rules, escrow payments, and property verification.
+                      Our support team is ready to assist you with bidding
+                      rules, escrow payments, and property verification.
                     </p>
                   </div>
                 </div>
@@ -1233,16 +1473,23 @@ export function CustomerDashboardClient({
               {/* Auction Grid / Empty State */}
               {filteredAuctions.length === 0 ? (
                 <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-12 text-center shadow-sm">
-                  <Compass size={40} className="mx-auto text-slate-400 dark:text-slate-600 mb-3" />
+                  <Compass
+                    size={40}
+                    className="mx-auto text-slate-400 dark:text-slate-600 mb-3"
+                  />
                   <h4 className="text-base font-semibold text-slate-900 dark:text-white">
                     No auctions found
                   </h4>
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-                    {searchQuery || selectedCategory !== "ALL" || selectedStatus !== "ALL"
+                    {searchQuery ||
+                    selectedCategory !== "ALL" ||
+                    selectedStatus !== "ALL"
                       ? "No live or upcoming auctions match your filters. Try clearing search filters."
                       : "There are currently no active or upcoming auctions available."}
                   </p>
-                  {(searchQuery || selectedCategory !== "ALL" || selectedStatus !== "ALL") && (
+                  {(searchQuery ||
+                    selectedCategory !== "ALL" ||
+                    selectedStatus !== "ALL") && (
                     <button
                       onClick={() => {
                         setSearchQuery("");
@@ -1256,11 +1503,16 @@ export function CustomerDashboardClient({
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {filteredAuctions.map((auc) => {
-                    const isLive = auc.status === "ACTIVE";
-                    const isUpcoming = auc.status === "SCHEDULED" || (!isLive && new Date(auc.startAt) > new Date());
-                    const currentBid = Number(auc.currentHighestBid || auc.startingPrice);
+                <>
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    {paginatedBrowseAuctions.map((auc) => {
+                      const isLive = auc.status === "ACTIVE";
+                    const isUpcoming =
+                      auc.status === "SCHEDULED" ||
+                      (!isLive && new Date(auc.startAt) > new Date());
+                    const currentBid = Number(
+                      auc.currentHighestBid || auc.startingPrice,
+                    );
                     const isWatched = watchedIds.has(auc.id);
 
                     return (
@@ -1320,26 +1572,34 @@ export function CustomerDashboardClient({
                             </h3>
 
                             <div className="mt-2 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                              <MapPin size={13} className="text-slate-400 dark:text-slate-500" />
+                              <MapPin
+                                size={13}
+                                className="text-slate-400 dark:text-slate-500"
+                              />
                               <span>
                                 {auc.listing.city}
-                                {auc.listing.region ? `, ${auc.listing.region}` : ""}
+                                {auc.listing.region
+                                  ? `, ${auc.listing.region}`
+                                  : ""}
                               </span>
                             </div>
 
                             {/* Features Pills */}
-                            {auc.listing.features && auc.listing.features.length > 0 && (
-                              <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-slate-600 dark:text-slate-300">
-                                {auc.listing.features.slice(0, 3).map((f: string, i: number) => (
-                                  <span
-                                    key={i}
-                                    className="rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5"
-                                  >
-                                    {f}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
+                            {auc.listing.features &&
+                              auc.listing.features.length > 0 && (
+                                <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+                                  {auc.listing.features
+                                    .slice(0, 3)
+                                    .map((f: string, i: number) => (
+                                      <span
+                                        key={i}
+                                        className="rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5"
+                                      >
+                                        {f}
+                                      </span>
+                                    ))}
+                                </div>
+                              )}
 
                             {/* Price Area */}
                             <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-end justify-between">
@@ -1357,7 +1617,9 @@ export function CustomerDashboardClient({
                                 </span>
                                 <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                                   <Clock size={12} className="text-blue-500" />
-                                  {formatTimeLeft(isLive ? auc.endAt : auc.startAt)}
+                                  {formatTimeLeft(
+                                    isLive ? auc.endAt : auc.startAt,
+                                  )}
                                 </span>
                               </div>
                             </div>
@@ -1392,7 +1654,19 @@ export function CustomerDashboardClient({
                     );
                   })}
                 </div>
-              )}
+                <Pagination
+                  currentPage={browsePage}
+                  totalPages={browseTotalPages}
+                  totalItems={browseTotal}
+                  pageSize={browsePageSize}
+                  onPageChange={setBrowsePage}
+                  onPageSizeChange={setBrowsePageSize}
+                  pageSizeOptions={[6, 9, 12, 24]}
+                  itemName="auctions"
+                  className="mt-6 border-t border-slate-100 dark:border-slate-800 pt-4"
+                />
+              </>
+            )}
             </div>
           )}
 
@@ -1413,14 +1687,16 @@ export function CustomerDashboardClient({
                   <thead>
                     <tr className="border-b border-slate-200 text-slate-400">
                       <th className="pb-3 font-semibold">Auction Item</th>
-                      <th className="pb-3 font-semibold">Current Highest Bid</th>
+                      <th className="pb-3 font-semibold">
+                        Current Highest Bid
+                      </th>
                       <th className="pb-3 font-semibold">Status</th>
                       <th className="pb-3 font-semibold">Time Remaining</th>
                       <th className="pb-3 font-semibold text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {auctions.map((auc) => {
+                    {paginatedBids.map((auc) => {
                       const isWinning = auc.highestBidderId === user.id;
                       const isLive = auc.status === "ACTIVE";
 
@@ -1441,17 +1717,22 @@ export function CustomerDashboardClient({
                                   {auc.listing.title}
                                 </div>
                                 <div className="text-[11px] text-slate-400">
-                                  {auc.listing.city} • {auc.listing.category.name}
+                                  {auc.listing.city} •{" "}
+                                  {auc.listing.category.name}
                                 </div>
                               </div>
                             </div>
                           </td>
                           <td className="py-4">
                             <div className="font-bold text-slate-900 text-sm">
-                              {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()} ETB
+                              {Number(
+                                auc.currentHighestBid || auc.startingPrice,
+                              ).toLocaleString()}{" "}
+                              ETB
                             </div>
                             <div className="text-[10px] text-slate-400">
-                              Increment: +{Number(auc.minBidIncrement).toLocaleString()} ETB
+                              Increment: +
+                              {Number(auc.minBidIncrement).toLocaleString()} ETB
                             </div>
                           </td>
                           <td className="py-4">
@@ -1487,6 +1768,17 @@ export function CustomerDashboardClient({
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                currentPage={bidsPage}
+                totalPages={bidsTotalPages}
+                totalItems={bidsTotal}
+                pageSize={bidsPageSize}
+                onPageChange={setBidsPage}
+                onPageSizeChange={setBidsPageSize}
+                pageSizeOptions={[5, 10, 20]}
+                itemName="bids"
+                className="pt-2 border-t border-slate-100"
+              />
             </div>
           )}
 
@@ -1499,12 +1791,13 @@ export function CustomerDashboardClient({
                     Won Auctions & Settlement
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Auctions you have won. Deposit earnest money within the deadline to complete conveyance.
+                    Auctions you have won. Deposit earnest money within the
+                    deadline to complete conveyance.
                   </p>
                 </div>
 
                 <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-                  {wonAuctions.map((res) => (
+                  {paginatedWonAuctions.map((res) => (
                     <div
                       key={res.id}
                       className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4"
@@ -1533,13 +1826,17 @@ export function CustomerDashboardClient({
 
                       <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-xs">
                         <div>
-                          <span className="text-slate-400 block">Winning Amount</span>
+                          <span className="text-slate-400 block">
+                            Winning Amount
+                          </span>
                           <span className="font-bold text-slate-900 text-sm">
                             {Number(res.winningAmount).toLocaleString()} ETB
                           </span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block">Earnest Deposit Due</span>
+                          <span className="text-slate-400 block">
+                            Earnest Deposit Due
+                          </span>
                           <span className="font-bold text-blue-600 text-sm">
                             {Number(res.depositDue).toLocaleString()} ETB
                           </span>
@@ -1549,8 +1846,16 @@ export function CustomerDashboardClient({
                       <div className="flex items-center justify-between pt-2 text-xs">
                         <span className="text-slate-500">
                           Status:{" "}
-                          <strong className={res.isSettled ? "text-emerald-600" : "text-amber-600"}>
-                            {res.isSettled ? "Settled & Verified" : "Deposit Pending"}
+                          <strong
+                            className={
+                              res.isSettled
+                                ? "text-emerald-600"
+                                : "text-amber-600"
+                            }
+                          >
+                            {res.isSettled
+                              ? "Settled & Verified"
+                              : "Deposit Pending"}
                           </strong>
                         </span>
 
@@ -1573,6 +1878,17 @@ export function CustomerDashboardClient({
                     </div>
                   ))}
                 </div>
+                <Pagination
+                  currentPage={wonPage}
+                  totalPages={wonTotalPages}
+                  totalItems={wonTotal}
+                  pageSize={wonPageSize}
+                  onPageChange={setWonPage}
+                  onPageSizeChange={setWonPageSize}
+                  pageSizeOptions={[6, 12, 24]}
+                  itemName="won auctions"
+                  className="mt-6 pt-4 border-t border-slate-100"
+                />
               </div>
             </div>
           )}
@@ -1591,9 +1907,7 @@ export function CustomerDashboardClient({
                 </div>
 
                 <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {auctions
-                    .filter((a) => watchedIds.has(a.id))
-                    .map((auc) => (
+                  {paginatedWatchlist.map((auc) => (
                       <div
                         key={auc.id}
                         className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col justify-between"
@@ -1615,7 +1929,10 @@ export function CustomerDashboardClient({
                               {auc.listing.city}
                             </div>
                             <div className="font-bold text-blue-600 text-sm mt-1">
-                              {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()} ETB
+                              {Number(
+                                auc.currentHighestBid || auc.startingPrice,
+                              ).toLocaleString()}{" "}
+                              ETB
                             </div>
                           </div>
                         </div>
@@ -1637,6 +1954,17 @@ export function CustomerDashboardClient({
                       </div>
                     ))}
                 </div>
+                <Pagination
+                  currentPage={watchlistPage}
+                  totalPages={watchlistTotalPages}
+                  totalItems={watchlistTotal}
+                  pageSize={watchlistPageSize}
+                  onPageChange={setWatchlistPage}
+                  onPageSizeChange={setWatchlistPageSize}
+                  pageSizeOptions={[6, 12, 24]}
+                  itemName="saved auctions"
+                  className="mt-6 pt-4 border-t border-slate-100"
+                />
               </div>
             </div>
           )}
@@ -1674,7 +2002,8 @@ export function CustomerDashboardClient({
                           {p.transactionRef || "N/A"}
                         </td>
                         <td className="py-3 font-semibold text-slate-900">
-                          {p.auctionResult?.auction?.listing?.title || "Property Settlement"}
+                          {p.auctionResult?.auction?.listing?.title ||
+                            "Property Settlement"}
                         </td>
                         <td className="py-3 font-bold text-slate-900">
                           {Number(p.amount).toLocaleString()} ETB
@@ -1686,21 +2015,34 @@ export function CustomerDashboardClient({
                               p.status === "PAID"
                                 ? "bg-emerald-50 text-emerald-700"
                                 : p.status === "PENDING"
-                                ? "bg-amber-50 text-amber-700"
-                                : "bg-rose-50 text-rose-700"
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-rose-50 text-rose-700"
                             }`}
                           >
                             {p.status}
                           </span>
                         </td>
                         <td className="py-3 text-slate-400">
-                          {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "N/A"}
+                          {p.createdAt
+                            ? new Date(p.createdAt).toLocaleDateString()
+                            : "N/A"}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                currentPage={bidsPage}
+                totalPages={bidsTotalPages}
+                totalItems={bidsTotal}
+                pageSize={bidsPageSize}
+                onPageChange={setBidsPage}
+                onPageSizeChange={setBidsPageSize}
+                pageSizeOptions={[5, 10, 20]}
+                itemName="bids"
+                className="pt-2 border-t border-slate-100"
+              />
             </div>
           )}
 
@@ -1713,7 +2055,8 @@ export function CustomerDashboardClient({
                     Complaints & Support Tickets
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Submit dispute requests or inquiries regarding auctions, title verification, or sellers.
+                    Submit dispute requests or inquiries regarding auctions,
+                    title verification, or sellers.
                   </p>
                 </div>
                 <button
@@ -1725,7 +2068,7 @@ export function CustomerDashboardClient({
               </div>
 
               <div className="space-y-3">
-                {tickets.map((t) => (
+                {paginatedTickets.map((t) => (
                   <div
                     key={t.id}
                     className="rounded-xl border border-slate-200 p-4 hover:border-slate-300 transition-colors space-y-2 text-xs"
@@ -1747,8 +2090,8 @@ export function CustomerDashboardClient({
                           t.status === "RESOLVED"
                             ? "bg-emerald-50 text-emerald-700"
                             : t.status === "UNDER_INVESTIGATION"
-                            ? "bg-blue-50 text-blue-700"
-                            : "bg-amber-50 text-amber-700"
+                              ? "bg-blue-50 text-blue-700"
+                              : "bg-amber-50 text-amber-700"
                         }`}
                       >
                         {t.status}
@@ -1763,6 +2106,17 @@ export function CustomerDashboardClient({
                   </div>
                 ))}
               </div>
+              <Pagination
+                currentPage={ticketsPage}
+                totalPages={ticketsTotalPages}
+                totalItems={ticketsTotal}
+                pageSize={ticketsPageSize}
+                onPageChange={setTicketsPage}
+                onPageSizeChange={setTicketsPageSize}
+                pageSizeOptions={[5, 10, 20]}
+                itemName="tickets"
+                className="mt-6 pt-4 border-t border-slate-100"
+              />
             </div>
           )}
 
@@ -1853,16 +2207,19 @@ export function CustomerDashboardClient({
                   Notification Center
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Real-time alerts for bids, outbid events, won auctions, and settlements.
+                  Real-time alerts for bids, outbid events, won auctions, and
+                  settlements.
                 </p>
               </div>
 
               <div className="space-y-3">
-                {notifications.map((n) => (
+                {paginatedNotifications.map((n) => (
                   <div
                     key={n.id}
                     className={`flex items-start justify-between rounded-xl p-4 text-xs transition-colors ${
-                      n.readAt ? "bg-slate-50 border border-slate-100" : "bg-blue-50/60 border border-blue-100"
+                      n.readAt
+                        ? "bg-slate-50 border border-slate-100"
+                        : "bg-blue-50/60 border border-blue-100"
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -1881,38 +2238,54 @@ export function CustomerDashboardClient({
                     </div>
 
                     <div className="ml-4 flex shrink-0 flex-col items-end gap-2">
-                    {!n.readAt && (
+                      {!n.readAt && (
+                        <button
+                          type="button"
+                          disabled={isPending}
+                          onClick={() => {
+                            startTransition(async () => {
+                              await markNotificationReadAction(n.id);
+                            });
+                          }}
+                          className="rounded-lg bg-blue-600 px-3 py-1 font-semibold text-white text-[11px] hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          Mark Read
+                        </button>
+                      )}
                       <button
                         type="button"
                         disabled={isPending}
                         onClick={() => {
+                          if (
+                            !window.confirm(
+                              "Delete this notification? This will not delete the inquiry or other users’ copies.",
+                            )
+                          )
+                            return;
                           startTransition(async () => {
-                            await markNotificationReadAction(n.id);
+                            await deleteNotificationAction(n.id);
                           });
                         }}
-                        className="rounded-lg bg-blue-600 px-3 py-1 font-semibold text-white text-[11px] hover:bg-blue-700 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-3 py-1 font-semibold text-rose-700 text-[11px] hover:bg-rose-50 disabled:opacity-50"
+                        aria-label={`Delete notification: ${n.title}`}
                       >
-                        Mark Read
+                        <Trash2 size={12} /> Delete
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      disabled={isPending}
-                      onClick={() => {
-                        if (!window.confirm("Delete this notification? This will not delete the inquiry or other users’ copies.")) return;
-                        startTransition(async () => {
-                          await deleteNotificationAction(n.id);
-                        });
-                      }}
-                      className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-3 py-1 font-semibold text-rose-700 text-[11px] hover:bg-rose-50 disabled:opacity-50"
-                      aria-label={`Delete notification: ${n.title}`}
-                    >
-                      <Trash2 size={12} /> Delete
-                    </button>
                     </div>
                   </div>
                 ))}
               </div>
+              <Pagination
+                currentPage={notifsPage}
+                totalPages={notifsTotalPages}
+                totalItems={notifsTotal}
+                pageSize={notifsPageSize}
+                onPageChange={setNotifsPage}
+                onPageSizeChange={setNotifsPageSize}
+                pageSizeOptions={[5, 10, 20]}
+                itemName="notifications"
+                className="mt-6 pt-4 border-t border-slate-100"
+              />
             </div>
           )}
         </main>
@@ -1940,7 +2313,8 @@ export function CustomerDashboardClient({
                 {biddingAuction.listing.title}
               </h3>
               <p className="text-xs text-slate-500">
-                {biddingAuction.listing.city} • {biddingAuction.listing.category.name}
+                {biddingAuction.listing.city} •{" "}
+                {biddingAuction.listing.category.name}
               </p>
             </div>
 
@@ -1948,19 +2322,30 @@ export function CustomerDashboardClient({
               <div className="flex justify-between">
                 <span className="text-slate-500">Current Highest Bid:</span>
                 <span className="font-bold text-slate-900">
-                  {Number(biddingAuction.currentHighestBid || biddingAuction.startingPrice).toLocaleString()} ETB
+                  {Number(
+                    biddingAuction.currentHighestBid ||
+                      biddingAuction.startingPrice,
+                  ).toLocaleString()}{" "}
+                  ETB
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Minimum Bid Increment:</span>
                 <span className="font-bold text-blue-600">
-                  + {Number(biddingAuction.minBidIncrement).toLocaleString()} ETB
+                  + {Number(biddingAuction.minBidIncrement).toLocaleString()}{" "}
+                  ETB
                 </span>
               </div>
               <div className="flex justify-between border-t border-slate-200 pt-2 font-semibold">
                 <span className="text-slate-700">Minimum Required Bid:</span>
                 <span className="text-slate-900">
-                  {(Number(biddingAuction.currentHighestBid || biddingAuction.startingPrice) + Number(biddingAuction.minBidIncrement)).toLocaleString()} ETB
+                  {(
+                    Number(
+                      biddingAuction.currentHighestBid ||
+                        biddingAuction.startingPrice,
+                    ) + Number(biddingAuction.minBidIncrement)
+                  ).toLocaleString()}{" "}
+                  ETB
                 </span>
               </div>
             </div>
@@ -1994,7 +2379,8 @@ export function CustomerDashboardClient({
               <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
                 <Clock size={13} className="text-blue-500" />
                 <span>
-                  Anti-sniping soft close enabled: Bids placed in final 5m extend timer.
+                  Anti-sniping soft close enabled: Bids placed in final 5m
+                  extend timer.
                 </span>
               </div>
 
@@ -2193,8 +2579,12 @@ export function CustomerDashboardClient({
                 >
                   <option value="COMPLAINT">Seller / Listing Complaint</option>
                   <option value="DISPUTE">Escrow / Payment Dispute</option>
-                  <option value="SUPPORT">General Inquiry / Bidding Help</option>
-                  <option value="PROBLEM_REPORT">Platform Bug / Problem Report</option>
+                  <option value="SUPPORT">
+                    General Inquiry / Bidding Help
+                  </option>
+                  <option value="PROBLEM_REPORT">
+                    Platform Bug / Problem Report
+                  </option>
                 </select>
               </div>
 

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Pagination } from "./pagination";
 import {
   placeBidAction,
   submitAuctionInquiryAction,
@@ -98,6 +99,14 @@ export function AuctionDetailClient({
   const [inquiryText, setInquiryText] = useState("");
   const [isSendingInquiry, setIsSendingInquiry] = useState(false);
   const [inquiryMessage, setInquiryMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [bidsPage, setBidsPage] = useState(1);
+  const [bidsPageSize, setBidsPageSize] = useState(10);
+  const totalBids = auction.bids.length;
+  const totalBidsPages = Math.max(1, Math.ceil(totalBids / bidsPageSize));
+  const paginatedBids = auction.bids.slice(
+    (bidsPage - 1) * bidsPageSize,
+    bidsPage * bidsPageSize,
+  );
 
   const handlePayEntranceFee = () => {
     if (!user) {
@@ -358,19 +367,32 @@ export function AuctionDetailClient({
                 {auction.bids.length} {auction.bids.length === 1 ? "bid" : "bids"} · Other bidders are anonymized.
               </p>
               {auction.bids.length > 0 ? (
-                <div className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
-                  {auction.bids.map((bid) => (
-                    <div key={bid.id} className="flex items-center justify-between gap-4 py-3">
-                      <div>
-                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{bid.bidder.name}</span>
-                        <time className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400" dateTime={bid.createdAt}>
-                          {formatTime(bid.createdAt)}
-                        </time>
+                <>
+                  <div className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
+                    {paginatedBids.map((bid) => (
+                      <div key={bid.id} className="flex items-center justify-between gap-4 py-3">
+                        <div>
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{bid.bidder.name}</span>
+                          <time className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400" dateTime={bid.createdAt}>
+                            {formatTime(bid.createdAt)}
+                          </time>
+                        </div>
+                        <span className="text-sm font-bold text-slate-900 dark:text-white">{Number(bid.amount).toLocaleString()} ETB</span>
                       </div>
-                      <span className="text-sm font-bold text-slate-900 dark:text-white">{Number(bid.amount).toLocaleString()} ETB</span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                  <Pagination
+                    currentPage={bidsPage}
+                    totalPages={totalBidsPages}
+                    totalItems={totalBids}
+                    pageSize={bidsPageSize}
+                    onPageChange={setBidsPage}
+                    onPageSizeChange={setBidsPageSize}
+                    pageSizeOptions={[5, 10, 20]}
+                    itemName="bids"
+                    className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800"
+                  />
+                </>
               ) : (
                 <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">No bids yet. Be the first to participate.</p>
               )}

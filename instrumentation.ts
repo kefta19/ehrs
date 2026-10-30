@@ -1,5 +1,10 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    const g = globalThis as unknown as {
+      __auctionSweepInterval?: NodeJS.Timeout;
+    };
+    if (g.__auctionSweepInterval) return;
+
     const { syncAuctionStatuses } = await import("@/lib/auction-lifecycle");
 
     // Run initial sync in background after a delay to not block startup
@@ -9,8 +14,8 @@ export async function register() {
       });
     }, 5000);
 
-    // Schedule background sync every 30 seconds
-    setInterval(async () => {
+    // Schedule background sync every 30 seconds with singleton guard
+    g.__auctionSweepInterval = setInterval(async () => {
       try {
         await syncAuctionStatuses();
       } catch (err) {

@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1200" fill="none">
+  <defs>
+    <linearGradient id="sky" x1="800" y1="0" x2="800" y2="1200" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#122344"/>
+      <stop offset=".58" stop-color="#345A78"/>
+      <stop offset="1" stop-color="#C47B4E"/>
+    </linearGradient>
+    <linearGradient id="sunset" x1="960" y1="420" x2="960" y2="950" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7C56A" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#E58A55" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="building" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#354C63"/>
+      <stop offset="1" stop-color="#172A43"/>
+    </linearGradient>
+    <linearGradient id="wood" x1="760" y1="660" x2="1040" y2="1090" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C17A43"/>
+      <stop offset=".5" stop-color="#78472F"/>
+      <stop offset="1" stop-color="#392C31"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="890" y1="300" x2="1130" y2="490" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE2A0"/>
+      <stop offset=".48" stop-color="#D79B4E"/>
+      <stop offset="1" stop-color="#8E5833"/>
+    </linearGradient>
+    <filter id="shadow" x="500" y="850" width="1000" height="300" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="24"/>
+    </filter>
+  </defs>
+  <path fill="url(#sky)" d="M0 0h1600v1200H0z"/>
+  <circle cx="1060" cy="500" r="330" fill="url(#sunset)"/>
+  <circle cx="1080" cy="520" r="112" fill="#F6C875" fill-opacity=".72"/>
+  <path fill="#20334A" d="m0 675 172-105 126 78 191-176 162 150 178-126 145 116 147-153 188 130 111-83 180 128v366H0V675Z"/>
+  <path fill="#17283E" d="m0 751 199-117 144 87 182-113 164 112 173-127 163 113 173-103 157 124 145-75v448H0V751Z"/>
+
+  <g fill="url(#building)">
+    <path d="M93 618h105v258H93zM217 552h126v324H217zM365 637h92v239h-92zM480 492h144v384H480z"/>
+    <path d="M645 594h115v282H645zM778 537h153v339H778zM951 627h103v249H951zM1072 454h134v422h-134z"/>
+    <path d="M1227 575h111v301h-111zM1355 508h151v368h-151z"/>
+  </g>
+  <g fill="#F3C77A" fill-opacity=".52">
+    <path d="M242 585h19v31h-19zM281 585h19v31h-19zM242 638h19v31h-19zM281 638h19v31h-19zM242 691h19v31h-19zM281 691h19v31h-19z"/>
+    <path d="M507 526h22v35h-22zM553 526h22v35h-22zM507 584h22v35h-22zM553 584h22v35h-22zM507 642h22v35h-22zM553 642h22v35h-22z"/>
+    <path d="M813 575h24v34h-24zM864 575h24v34h-24zM813 632h24v34h-24zM864 632h24v34h-24zM813 689h24v34h-24zM864 689h24v34h-24z"/>
+    <path d="M1100 493h22v35h-22zM1148 493h22v35h-22zM1100 552h22v35h-22zM1148 552h22v35h-22zM1100 611h22v35h-22zM1148 611h22v35h-22z"/>
+    <path d="M1390 546h22v35h-22zM1439 546h22v35h-22zM1390 605h22v35h-22zM1439 605h22v35h-22zM1390 664h22v35h-22zM1439 664h22v35h-22z"/>
+  </g>
+  <path fill="#182438" d="M0 855h1600v345H0z"/>
+  <path fill="#26364A" d="M0 889c254-57 433-35 669 20 278 65 565 52 931-18v309H0V889Z"/>
+
+  <ellipse cx="987" cy="1036" fill="#080F1A" fill-opacity=".5" rx="395" ry="92" filter="url(#shadow)"/>
+  <path fill="url(#wood)" stroke="#D39A5D" stroke-opacity=".6" stroke-width="8" d="M659 974c35-111 153-178 327-178 175 0 294 67 329 178l-28 109H688l-29-109Z"/>
+  <ellipse cx="986" cy="970" fill="#D39555" fill-opacity=".72" rx="328" ry="87"/>
+  <ellipse cx="986" cy="955" fill="#815238" rx="269" ry="62"/>
+  <path fill="#C68B51" d="M766 930c87-43 350-45 442 0-90 25-351 27-442 0Z"/>
+
+  <g transform="rotate(-37 1003 601)">
+    <rect x="968" y="399" width="67" height="353" rx="30" fill="url(#wood)" stroke="#E3B77A" stroke-width="8"/>
+    <rect x="882" y="346" width="239" height="123" rx="29" fill="url(#gold)" stroke="#FFE4AC" stroke-width="10"/>
+    <path d="M909 366h185v23H909z" fill="#FFF0C7" fill-opacity=".6"/>
+    <path d="M968 716h67v34h-67z" fill="#57372F"/>
+  </g>
+
+  <g transform="translate(126 205)">
+    <path d="M0 0h170v108H0z" fill="#078930"/>
+    <path d="M0 36h170v36H0z" fill="#FCDD09"/>
+    <path d="M0 72h170v36H0z" fill="#DA121A"/>
+    <circle cx="85" cy="54" r="25" fill="#0F47AF"/>
+    <path d="m85 35 5.3 12.1 13.1 1-9.9 8.6 3.1 12.8L85 62.7l-11.6 6.8 3.1-12.8-9.9-8.6 13.1-1L85 35Z" fill="#FCDD09"/>
+    <path d="M83 108v191" stroke="#E4D7B5" stroke-width="8"/>
+  </g>
+
+  <g fill="#F2C878" fill-opacity=".75">
+    <circle cx="198" cy="1002" r="5"/><circle cx="338" cy="1082" r="4"/>
+    <circle cx="1312" cy="1000" r="5"/><circle cx="1448" cy="1060" r="4"/>
+    <circle cx="1268" cy="922" r="3"/><circle cx="384" cy="940" r="3"/>
+  </g>
+</svg>

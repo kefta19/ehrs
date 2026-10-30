@@ -25,10 +25,10 @@ export default async function AdminPage({
   syncAuctionStatuses().catch((e) => console.error("Auction sync error:", e));
 
   // Fetch critical stats first (for dashboard overview)
-  const [totalUsers, pendingKycCount, activeAuctionsCount, openTicketsCount] =
+  const [totalUsers, pendingListingsCount, activeAuctionsCount, openTicketsCount] =
     await Promise.all([
       prisma.user.count(),
-      prisma.sellerProfile.count({ where: { status: "PENDING" } }),
+      prisma.listing.count({ where: { status: "PENDING_REVIEW" } }),
       prisma.auction.count({ where: { status: "ACTIVE" } }),
       prisma.ticket.count({ where: { status: "OPEN" } }),
     ]);
@@ -37,11 +37,13 @@ export default async function AdminPage({
   const [
     allPayments,
     usersList,
-    pendingKyc,
     pendingListings,
     allAuctions,
     allBids,
-    pendingBuyerRegistrations,
+    sellerProfiles,
+    buyerRegistrations,
+    buyerEntryFees,
+    sellerEntryFees,
     tickets,
     categories,
     systemSettings,
@@ -104,12 +106,7 @@ export default async function AdminPage({
         createdAt: true,
       },
     }),
-    prisma.sellerProfile.findMany({
-      where: { status: { in: ["PENDING", "UNDER_REVIEW"] } },
-      include: { user: true },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    }),
+
     prisma.listing.findMany({
       include: {
         seller: {
@@ -158,8 +155,20 @@ export default async function AdminPage({
             id: true,
             name: true,
             email: true,
+            phone: true,
+            avatarUrl: true,
             role: true,
             status: true,
+            createdAt: true,
+            emailVerifiedAt: true,
+            buyerProfile: {
+              select: {
+                address: true,
+                preferredLocation: true,
+                idDocumentUrl: true,
+                isVerified: true,
+              },
+            },
           },
         },
         auction: {
@@ -168,7 +177,88 @@ export default async function AdminPage({
             status: true,
             startAt: true,
             endAt: true,
-            listing: { select: { title: true } },
+            startingPrice: true,
+            reservePrice: true,
+            minBidIncrement: true,
+            currentHighestBid: true,
+            terms: true,
+            seller: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+                role: true,
+                status: true,
+                createdAt: true,
+                sellerProfile: {
+                  select: {
+                    nationalIdNumber: true,
+                    businessName: true,
+                    taxId: true,
+                    address: true,
+                    idDocumentUrl: true,
+                    status: true,
+                  },
+                },
+              },
+            },
+            listing: {
+              select: {
+                id: true,
+                title: true,
+                description: true,
+                condition: true,
+                address: true,
+                city: true,
+                region: true,
+                country: true,
+                postalCode: true,
+                referenceNumber: true,
+                features: true,
+                attributes: true,
+                status: true,
+                videoUrl: true,
+                ownerNationalId: true,
+                idDocumentMediaId: true,
+                createdAt: true,
+                category: { select: { name: true } },
+                images: {
+                  orderBy: { displayOrder: "asc" },
+                  select: { id: true, url: true, isPrimary: true },
+                },
+                documents: {
+                  select: {
+                    id: true,
+                    title: true,
+                    documentType: true,
+                    fileUrl: true,
+                    isVerified: true,
+                  },
+                },
+                seller: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    phone: true,
+                    role: true,
+                    status: true,
+                    createdAt: true,
+                    sellerProfile: {
+                      select: {
+                        nationalIdNumber: true,
+                        businessName: true,
+                        taxId: true,
+                        address: true,
+                        idDocumentUrl: true,
+                        status: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
         payment: true,
@@ -176,13 +266,151 @@ export default async function AdminPage({
       orderBy: { createdAt: "desc" },
       take: 50,
     }),
-    prisma.buyerBidRegistration.findMany({
-      where: { status: "PENDING" },
-      include: {
-        buyer: { select: { id: true, name: true, email: true } },
-        auction: { include: { listing: { select: { title: true } } } },
+    prisma.sellerProfile.findMany({
+      select: {
+        id: true,
+        nationalIdNumber: true,
+        businessName: true,
+        taxId: true,
+        address: true,
+        idDocumentUrl: true,
+        status: true,
+        createdAt: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            role: true,
+            status: true,
+            createdAt: true,
+          },
+        },
       },
       orderBy: { createdAt: "asc" },
+    }),
+    prisma.buyerBidRegistration.findMany({
+      select: {
+        id: true,
+        buyerId: true,
+        auctionId: true,
+        feeAmount: true,
+        currency: true,
+        paymentMethod: true,
+        paymentProofUrl: true,
+        status: true,
+        txRef: true,
+        paidAt: true,
+        createdAt: true,
+        buyer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            status: true,
+            createdAt: true,
+            emailVerifiedAt: true,
+            buyerProfile: {
+              select: {
+                address: true,
+                preferredLocation: true,
+                idDocumentUrl: true,
+                isVerified: true,
+              },
+            },
+          },
+        },
+        auction: {
+          select: {
+            id: true,
+            listing: { select: { title: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.buyerAuctionEntryFee.findMany({
+      select: {
+        id: true,
+        buyerId: true,
+        auctionId: true,
+        amount: true,
+        currency: true,
+        method: true,
+        status: true,
+        txRef: true,
+        confirmedAt: true,
+        createdAt: true,
+        buyer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            status: true,
+            createdAt: true,
+            emailVerifiedAt: true,
+            buyerProfile: {
+              select: {
+                address: true,
+                preferredLocation: true,
+                idDocumentUrl: true,
+                isVerified: true,
+              },
+            },
+          },
+        },
+        auction: {
+          select: {
+            id: true,
+            listing: { select: { title: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.auctionEntryFee.findMany({
+      select: {
+        id: true,
+        amount: true,
+        currency: true,
+        method: true,
+        status: true,
+        txRef: true,
+        transactionUrl: true,
+        confirmedAt: true,
+        createdAt: true,
+        payer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            status: true,
+            createdAt: true,
+            emailVerifiedAt: true,
+            sellerProfile: {
+              select: {
+                nationalIdNumber: true,
+                businessName: true,
+                taxId: true,
+                address: true,
+                idDocumentUrl: true,
+                status: true,
+              },
+            },
+          },
+        },
+        auction: {
+          select: {
+            id: true,
+            listing: { select: { title: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
     }),
     prisma.ticket.findMany({
       include: { createdBy: true },
@@ -207,6 +435,109 @@ export default async function AdminPage({
     .filter((p) => p.status === "PAID")
     .reduce((sum, p) => sum + Number(p.amount), 0);
 
+  const registeredBuyerKeys = new Set(
+    buyerRegistrations.map((registration) =>
+      `${registration.auctionId}:${registration.buyerId}`,
+    ),
+  );
+  const entryFeePayments = [
+    ...buyerRegistrations.map((registration) => ({
+      id: registration.id,
+      role: "BUYER" as const,
+      payer: registration.buyer,
+      auctionTitle: registration.auction.listing.title,
+      amount: Number(registration.feeAmount),
+      currency: registration.currency,
+      method: registration.paymentMethod,
+      status: registration.status,
+      transactionRef: registration.txRef ?? "—",
+      transactionUrl: registration.paymentProofUrl,
+      payerDetails: {
+        phone: registration.buyer.phone,
+        accountStatus: registration.buyer.status,
+        joinedAt: registration.buyer.createdAt.toISOString(),
+        emailVerified: Boolean(registration.buyer.emailVerifiedAt),
+        address: registration.buyer.buyerProfile?.address ?? null,
+        preferredLocation:
+          registration.buyer.buyerProfile?.preferredLocation ?? null,
+        isVerified: registration.buyer.buyerProfile?.isVerified ?? false,
+        nationalIdNumber: null,
+        businessName: null,
+        taxId: null,
+        identityAddress: null,
+        idDocumentUrl:
+          registration.buyer.buyerProfile?.idDocumentUrl ?? null,
+        verificationStatus: null,
+      },
+      confirmedAt: registration.paidAt?.toISOString() ?? null,
+      createdAt: registration.createdAt.toISOString(),
+    })),
+    ...buyerEntryFees
+      .filter(
+        (fee) => !registeredBuyerKeys.has(`${fee.auctionId}:${fee.buyerId}`),
+      )
+      .map((fee) => ({
+        id: fee.id,
+        role: "BUYER" as const,
+        payer: fee.buyer,
+        auctionTitle: fee.auction.listing.title,
+        amount: Number(fee.amount),
+        currency: fee.currency,
+        method: fee.method,
+        status: fee.status,
+        transactionRef: fee.txRef,
+        transactionUrl: null,
+        payerDetails: {
+          phone: fee.buyer.phone,
+          accountStatus: fee.buyer.status,
+          joinedAt: fee.buyer.createdAt.toISOString(),
+          emailVerified: Boolean(fee.buyer.emailVerifiedAt),
+          address: fee.buyer.buyerProfile?.address ?? null,
+          preferredLocation:
+            fee.buyer.buyerProfile?.preferredLocation ?? null,
+          isVerified: fee.buyer.buyerProfile?.isVerified ?? false,
+          nationalIdNumber: null,
+          businessName: null,
+          taxId: null,
+          identityAddress: null,
+          idDocumentUrl: fee.buyer.buyerProfile?.idDocumentUrl ?? null,
+          verificationStatus: null,
+        },
+        confirmedAt: fee.confirmedAt?.toISOString() ?? null,
+        createdAt: fee.createdAt.toISOString(),
+      })),
+    ...sellerEntryFees.map((fee) => ({
+      id: fee.id,
+      role: "SELLER" as const,
+      payer: fee.payer,
+      auctionTitle: fee.auction.listing.title,
+      amount: Number(fee.amount),
+      currency: fee.currency,
+      method: fee.method,
+      status: fee.status,
+      transactionRef: fee.txRef,
+      transactionUrl: fee.transactionUrl,
+      payerDetails: {
+        phone: fee.payer.phone,
+        accountStatus: fee.payer.status,
+        joinedAt: fee.payer.createdAt.toISOString(),
+        emailVerified: Boolean(fee.payer.emailVerifiedAt),
+        address: null,
+        preferredLocation: null,
+        isVerified: fee.payer.sellerProfile?.status === "APPROVED",
+        nationalIdNumber:
+          fee.payer.sellerProfile?.nationalIdNumber ?? null,
+        businessName: fee.payer.sellerProfile?.businessName ?? null,
+        taxId: fee.payer.sellerProfile?.taxId ?? null,
+        identityAddress: fee.payer.sellerProfile?.address ?? null,
+        idDocumentUrl: fee.payer.sellerProfile?.idDocumentUrl ?? null,
+        verificationStatus: fee.payer.sellerProfile?.status ?? null,
+      },
+      confirmedAt: fee.confirmedAt?.toISOString() ?? null,
+      createdAt: fee.createdAt.toISOString(),
+    })),
+  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
   const googleOnlyAccount = await isGoogleOnlyAccount(user.id);
   const dashboardUser: AdminUser = {
     id: user.id,
@@ -226,18 +557,18 @@ export default async function AdminPage({
       initialTab={initialTab}
       stats={{
         totalUsers,
-        pendingKycCount,
+        pendingListingsCount,
         activeAuctionsCount,
         totalVolume,
         openTicketsCount,
       }}
       usersList={JSON.parse(JSON.stringify(usersList))}
-      pendingKyc={JSON.parse(JSON.stringify(pendingKyc))}
       pendingListings={JSON.parse(JSON.stringify(pendingListings))}
       allAuctions={JSON.parse(JSON.stringify(allAuctions))}
       allBids={JSON.parse(JSON.stringify(allBids))}
-      pendingBuyerRegistrations={JSON.parse(JSON.stringify(pendingBuyerRegistrations))}
-      payments={JSON.parse(JSON.stringify(allPayments))}
+      sellerProfiles={JSON.parse(JSON.stringify(sellerProfiles))}
+      buyerRegistrations={JSON.parse(JSON.stringify(buyerRegistrations))}
+      entryFeePayments={entryFeePayments}
       tickets={JSON.parse(JSON.stringify(tickets))}
       categories={JSON.parse(JSON.stringify(categories))}
       systemSettings={JSON.parse(JSON.stringify(systemSettings))}

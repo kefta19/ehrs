@@ -23,16 +23,21 @@ export function getGoogleOAuthConfig() {
 
   if (!clientId || !clientSecret || !redirectUri) return null;
 
-  const redirectUrl = new URL(redirectUri);
-  if (
-    redirectUrl.protocol !== "https:" &&
-    !(redirectUrl.protocol === "http:" &&
-      ["localhost", "127.0.0.1", "[::1]"].includes(redirectUrl.hostname))
-  ) {
-    throw new Error("GOOGLE_REDIRECT_URI must use HTTPS except on localhost.");
-  }
+  try {
+    const redirectUrl = new URL(redirectUri);
+    if (
+      redirectUrl.protocol !== "https:" &&
+      !(redirectUrl.protocol === "http:" &&
+        ["localhost", "127.0.0.1", "[::1]"].includes(redirectUrl.hostname))
+    ) {
+      console.warn("GOOGLE_REDIRECT_URI must use HTTPS except on localhost.");
+      return null;
+    }
 
-  return { clientId, clientSecret, redirectUri };
+    return { clientId, clientSecret, redirectUri };
+  } catch {
+    return null;
+  }
 }
 
 export function createGoogleOAuthClient() {

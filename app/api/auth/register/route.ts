@@ -7,6 +7,8 @@ import { logAudit } from "@/lib/security";
 import { ensureBootstrap } from "@/lib/seed";
 import { registerSchema } from "@/lib/validation";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: NextRequest) {
   try {
     // Run bootstrap asynchronously without blocking
@@ -23,7 +25,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { name, email, password, phone, role, businessName, nationalId } = parsed.data;
-    const normalizedEmail = email.toLowerCase();
+    const normalizedEmail = email.trim().toLowerCase();
 
     const existingUser = await prisma.user.findUnique({
       where: { email: normalizedEmail },
@@ -70,10 +72,10 @@ export async function POST(request: NextRequest) {
           ? {
             sellerProfile: {
               create: {
-                nationalIdNumber: nationalId || "PENDING",
+                nationalIdNumber: nationalId || "APPROVED",
                 businessName: businessName || null,
                 address: "Not provided",
-                status: "PENDING",
+                status: "APPROVED",
               },
             },
           }

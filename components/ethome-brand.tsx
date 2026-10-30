@@ -9,10 +9,12 @@ export function ETHomeLogo({
   size = "md",
   dark = false,
   href = "/",
+  showTagline = true,
 }: {
   size?: "sm" | "md" | "lg";
   dark?: boolean;
   href?: string;
+  showTagline?: boolean;
 }) {
   const { companyName, logoUrl } = useBranding();
   const iconSize = size === "sm" ? 16 : size === "lg" ? 24 : 20;
@@ -44,11 +46,13 @@ export function ETHomeLogo({
         >
           {companyName}
         </span>
-        <span
-          className={`${subSize} ${dark ? "text-slate-400" : "text-slate-500"}`}
-        >
-          Online Auction Marketplace
-        </span>
+        {showTagline && (
+          <span
+            className={`${subSize} ${dark ? "text-slate-400" : "text-slate-500"}`}
+          >
+            Online Auction Marketplace
+          </span>
+        )}
       </div>
     </div>
   );

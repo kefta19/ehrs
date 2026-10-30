@@ -38,7 +38,6 @@ import { PaymentMethodDialog } from "./payment-method-dialog";
 import { WorkflowSuccessDialog } from "./workflow-success-dialog";
 import { AnimatedInput } from "./animated-input";
 import {
-  submitSellerKycAction,
   cancelAuctionAction,
   replyToBuyerInquiryAction,
 } from "@/app/actions/seller";
@@ -47,9 +46,17 @@ import {
   markNotificationReadAction,
 } from "@/app/actions/buyer";
 import { ListingWizard } from "./listing-wizard";
-import { auctionStatusMeta, listingStatusMeta, TONE_CLASS } from "@/lib/status-labels";
+import { Pagination } from "./pagination";
+import {
+  auctionStatusMeta,
+  listingStatusMeta,
+  TONE_CLASS,
+} from "@/lib/status-labels";
 import { AccountManagement } from "@/components/account-management";
-import { deleteListingAction, updateListingAction } from "@/app/actions/listing";
+import {
+  deleteListingAction,
+  updateListingAction,
+} from "@/app/actions/listing";
 import { useRouter } from "next/navigation";
 
 type SellerUser = {
@@ -62,10 +69,13 @@ type SellerUser = {
 };
 
 function getInquiryTicketId(notification: Notification) {
-  if (notification.type !== "AUCTION_INQUIRY" || !notification.link) return null;
+  if (notification.type !== "AUCTION_INQUIRY" || !notification.link)
+    return null;
   try {
-    return new URL(notification.link, "https://notifications.invalid")
-      .searchParams.get("inquiryId");
+    return new URL(
+      notification.link,
+      "https://notifications.invalid",
+    ).searchParams.get("inquiryId");
   } catch {
     return null;
   }
@@ -215,28 +225,38 @@ export function ProviderDashboardClient({
     | "winners"
     | "payments"
     | "reports"
-    | "kyc"
     | "notifications"
     | "account"
   >(initialTab ?? "dashboard");
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const selectTab = (tab: typeof activeTab) => {
     setActiveTab(tab);
     setMobileMenuOpen(false);
+    setProfileMenuOpen(false);
   };
   const [isPending, startTransition] = useTransition();
   const [listingDeleteMessage, setListingDeleteMessage] = useState<{
     error?: string;
     message?: string;
   } | null>(null);
-  const [inquiryReplies, setInquiryReplies] = useState<Record<string, string>>({});
-  const [replyingToInquiry, setReplyingToInquiry] = useState<string | null>(null);
+  const [inquiryReplies, setInquiryReplies] = useState<Record<string, string>>(
+    {},
+  );
+  const [replyingToInquiry, setReplyingToInquiry] = useState<string | null>(
+    null,
+  );
   const [inquiryReplyFeedback, setInquiryReplyFeedback] = useState<
     Record<string, { success: boolean; message: string }>
   >({});
   const [selectedBid, setSelectedBid] = useState<
-    (Bid & { auctionTitle: string; auctionStatus?: string; auctionEndAt?: string }) | null
+    | (Bid & {
+        auctionTitle: string;
+        auctionStatus?: string;
+        auctionEndAt?: string;
+      })
+    | null
   >(null);
   const handleReplyToInquiry = async (
     event: React.FormEvent<HTMLFormElement>,
@@ -285,12 +305,23 @@ export function ProviderDashboardClient({
     }
   };
 
-  // Modals / forms
-  const [showListingModal, setShowListingModal] = useState(false);
-  const [showAuctionModal, setShowAuctionModal] = useState(false);
-  const [selectedListingForAuction, setSelectedListingForAuction] = useState<Listing | null>(null);
+  // Listing and auction creation flow
+  const [wizardStartStep, setWizardStartStep] = useState<1 | 2>(1);
+  const [selectedListingForAuction, setSelectedListingForAuction] =
+    useState<Listing | null>(null);
+  const openListingWizard = () => {
+    setSelectedListingForAuction(null);
+    setWizardStartStep(1);
+    selectTab("create-listing");
+  };
+  const openAuctionWizard = (listing: Listing | null = null) => {
+    setSelectedListingForAuction(listing);
+    setWizardStartStep(2);
+    selectTab("create-auction");
+  };
   const [showEditListingModal, setShowEditListingModal] = useState(false);
-  const [selectedListingForEdit, setSelectedListingForEdit] = useState<Listing | null>(null);
+  const [selectedListingForEdit, setSelectedListingForEdit] =
+    useState<Listing | null>(null);
   const [editListingForm, setEditListingForm] = useState({
     title: "",
     description: "",
@@ -304,7 +335,7 @@ export function ProviderDashboardClient({
     message?: string;
   } | null>(null);
 
-  // Local state for listings to avoid full page refresh
+// Local state for listings to avoid full page refresh
   const [localListings, setLocalListings] = useState<Listing[]>(listings);
 
   // Payment and success dialogs
@@ -317,18 +348,6 @@ export function ProviderDashboardClient({
     icon?: "success" | "info" | "warning";
   } | null>(null);
 
-  // Form messages
-  const [kycMsg, setKycMsg] = useState<{ error?: string; success?: string } | null>(null);
-
-  // KYC form state
-  const [kycForm, setKycForm] = useState({
-    nationalIdNumber: sellerProfile?.nationalIdNumber || "",
-    businessName: sellerProfile?.businessName || "",
-    taxId: sellerProfile?.taxId || "",
-    address: sellerProfile?.address || "",
-    idDocumentUrl: sellerProfile?.idDocumentUrl || "",
-  });
-
   // Active category selection in listing creation
   const [selectedCatSlug, setSelectedCatSlug] = useState<string>("homes");
 
@@ -338,17 +357,24 @@ export function ProviderDashboardClient({
   const completedAuctions = auctions.filter((a) => a.status === "COMPLETED");
 
   // All bids across seller's auctions
-  const allBids: Array<Bid & { auctionTitle: string; auctionStatus?: string; auctionEndAt?: string }> = auctions
+  const allBids: Array<
+    Bid & {
+      auctionTitle: string;
+      auctionStatus?: string;
+      auctionEndAt?: string;
+    }
+  > = auctions
     .flatMap((a) =>
       (a.bids || []).map((b: Bid) => ({
         ...b,
         auctionTitle: a.listing?.title || "Auction Item",
         auctionStatus: a.status,
         auctionEndAt: a.endAt,
-      }))
+      })),
     )
     .sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
 
   // Unique bidders
@@ -356,11 +382,57 @@ export function ProviderDashboardClient({
 
   // Total sales volume
   const totalSales = completedAuctions.reduce(
-    (sum, a) => sum + Number(a.result?.winningAmount || a.currentHighestBid || 0),
-    0
+    (sum, a) =>
+      sum + Number(a.result?.winningAmount || a.currentHighestBid || 0),
+    0,
   );
 
-  const kycStatus = sellerProfile?.status || "NOT_SUBMITTED";
+  // Pagination States for Seller Tabs
+  const [listingsPage, setListingsPage] = useState(1);
+  const [listingsPageSize, setListingsPageSize] = useState(6);
+  const listingsTotal = localListings.length;
+  const listingsTotalPages = Math.max(1, Math.ceil(listingsTotal / listingsPageSize));
+  const paginatedListings = localListings.slice(
+    (listingsPage - 1) * listingsPageSize,
+    listingsPage * listingsPageSize,
+  );
+
+  const [auctionsPage, setAuctionsPage] = useState(1);
+  const [auctionsPageSize, setAuctionsPageSize] = useState(6);
+  const auctionsTotal = auctions.length;
+  const auctionsTotalPages = Math.max(1, Math.ceil(auctionsTotal / auctionsPageSize));
+  const paginatedAuctions = auctions.slice(
+    (auctionsPage - 1) * auctionsPageSize,
+    auctionsPage * auctionsPageSize,
+  );
+
+  const [bidsPage, setBidsPage] = useState(1);
+  const [bidsPageSize, setBidsPageSize] = useState(10);
+  const bidsTotal = allBids.length;
+  const bidsTotalPages = Math.max(1, Math.ceil(bidsTotal / bidsPageSize));
+  const paginatedBids = allBids.slice(
+    (bidsPage - 1) * bidsPageSize,
+    bidsPage * bidsPageSize,
+  );
+
+  const wonAuctionsList = auctions.filter((a) => a.status === "COMPLETED" || a.result);
+  const [winnersPage, setWinnersPage] = useState(1);
+  const [winnersPageSize, setWinnersPageSize] = useState(6);
+  const winnersTotal = wonAuctionsList.length;
+  const winnersTotalPages = Math.max(1, Math.ceil(winnersTotal / winnersPageSize));
+  const paginatedWinners = wonAuctionsList.slice(
+    (winnersPage - 1) * winnersPageSize,
+    winnersPage * winnersPageSize,
+  );
+
+  const [notifsPage, setNotifsPage] = useState(1);
+  const [notifsPageSize, setNotifsPageSize] = useState(10);
+  const notifsTotal = notifications.length;
+  const notifsTotalPages = Math.max(1, Math.ceil(notifsTotal / notifsPageSize));
+  const paginatedNotifications = notifications.slice(
+    (notifsPage - 1) * notifsPageSize,
+    notifsPage * notifsPageSize,
+  );
 
   return (
     <div className="flex min-h-screen bg-background text-slate-800 dark:text-slate-100 transition-colors">
@@ -374,10 +446,11 @@ export function ProviderDashboardClient({
 
       {/* ─────────────────── LEFT SIDEBAR ─────────────────── */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-[#132238] bg-[#0A192F] text-slate-300 transition-transform duration-300 ease-in-out lg:translate-x-0 ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
+        className={`dashboard-sidebar fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-slate-200 bg-background text-foreground transition-transform duration-300 ease-in-out dark:border-slate-800 lg:translate-x-0 ${
+          mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
       >
-        <div className="flex h-16 items-center justify-between px-6 border-b border-[#132644]">
+        <div className="flex h-16 items-center justify-between px-6 border-b border-slate-200 dark:border-slate-800">
           <ETHomeLogo dark size="md" href="/seller" />
           <button
             type="button"
@@ -389,151 +462,154 @@ export function ProviderDashboardClient({
         </div>
 
         <div className="flex flex-1 flex-col justify-between overflow-y-auto px-4 py-4">
-          <nav className="space-y-0.5 text-xs">
-            <button
-              onClick={() => selectTab("dashboard")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "dashboard"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-                }`}
-            >
-              <LayoutDashboard size={16} />
-              <span>Seller Overview</span>
-            </button>
-
-            <button
-              onClick={() => selectTab("listings")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "listings"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-                }`}
-            >
-              <div className="flex items-center gap-3.5">
-                <PackagePlus size={16} />
-                <span>My Listings</span>
+          <nav className="space-y-4 text-xs">
+            <div className="space-y-1">
+              <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Overview
               </div>
-              <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-xs text-blue-300">
-                {listings.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => selectTab("auctions")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "auctions"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+              <button
+                onClick={() => selectTab("dashboard")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "dashboard"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
                 }`}
-            >
-              <div className="flex items-center gap-3.5">
-                <Gavel size={16} />
-                <span>Manage Auctions</span>
-              </div>
-              <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">
-                {auctions.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => selectTab("bids")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "bids"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-                }`}
-            >
-              <div className="flex items-center gap-3.5">
-                <TrendingUp size={16} />
-                <span>Monitor Bids</span>
-              </div>
-              <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-xs text-purple-300">
-                {allBids.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => selectTab("winners")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "winners"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-                }`}
-            >
-              <Award size={16} />
-              <span>Winning Bidders</span>
-            </button>
-
-            <button
-              onClick={() => selectTab("payments")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "payments"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-                }`}
-            >
-              <CreditCard size={16} />
-              <span>Escrow & Settlements</span>
-            </button>
-
-            <button
-              onClick={() => selectTab("kyc")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "kyc"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-                }`}
-            >
-              <div className="flex items-center gap-3.5">
-                <ShieldCheck size={16} />
-                <span>Seller Verification</span>
-              </div>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${kycStatus === "APPROVED"
-                  ? "bg-emerald-500/20 text-emerald-300"
-                  : "bg-amber-500/20 text-amber-300"
-                  }`}
               >
-                {kycStatus}
-              </span>
-            </button>
+                <LayoutDashboard size={16} />
+                <span>Seller Overview</span>
+              </button>
+            </div>
 
-            <button
-              onClick={() => selectTab("reports")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "reports"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-                }`}
-            >
-              <BarChart3 size={16} />
-              <span>Reports & Analytics</span>
-            </button>
-
-            <button
-              onClick={() => selectTab("account")}
-              className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "account"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-                }`}
-            >
-              <UserRound size={16} />
-              <span>Manage Account</span>
-            </button>
-
-            <button
-              onClick={() => selectTab("notifications")}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${activeTab === "notifications"
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-slate-400 hover:bg-[#12233f] hover:text-white"
-                }`}
-            >
-              <div className="flex items-center gap-3.5">
-                <Bell size={16} />
-                <span>Notifications</span>
+            <div className="space-y-1">
+              <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Listings & Auctions
               </div>
-              {notifications.filter((n) => !n.readAt).length > 0 && (
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
-                  {notifications.filter((n) => !n.readAt).length}
+              <button
+                onClick={() => selectTab("listings")}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "listings"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <div className="flex items-center gap-3.5">
+                  <PackagePlus size={16} />
+                  <span>My Listings</span>
+                </div>
+                <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-xs text-blue-300">
+                  {listings.length}
                 </span>
-              )}
-            </button>
+              </button>
+
+              <button
+                onClick={() => selectTab("auctions")}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "auctions"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <div className="flex items-center gap-3.5">
+                  <Gavel size={16} />
+                  <span>Manage Auctions</span>
+                </div>
+                <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">
+                  {auctions.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => selectTab("bids")}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "bids"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <div className="flex items-center gap-3.5">
+                  <TrendingUp size={16} />
+                  <span>Monitor Bids</span>
+                </div>
+                <span className="rounded-full bg-purple-500/20 px-2 py-0.5 text-xs text-purple-300">
+                  {allBids.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => selectTab("winners")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "winners"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <Award size={16} />
+                <span>Winning Bidders</span>
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Business & Account
+              </div>
+              <button
+                onClick={() => selectTab("payments")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "payments"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <CreditCard size={16} />
+                <span>Escrow & Settlements</span>
+              </button>
+
+              <button
+                onClick={() => selectTab("reports")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "reports"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <BarChart3 size={16} />
+                <span>Reports & Analytics</span>
+              </button>
+
+              <button
+                onClick={() => selectTab("notifications")}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "notifications"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <div className="flex items-center gap-3.5">
+                  <Bell size={16} />
+                  <span>Notifications</span>
+                </div>
+                {notifications.filter((n) => !n.readAt).length > 0 && (
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">
+                    {notifications.filter((n) => !n.readAt).length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => selectTab("account")}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                  activeTab === "account"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-400 hover:bg-[#12233f] hover:text-white"
+                }`}
+              >
+                <UserRound size={16} />
+                <span>Manage Account</span>
+              </button>
+            </div>
           </nav>
 
-          <div className="border-t border-[#132644] pt-4">
+          <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
             <LogoutButton className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-colors" />
           </div>
         </div>
@@ -555,11 +631,12 @@ export function ProviderDashboardClient({
             <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white truncate">
               {activeTab === "dashboard" && "Seller Control Center"}
               {activeTab === "listings" && "My Auction Items & Assets"}
+              {activeTab === "create-listing" && "Add New Auction Item"}
+              {activeTab === "create-auction" && "Schedule Auction"}
               {activeTab === "auctions" && "Manage Scheduled & Live Auctions"}
               {activeTab === "bids" && "Real-Time Bid Monitor"}
               {activeTab === "winners" && "Winning Bidders & Conveyance"}
               {activeTab === "payments" && "Escrow Deposits & Payouts"}
-              {activeTab === "kyc" && "Seller Identity Verification (KYC)"}
               {activeTab === "reports" && "Sales & Conversion Analytics"}
               {activeTab === "notifications" && "Seller Alerts"}
               {activeTab === "account" && "Manage Account"}
@@ -569,105 +646,141 @@ export function ProviderDashboardClient({
           <div className="flex items-center gap-2 sm:gap-4">
             <ThemeToggle />
             <button
-              onClick={() => setShowListingModal(true)}
+              onClick={openListingWizard}
               className="hidden sm:flex items-center gap-2 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white shadow hover:bg-blue-700 transition-colors"
             >
               <Plus size={16} /> Add Auction Item
             </button>
 
-            <div className="flex items-center gap-3 border-l border-slate-200 pl-4">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-semibold text-blue-700 text-sm">
-                {user.name.charAt(0)}
-              </div>
-              <div className="text-left">
-                <div className="text-sm font-semibold text-slate-900 leading-tight">
-                  {user.name}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setProfileMenuOpen((current) => !current)}
+                className="flex items-center gap-3 border-l border-slate-200 pl-4 text-left transition-colors hover:text-slate-700"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-semibold text-blue-700 text-sm">
+                  {user.name.charAt(0)}
                 </div>
-                <div className="text-xs text-slate-500">
-                  Seller / Auction Owner
+                <div className="text-left">
+                  <div className="text-sm font-semibold text-slate-900 leading-tight">
+                    {user.name}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    Seller / Auction Owner
+                  </div>
                 </div>
-              </div>
+              </button>
+
+              {profileMenuOpen && (
+                <div className="absolute right-0 top-full z-30 mt-2 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                  <button
+                    type="button"
+                    onClick={() => selectTab("account")}
+                    className="block w-full px-4 py-3 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    Manage Account
+                  </button>
+                  <div className="border-t border-slate-200 dark:border-slate-700">
+                    <LogoutButton className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium text-rose-500 transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/30" />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>
 
         {/* Content Body */}
-        <main className="flex-1 p-8 space-y-8">
-          {/* KYC Alert if not approved */}
-          {kycStatus !== "APPROVED" && (
-            <div className="flex items-center justify-between rounded-2xl bg-amber-50 border border-amber-200 p-5 text-xs text-amber-800">
-              <div className="flex items-center gap-3">
-                <AlertCircle size={20} className="text-amber-600" />
-                <div>
-                  <strong className="font-bold text-amber-900 block text-sm">
-                    Seller Verification Required
-                  </strong>
-                  Submit your National ID / Business Registration documents to unlock live auction publishing.
-                </div>
-              </div>
-              <button
-                onClick={() => setActiveTab("kyc")}
-                className="rounded-xl bg-amber-600 px-4 py-2 font-bold text-white hover:bg-amber-700 shadow-sm"
-              >
-                Complete KYC
-              </button>
-            </div>
+        <main className="mx-auto flex w-full max-w-[1800px] flex-1 flex-col p-4 sm:p-6 lg:p-8 xl:px-10 space-y-8">
+          {(activeTab === "create-listing" ||
+            activeTab === "create-auction") && (
+            <ListingWizard
+              categories={categories}
+              listings={localListings}
+              startStep={wizardStartStep}
+              initialListingId={selectedListingForAuction?.id ?? null}
+              onClose={() => {
+                setSelectedListingForAuction(null);
+                selectTab("listings");
+              }}
+            />
           )}
 
           {/* ══════════════════ TAB 1: OVERVIEW ══════════════════ */}
           {activeTab === "dashboard" && (
-            <div className="space-y-8">
+            <div className="space-y-6">
               {/* Stat Cards */}
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                       <PackagePlus size={20} />
                     </div>
-                    <span className="text-xs font-semibold text-slate-400">Total Items</span>
+                    <span className="text-xs font-semibold text-slate-400">
+                      Total Items
+                    </span>
                   </div>
-                  <div className="mt-4">
-                    <div className="text-xs font-medium text-slate-500">My Listings</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">{listings.length}</div>
+                  <div className="mt-3">
+                    <div className="text-xs font-medium text-slate-500">
+                      My Listings
+                    </div>
+                    <div className="text-xl font-bold text-slate-900 mt-1">
+                      {listings.length}
+                    </div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                       <Gavel size={20} />
                     </div>
-                    <span className="text-xs font-semibold text-emerald-600">Live Now</span>
+                    <span className="text-xs font-semibold text-emerald-600">
+                      Live Now
+                    </span>
                   </div>
-                  <div className="mt-4">
-                    <div className="text-xs font-medium text-slate-500">Active Auctions</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">{activeAuctions.length}</div>
+                  <div className="mt-3">
+                    <div className="text-xs font-medium text-slate-500">
+                      Active Auctions
+                    </div>
+                    <div className="text-xl font-bold text-slate-900 mt-1">
+                      {activeAuctions.length}
+                    </div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
                       <TrendingUp size={20} />
                     </div>
-                    <span className="text-xs font-semibold text-purple-600">Bids Placed</span>
+                    <span className="text-xs font-semibold text-purple-600">
+                      Bids Placed
+                    </span>
                   </div>
-                  <div className="mt-4">
-                    <div className="text-xs font-medium text-slate-500">Total Bids Received</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">{allBids.length}</div>
+                  <div className="mt-3">
+                    <div className="text-xs font-medium text-slate-500">
+                      Total Bids Received
+                    </div>
+                    <div className="text-xl font-bold text-slate-900 mt-1">
+                      {allBids.length}
+                    </div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
                       <DollarSign size={20} />
                     </div>
-                    <span className="text-xs font-semibold text-amber-600">Settled</span>
+                    <span className="text-xs font-semibold text-amber-600">
+                      Settled
+                    </span>
                   </div>
-                  <div className="mt-4">
-                    <div className="text-xs font-medium text-slate-500">Gross Sales Volume</div>
-                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                  <div className="mt-3">
+                    <div className="text-xs font-medium text-slate-500">
+                      Gross Sales Volume
+                    </div>
+                    <div className="text-xl font-bold text-slate-900 mt-1">
                       {totalSales.toLocaleString()} ETB
                     </div>
                   </div>
@@ -696,7 +809,10 @@ export function ProviderDashboardClient({
                     >
                       <div className="flex items-start gap-4">
                         <img
-                          src={auc.listing?.images?.[0]?.url || "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=300&q=80"}
+                          src={
+                            auc.listing?.images?.[0]?.url ||
+                            "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=300&q=80"
+                          }
                           alt={auc.listing?.title}
                           className="h-16 w-24 rounded-lg object-cover"
                         />
@@ -715,13 +831,20 @@ export function ProviderDashboardClient({
 
                       <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between text-xs">
                         <div>
-                          <span className="text-slate-400 block">Current High Bid</span>
+                          <span className="text-slate-400 block">
+                            Current High Bid
+                          </span>
                           <span className="text-base font-bold text-slate-900">
-                            {Number(auc.currentHighestBid || auc.startingPrice).toLocaleString()} ETB
+                            {Number(
+                              auc.currentHighestBid || auc.startingPrice,
+                            ).toLocaleString()}{" "}
+                            ETB
                           </span>
                         </div>
                         <div className="text-right">
-                          <span className="text-slate-400 block">Bids Received</span>
+                          <span className="text-slate-400 block">
+                            Bids Received
+                          </span>
                           <span className="font-semibold text-blue-600">
                             {auc.bids?.length || 0} bids
                           </span>
@@ -748,7 +871,10 @@ export function ProviderDashboardClient({
 
                 <div className="divide-y divide-slate-100 text-xs">
                   {allBids.slice(0, 5).map((b, idx) => (
-                    <div key={idx} className="flex items-center justify-between py-3">
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between py-3"
+                    >
                       <div className="flex items-center gap-3">
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-bold text-[10px]">
                           ETB
@@ -782,10 +908,11 @@ export function ProviderDashboardClient({
             <div className="space-y-6">
               {listingDeleteMessage && (
                 <div
-                  className={`rounded-xl border p-3 text-xs ${listingDeleteMessage.error
-                    ? "border-rose-200 bg-rose-50 text-rose-700"
-                    : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    }`}
+                  className={`rounded-xl border p-3 text-xs ${
+                    listingDeleteMessage.error
+                      ? "border-rose-200 bg-rose-50 text-rose-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}
                 >
                   {listingDeleteMessage.error || listingDeleteMessage.message}
                 </div>
@@ -800,7 +927,7 @@ export function ProviderDashboardClient({
                   </p>
                 </div>
                 <button
-                  onClick={() => setShowListingModal(true)}
+                  onClick={openListingWizard}
                   className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-blue-700 flex items-center gap-2"
                 >
                   <Plus size={16} /> Add New Listing
@@ -808,7 +935,7 @@ export function ProviderDashboardClient({
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {localListings.map((l) => (
+                {paginatedListings.map((l) => (
                   <div
                     key={l.id}
                     className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm flex flex-col justify-between"
@@ -816,11 +943,19 @@ export function ProviderDashboardClient({
                     <div>
                       <div className="relative aspect-[16/10] bg-slate-100">
                         <img
-                          src={l.images?.[0]?.url || "https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=400&q=80"}
+                          src={
+                            l.images?.[0]?.url ||
+                            "https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=400&q=80"
+                          }
                           alt={l.title}
                           className="h-full w-full object-cover"
                         />
-                        <span className={`absolute top-3 left-3 rounded-md px-2 py-0.5 text-xs font-semibold ${TONE_CLASS[listingStatusMeta(l.status || "DRAFT").tone]}`}>  {listingStatusMeta(l.status || "DRAFT").label}</span>
+                        <span
+                          className={`absolute top-3 left-3 rounded-md px-2 py-0.5 text-xs font-semibold ${TONE_CLASS[listingStatusMeta(l.status || "DRAFT").tone]}`}
+                        >
+                          {" "}
+                          {listingStatusMeta(l.status || "DRAFT").label}
+                        </span>
                       </div>
 
                       <div className="p-5 space-y-2">
@@ -833,7 +968,11 @@ export function ProviderDashboardClient({
                         <p className="text-xs text-slate-500 line-clamp-2">
                           {l.description}
                         </p>
-                        {l.status === "REJECTED" && l.rejectionReason && (<p className="rounded-lg bg-rose-50 p-2 text-[11px] text-rose-700">Admin: {l.rejectionReason}</p>)}
+                        {l.status === "REJECTED" && l.rejectionReason && (
+                          <p className="rounded-lg bg-rose-50 p-2 text-[11px] text-rose-700">
+                            Admin: {l.rejectionReason}
+                          </p>
+                        )}
                         <div className="flex items-center gap-1 text-[11px] text-slate-400">
                           <MapPin size={12} /> {l.city}, {l.region}
                         </div>
@@ -845,7 +984,9 @@ export function ProviderDashboardClient({
                         Ref: {l.referenceNumber || "ETH-LST"}
                       </span>
                       <div className="flex items-center gap-2">
-                        {(l.status === "DRAFT" || l.status === "REJECTED" || l.status === "PENDING_REVIEW") && (
+                        {(l.status === "DRAFT" ||
+                          l.status === "REJECTED" ||
+                          l.status === "PENDING_REVIEW") && (
                           <button
                             onClick={() => {
                               setSelectedListingForEdit(l);
@@ -867,7 +1008,9 @@ export function ProviderDashboardClient({
                         {(l.status === "DRAFT" || l.status === "REJECTED") && (
                           <>
                             <button
-                              disabled={isPending || (l._count?.auctions ?? 0) > 0}
+                              disabled={
+                                isPending || (l._count?.auctions ?? 0) > 0
+                              }
                               onClick={() => {
                                 if (
                                   !window.confirm(
@@ -877,7 +1020,9 @@ export function ProviderDashboardClient({
                                   return;
                                 }
                                 startTransition(async () => {
-                                  const result = await deleteListingAction(l.id);
+                                  const result = await deleteListingAction(
+                                    l.id,
+                                  );
                                   setListingDeleteMessage(result);
                                   if (result.success) router.refresh();
                                 });
@@ -892,10 +1037,7 @@ export function ProviderDashboardClient({
                               Delete
                             </button>
                             <button
-                              onClick={() => {
-                                setSelectedListingForAuction(l);
-                                setShowAuctionModal(true);
-                              }}
+                              onClick={() => openAuctionWizard(l)}
                               className="rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-700"
                             >
                               Create Auction &rarr;
@@ -907,6 +1049,17 @@ export function ProviderDashboardClient({
                   </div>
                 ))}
               </div>
+              <Pagination
+                currentPage={listingsPage}
+                totalPages={listingsTotalPages}
+                totalItems={listingsTotal}
+                pageSize={listingsPageSize}
+                onPageChange={setListingsPage}
+                onPageSizeChange={setListingsPageSize}
+                pageSizeOptions={[6, 12, 24]}
+                itemName="listings"
+                className="mt-6 pt-4 border-t border-slate-100"
+              />
             </div>
           )}
 
@@ -919,11 +1072,12 @@ export function ProviderDashboardClient({
                     Manage Auctions
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Schedule, monitor, and configure parameters for your auctions.
+                    Schedule, monitor, and configure parameters for your
+                    auctions.
                   </p>
                 </div>
                 <button
-                  onClick={() => setShowAuctionModal(true)}
+                  onClick={() => openAuctionWizard()}
                   className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-blue-700"
                 >
                   Schedule New Auction
@@ -953,14 +1107,22 @@ export function ProviderDashboardClient({
                           {Number(auc.startingPrice).toLocaleString()} ETB
                         </td>
                         <td className="py-3 font-bold text-blue-600">
-                          {Number(auc.currentHighestBid || 0).toLocaleString()} ETB
+                          {Number(auc.currentHighestBid || 0).toLocaleString()}{" "}
+                          ETB
                         </td>
                         <td className="py-3">
-                          <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${TONE_CLASS[auctionStatusMeta(auc.status || "DRAFT").tone]}`}>  {auctionStatusMeta(auc.status || "DRAFT").label}</span>
+                          <span
+                            className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${TONE_CLASS[auctionStatusMeta(auc.status || "DRAFT").tone]}`}
+                          >
+                            {" "}
+                            {auctionStatusMeta(auc.status || "DRAFT").label}
+                          </span>
                         </td>
                         <td className="py-3">
                           <span className="font-semibold">
-                            {auc.entryFees?.[0]?.status ?? auc.entryFeeStatus ?? "UNPAID"}
+                            {auc.entryFees?.[0]?.status ??
+                              auc.entryFeeStatus ??
+                              "UNPAID"}
                           </span>
                           {auc.entryFees?.[0] && (
                             <span className="block text-slate-500">
@@ -972,40 +1134,57 @@ export function ProviderDashboardClient({
                         <td className="py-3 text-slate-500">
                           {auc.startAt
                             ? new Date(auc.startAt).toLocaleDateString()
-                            : "N/A"} - {" "}
+                            : "N/A"}{" "}
+                          -{" "}
                           {auc.endAt
                             ? new Date(auc.endAt).toLocaleDateString()
                             : "N/A"}
                         </td>
                         <td className="py-3 text-right">
-                          {auc.status === "PENDING_APPROVAL" && auc.listing?.status === "APPROVED" && (auc.entryFees?.[0]?.status === "UNPAID" || auc.entryFees?.[0]?.status === "PENDING") && (
-                            <button
-                              onClick={() => {
-                                setShowPaymentDialog(true);
-                              }}
-                              className="rounded-lg bg-emerald-600 px-3 py-1.5 font-semibold text-white hover:bg-emerald-700 mr-2 transition shadow-lg shadow-emerald-500/30"
-                            >
-                              Pay Entry Fee
-                            </button>
-                          )}
-                          {(auc.status === "PENDING_APPROVAL" || auc.status === "SCHEDULED") && auc.bids?.length === 0 && (
-                            <button
-                              onClick={() => {
-                                startTransition(async () => {
-                                  await cancelAuctionAction(auc.id);
-                                });
-                              }}
-                              className="text-rose-600 hover:text-rose-700 font-semibold"
-                            >
-                              Cancel
-                            </button>
-                          )}
+                          {auc.status === "PENDING_APPROVAL" &&
+                            auc.listing?.status === "APPROVED" &&
+                            (auc.entryFees?.[0]?.status === "UNPAID" ||
+                              auc.entryFees?.[0]?.status === "PENDING") && (
+                              <button
+                                onClick={() => {
+                                  setShowPaymentDialog(true);
+                                }}
+                                className="rounded-lg bg-emerald-600 px-3 py-1.5 font-semibold text-white hover:bg-emerald-700 mr-2 transition shadow-lg shadow-emerald-500/30"
+                              >
+                                Pay Entry Fee
+                              </button>
+                            )}
+                          {(auc.status === "PENDING_APPROVAL" ||
+                            auc.status === "SCHEDULED") &&
+                            auc.bids?.length === 0 && (
+                              <button
+                                onClick={() => {
+                                  startTransition(async () => {
+                                    await cancelAuctionAction(auc.id);
+                                  });
+                                }}
+                                className="text-rose-600 hover:text-rose-700 font-semibold"
+                              >
+                                Cancel
+                              </button>
+                            )}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                currentPage={auctionsPage}
+                totalPages={auctionsTotalPages}
+                totalItems={auctionsTotal}
+                pageSize={auctionsPageSize}
+                onPageChange={setAuctionsPage}
+                onPageSizeChange={setAuctionsPageSize}
+                pageSizeOptions={[6, 10, 20]}
+                itemName="auctions"
+                className="mt-4 pt-3 border-t border-slate-100"
+              />
             </div>
           )}
 
@@ -1034,14 +1213,18 @@ export function ProviderDashboardClient({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {allBids.map((b) => (
+                    {paginatedBids.map((b) => (
                       <tr key={b.id} className="hover:bg-slate-50">
                         <td className="py-3 font-semibold text-slate-900">
                           {b.auctionTitle}
                         </td>
                         <td className="py-3 text-slate-700">
-                          <span className="block font-semibold">{b.bidder?.name || "Unknown bidder"}</span>
-                          <span className="block text-[11px] text-slate-500">{b.bidder?.email || b.bidderId}</span>
+                          <span className="block font-semibold">
+                            {b.bidder?.name || "Unknown bidder"}
+                          </span>
+                          <span className="block text-[11px] text-slate-500">
+                            {b.bidder?.email || b.bidderId}
+                          </span>
                         </td>
                         <td className="py-3 font-bold text-slate-900">
                           {Number(b.amount).toLocaleString()} ETB
@@ -1067,7 +1250,10 @@ export function ProviderDashboardClient({
                     ))}
                     {allBids.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="py-8 text-center text-sm text-slate-500">
+                        <td
+                          colSpan={6}
+                          className="py-8 text-center text-sm text-slate-500"
+                        >
                           No bids have been placed on your auctions yet.
                         </td>
                       </tr>
@@ -1075,6 +1261,17 @@ export function ProviderDashboardClient({
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                currentPage={bidsPage}
+                totalPages={bidsTotalPages}
+                totalItems={bidsTotal}
+                pageSize={bidsPageSize}
+                onPageChange={setBidsPage}
+                onPageSizeChange={setBidsPageSize}
+                pageSizeOptions={[5, 10, 25]}
+                itemName="bids"
+                className="mt-4 pt-3 border-t border-slate-100"
+              />
             </div>
           )}
 
@@ -1086,14 +1283,13 @@ export function ProviderDashboardClient({
                   Winning Bidders & Conveyance
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Concluded auctions awaiting settlement and title deed transfer.
+                  Concluded auctions awaiting settlement and title deed
+                  transfer.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                {auctions
-                  .filter((a) => a.status === "COMPLETED" || a.result)
-                  .map((auc) => (
+                {paginatedWinners.map((auc) => (
                     <div
                       key={auc.id}
                       className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4"
@@ -1103,7 +1299,9 @@ export function ProviderDashboardClient({
                           Concluded Winner
                         </span>
                         <span className="text-xs text-slate-400">
-                          {auc.endAt ? new Date(auc.endAt).toLocaleDateString() : "N/A"}
+                          {auc.endAt
+                            ? new Date(auc.endAt).toLocaleDateString()
+                            : "N/A"}
                         </span>
                       </div>
 
@@ -1113,152 +1311,53 @@ export function ProviderDashboardClient({
 
                       <div className="rounded-xl bg-slate-50 p-4 text-xs space-y-2">
                         <div className="flex justify-between">
-                          <span className="text-slate-500">Winning Amount:</span>
+                          <span className="text-slate-500">
+                            Winning Amount:
+                          </span>
                           <span className="font-bold text-slate-900">
-                            {Number(auc.result?.winningAmount || auc.currentHighestBid).toLocaleString()} ETB
+                            {Number(
+                              auc.result?.winningAmount ||
+                                auc.currentHighestBid,
+                            ).toLocaleString()}{" "}
+                            ETB
                           </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-slate-500">Deposit Due:</span>
                           <span className="font-bold text-blue-600">
-                            {Number(auc.result?.depositDue || 0).toLocaleString()} ETB
+                            {Number(
+                              auc.result?.depositDue || 0,
+                            ).toLocaleString()}{" "}
+                            ETB
                           </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-slate-500">Escrow Status:</span>
                           <span className="font-bold text-emerald-600">
-                            {auc.result?.isSettled ? "Settled & Verified" : "Pending Deposit"}
+                            {auc.result?.isSettled
+                              ? "Settled & Verified"
+                              : "Pending Deposit"}
                           </span>
                         </div>
                       </div>
                     </div>
                   ))}
               </div>
+              <Pagination
+                currentPage={winnersPage}
+                totalPages={winnersTotalPages}
+                totalItems={winnersTotal}
+                pageSize={winnersPageSize}
+                onPageChange={setWinnersPage}
+                onPageSizeChange={setWinnersPageSize}
+                pageSizeOptions={[6, 12, 24]}
+                itemName="concluded auctions"
+                className="mt-6 pt-4 border-t border-slate-100"
+              />
             </div>
           )}
 
-          {/* ══════════════════ TAB 6: SELLER VERIFICATION (KYC) ══════════════════ */}
-          {activeTab === "kyc" && (
-            <div className="max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">
-                  Seller Identity & Business Verification
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Submit government-issued identification and registered business details to verify your seller status.
-                </p>
-              </div>
-
-              {kycMsg && (
-                <div
-                  className={`rounded-xl p-3 text-xs ${kycMsg.error
-                    ? "bg-rose-50 text-rose-700"
-                    : "bg-emerald-50 text-emerald-700"
-                    }`}
-                >
-                  {kycMsg.error || kycMsg.success}
-                </div>
-              )}
-
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const formData = new FormData(e.currentTarget);
-                  startTransition(async () => {
-                    const res = await submitSellerKycAction(formData);
-                    if (res.success) {
-                      setKycMsg({ success: res.message });
-                      setSuccessDialogData({
-                        title: "KYC Submitted Successfully",
-                        message: "Your identity verification has been submitted for review. An administrator will review your documents within 1-2 business days.",
-                        nextStep: "Wait for admin approval",
-                        icon: "success",
-                      });
-                      setShowSuccessDialog(true);
-                    } else {
-                      setKycMsg({ error: res.error });
-                    }
-                  });
-                }}
-                className="space-y-4 text-xs"
-              >
-                <AnimatedInput
-                  label="National ID / Passport Number"
-                  name="nationalIdNumber"
-                  value={kycForm.nationalIdNumber}
-                  onChange={(v) => setKycForm({ ...kycForm, nationalIdNumber: v })}
-                  required
-                  placeholder="e.g. ETH-NAT-890241"
-                  minLength={4}
-                  maxLength={50}
-                  validate={(v) => {
-                    if (!/^[A-Z0-9-]+$/.test(v)) {
-                      return { valid: false, message: "Use uppercase letters, numbers, and hyphens only" };
-                    }
-                    return { valid: true };
-                  }}
-                />
-
-                <AnimatedInput
-                  label="Business / Entity Legal Name (Optional)"
-                  name="businessName"
-                  value={kycForm.businessName}
-                  onChange={(v) => setKycForm({ ...kycForm, businessName: v })}
-                  placeholder="e.g. Prime Estate Developers LLC"
-                  maxLength={200}
-                />
-
-                <AnimatedInput
-                  label="Tax Identification Number (TIN)"
-                  name="taxId"
-                  value={kycForm.taxId}
-                  onChange={(v) => setKycForm({ ...kycForm, taxId: v })}
-                  placeholder="e.g. TAX-987654321"
-                  minLength={5}
-                  maxLength={30}
-                  validate={(v) => {
-                    if (v && !/^[A-Z0-9-]+$/.test(v)) {
-                      return { valid: false, message: "Use uppercase letters, numbers, and hyphens only" };
-                    }
-                    return { valid: true };
-                  }}
-                />
-
-                <AnimatedInput
-                  label="Physical Address"
-                  name="address"
-                  value={kycForm.address}
-                  onChange={(v) => setKycForm({ ...kycForm, address: v })}
-                  placeholder="Street, City, Region"
-                  required
-                  minLength={10}
-                  maxLength={500}
-                />
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    ID Document / License URL or File Link
-                  </label>
-                  <input
-                    name="idDocumentUrl"
-                    defaultValue={sellerProfile?.idDocumentUrl || ""}
-                    placeholder="https://..."
-                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="rounded-xl bg-blue-600 px-5 py-2.5 font-bold text-white shadow hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {isPending ? "Submitting..." : "Submit KYC Documents"}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* ══════════════════ TAB 7: REPORTS ══════════════════ */}
+          {/* ══════════════════ TAB: REPORTS ══════════════════ */}
           {activeTab === "reports" && (
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
               <div className="flex items-center justify-between">
@@ -1267,7 +1366,8 @@ export function ProviderDashboardClient({
                     Seller Sales & Auction Reports
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Historical metrics, auction clearance rate, and gross revenue summary.
+                    Historical metrics, auction clearance rate, and gross
+                    revenue summary.
                   </p>
                 </div>
                 <button
@@ -1280,19 +1380,25 @@ export function ProviderDashboardClient({
 
               <div className="grid grid-cols-1 gap-5 md:grid-cols-3 text-xs">
                 <div className="rounded-xl bg-slate-50 p-4">
-                  <span className="text-slate-400 block">Total Auctions Hosted</span>
+                  <span className="text-slate-400 block">
+                    Total Auctions Hosted
+                  </span>
                   <span className="text-2xl font-bold text-slate-900 mt-1 block">
                     {auctions.length}
                   </span>
                 </div>
                 <div className="rounded-xl bg-slate-50 p-4">
-                  <span className="text-slate-400 block">Unique Participating Bidders</span>
+                  <span className="text-slate-400 block">
+                    Unique Participating Bidders
+                  </span>
                   <span className="text-2xl font-bold text-slate-900 mt-1 block">
                     {uniqueBidders.length}
                   </span>
                 </div>
                 <div className="rounded-xl bg-slate-50 p-4">
-                  <span className="text-slate-400 block">Settled Gross Volume</span>
+                  <span className="text-slate-400 block">
+                    Settled Gross Volume
+                  </span>
                   <span className="text-2xl font-bold text-emerald-600 mt-1 block">
                     {totalSales.toLocaleString()} ETB
                   </span>
@@ -1308,7 +1414,8 @@ export function ProviderDashboardClient({
                   Notification Center
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Updates about your listings, auctions, payments, and account. Reply to buyer inquiries here.
+                  Updates about your listings, auctions, payments, and account.
+                  Reply to buyer inquiries here.
                 </p>
               </div>
 
@@ -1324,20 +1431,24 @@ export function ProviderDashboardClient({
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {notifications.map((notification) => {
+                  {paginatedNotifications.map((notification) => {
                     const inquiryTicketId = getInquiryTicketId(notification);
                     return (
                       <article
                         key={notification.id}
-                        className={`flex flex-col gap-4 rounded-xl border p-4 sm:flex-row sm:items-start sm:justify-between ${notification.readAt
-                          ? "border-slate-100 bg-slate-50"
-                          : "border-blue-100 bg-blue-50/60"
-                          }`}
+                        className={`flex flex-col gap-4 rounded-xl border p-4 sm:flex-row sm:items-start sm:justify-between ${
+                          notification.readAt
+                            ? "border-slate-100 bg-slate-50"
+                            : "border-blue-100 bg-blue-50/60"
+                        }`}
                       >
                         <div className="flex min-w-0 items-start gap-3">
                           <span
-                            className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white ${notification.readAt ? "bg-slate-400" : "bg-blue-600"
-                              }`}
+                            className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white ${
+                              notification.readAt
+                                ? "bg-slate-400"
+                                : "bg-blue-600"
+                            }`}
                           >
                             <Bell size={14} />
                           </span>
@@ -1352,7 +1463,9 @@ export function ProviderDashboardClient({
                               className="mt-2 block text-[10px] text-slate-400"
                               dateTime={notification.createdAt}
                             >
-                              {new Date(notification.createdAt).toLocaleString()}
+                              {new Date(
+                                notification.createdAt,
+                              ).toLocaleString()}
                             </time>
                             {notification.link && (
                               <a
@@ -1399,7 +1512,9 @@ export function ProviderDashboardClient({
                                   </span>
                                   <button
                                     type="submit"
-                                    disabled={replyingToInquiry === inquiryTicketId}
+                                    disabled={
+                                      replyingToInquiry === inquiryTicketId
+                                    }
                                     className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
                                   >
                                     <Send size={13} />
@@ -1411,12 +1526,17 @@ export function ProviderDashboardClient({
                                 {inquiryReplyFeedback[inquiryTicketId] && (
                                   <p
                                     role="status"
-                                    className={`mt-2 text-xs ${inquiryReplyFeedback[inquiryTicketId].success
-                                      ? "text-emerald-700 dark:text-emerald-400"
-                                      : "text-rose-700 dark:text-rose-400"
-                                      }`}
+                                    className={`mt-2 text-xs ${
+                                      inquiryReplyFeedback[inquiryTicketId]
+                                        .success
+                                        ? "text-emerald-700 dark:text-emerald-400"
+                                        : "text-rose-700 dark:text-rose-400"
+                                    }`}
                                   >
-                                    {inquiryReplyFeedback[inquiryTicketId].message}
+                                    {
+                                      inquiryReplyFeedback[inquiryTicketId]
+                                        .message
+                                    }
                                   </p>
                                 )}
                               </form>
@@ -1431,7 +1551,9 @@ export function ProviderDashboardClient({
                               disabled={isPending}
                               onClick={() =>
                                 startTransition(async () => {
-                                  await markNotificationReadAction(notification.id);
+                                  await markNotificationReadAction(
+                                    notification.id,
+                                  );
                                 })
                               }
                               className="rounded-lg bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1443,7 +1565,12 @@ export function ProviderDashboardClient({
                             type="button"
                             disabled={isPending}
                             onClick={() => {
-                              if (!window.confirm("Delete this notification? This will not delete the inquiry or other users’ copies.")) return;
+                              if (
+                                !window.confirm(
+                                  "Delete this notification? This will not delete the inquiry or other users’ copies.",
+                                )
+                              )
+                                return;
                               startTransition(async () => {
                                 await deleteNotificationAction(notification.id);
                               });
@@ -1459,6 +1586,17 @@ export function ProviderDashboardClient({
                   })}
                 </div>
               )}
+              <Pagination
+                currentPage={notifsPage}
+                totalPages={notifsTotalPages}
+                totalItems={notifsTotal}
+                pageSize={notifsPageSize}
+                onPageChange={setNotifsPage}
+                onPageSizeChange={setNotifsPageSize}
+                pageSizeOptions={[5, 10, 20]}
+                itemName="notifications"
+                className="mt-6 pt-4 border-t border-slate-100"
+              />
             </section>
           )}
 
@@ -1490,8 +1628,13 @@ export function ProviderDashboardClient({
           >
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Bid record</p>
-                <h2 id="seller-bid-details-title" className="mt-1 text-xl font-bold text-slate-900 dark:text-white">
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                  Bid record
+                </p>
+                <h2
+                  id="seller-bid-details-title"
+                  className="mt-1 text-xl font-bold text-slate-900 dark:text-white"
+                >
                   {selectedBid.auctionTitle}
                 </h2>
               </div>
@@ -1514,74 +1657,113 @@ export function ProviderDashboardClient({
               </div>
               <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
                 <dt className="text-xs text-slate-500">Bid status</dt>
-                <dd className="mt-1 font-semibold text-slate-900 dark:text-white">{selectedBid.status}</dd>
+                <dd className="mt-1 font-semibold text-slate-900 dark:text-white">
+                  {selectedBid.status}
+                </dd>
               </div>
               <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
                 <dt className="text-xs text-slate-500">Submitted</dt>
-                <dd className="mt-1 text-sm font-medium text-slate-900 dark:text-white">{new Date(selectedBid.createdAt).toLocaleString()}</dd>
+                <dd className="mt-1 text-sm font-medium text-slate-900 dark:text-white">
+                  {new Date(selectedBid.createdAt).toLocaleString()}
+                </dd>
               </div>
               <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
                 <dt className="text-xs text-slate-500">Auction status / end</dt>
                 <dd className="mt-1 text-sm font-medium text-slate-900 dark:text-white">
                   {selectedBid.auctionStatus || "Unknown"}
-                  {selectedBid.auctionEndAt ? ` · ${new Date(selectedBid.auctionEndAt).toLocaleString()}` : ""}
+                  {selectedBid.auctionEndAt
+                    ? ` · ${new Date(selectedBid.auctionEndAt).toLocaleString()}`
+                    : ""}
                 </dd>
               </div>
             </dl>
 
             <div className="mt-5 rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
-              <h3 className="font-semibold text-slate-900 dark:text-white">Bidder</h3>
+              <h3 className="font-semibold text-slate-900 dark:text-white">
+                Bidder
+              </h3>
               <dl className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div>
                   <dt className="text-xs text-slate-500">Name</dt>
-                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">{selectedBid.bidder?.name || "Unavailable"}</dd>
+                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {selectedBid.bidder?.name || "Unavailable"}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs text-slate-500">Email</dt>
-                  <dd className="mt-1 break-all text-sm font-medium text-slate-800 dark:text-slate-200">{selectedBid.bidder?.email || "Unavailable"}</dd>
+                  <dd className="mt-1 break-all text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {selectedBid.bidder?.email || "Unavailable"}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs text-slate-500">Account status</dt>
-                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">{selectedBid.bidder?.status || "Unknown"}</dd>
+                  <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {selectedBid.bidder?.status || "Unknown"}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs text-slate-500">Bidder ID</dt>
-                  <dd className="mt-1 break-all font-mono text-xs text-slate-600 dark:text-slate-300">{selectedBid.bidderId}</dd>
+                  <dd className="mt-1 break-all font-mono text-xs text-slate-600 dark:text-slate-300">
+                    {selectedBid.bidderId}
+                  </dd>
                 </div>
               </dl>
             </div>
 
             <div className="mt-5 rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
-              <h3 className="font-semibold text-slate-900 dark:text-white">Bid payment</h3>
+              <h3 className="font-semibold text-slate-900 dark:text-white">
+                Bid payment
+              </h3>
               {selectedBid.payment ? (
                 <>
                   <dl className="mt-3 grid gap-3 sm:grid-cols-2">
                     <div>
                       <dt className="text-xs text-slate-500">Payment status</dt>
-                      <dd className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedBid.payment.status}</dd>
+                      <dd className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        {selectedBid.payment.status}
+                      </dd>
                     </div>
                     <div>
                       <dt className="text-xs text-slate-500">Payment amount</dt>
                       <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
-                        {Number(selectedBid.payment.amount).toLocaleString()} {selectedBid.payment.currency}
+                        {Number(selectedBid.payment.amount).toLocaleString()}{" "}
+                        {selectedBid.payment.currency}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-xs text-slate-500">Method</dt>
-                      <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">{selectedBid.payment.method}</dd>
+                      <dd className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                        {selectedBid.payment.method}
+                      </dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-slate-500">Transaction reference</dt>
-                      <dd className="mt-1 break-all font-mono text-xs text-slate-700 dark:text-slate-300">{selectedBid.payment.transactionRef || "Not provided"}</dd>
+                      <dt className="text-xs text-slate-500">
+                        Transaction reference
+                      </dt>
+                      <dd className="mt-1 break-all font-mono text-xs text-slate-700 dark:text-slate-300">
+                        {selectedBid.payment.transactionRef || "Not provided"}
+                      </dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-slate-500">Payment submitted</dt>
-                      <dd className="mt-1 text-sm text-slate-700 dark:text-slate-300">{new Date(selectedBid.payment.createdAt).toLocaleString()}</dd>
+                      <dt className="text-xs text-slate-500">
+                        Payment submitted
+                      </dt>
+                      <dd className="mt-1 text-sm text-slate-700 dark:text-slate-300">
+                        {new Date(
+                          selectedBid.payment.createdAt,
+                        ).toLocaleString()}
+                      </dd>
                     </div>
                     {selectedBid.payment.verifiedAt && (
                       <div>
-                        <dt className="text-xs text-slate-500">Payment verified</dt>
-                        <dd className="mt-1 text-sm text-slate-700 dark:text-slate-300">{new Date(selectedBid.payment.verifiedAt).toLocaleString()}</dd>
+                        <dt className="text-xs text-slate-500">
+                          Payment verified
+                        </dt>
+                        <dd className="mt-1 text-sm text-slate-700 dark:text-slate-300">
+                          {new Date(
+                            selectedBid.payment.verifiedAt,
+                          ).toLocaleString()}
+                        </dd>
                       </div>
                     )}
                   </dl>
@@ -1590,15 +1772,26 @@ export function ProviderDashboardClient({
                       Rejection reason: {selectedBid.payment.rejectionReason}
                     </p>
                   )}
-                  {(selectedBid.payment.receiptUrl || selectedBid.payment.bankReferenceUrl) && (
+                  {(selectedBid.payment.receiptUrl ||
+                    selectedBid.payment.bankReferenceUrl) && (
                     <div className="mt-4 flex flex-wrap gap-3">
                       {selectedBid.payment.receiptUrl && (
-                        <a href={selectedBid.payment.receiptUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-blue-700 underline dark:text-blue-300">
+                        <a
+                          href={selectedBid.payment.receiptUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-semibold text-blue-700 underline dark:text-blue-300"
+                        >
                           Open receipt
                         </a>
                       )}
                       {selectedBid.payment.bankReferenceUrl && (
-                        <a href={selectedBid.payment.bankReferenceUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-blue-700 underline dark:text-blue-300">
+                        <a
+                          href={selectedBid.payment.bankReferenceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-semibold text-blue-700 underline dark:text-blue-300"
+                        >
                           Open payment evidence
                         </a>
                       )}
@@ -1606,25 +1799,13 @@ export function ProviderDashboardClient({
                   )}
                 </>
               ) : (
-                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">No bid payment record has been submitted.</p>
+                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                  No bid payment record has been submitted.
+                </p>
               )}
             </div>
           </section>
         </div>
-      )}
-
-      {(showListingModal || showAuctionModal) && (
-        <ListingWizard
-          categories={categories}
-          listings={listings}
-          startStep={showAuctionModal ? 2 : 1}
-          initialListingId={selectedListingForAuction?.id ?? null}
-          onClose={() => {
-            setShowListingModal(false);
-            setShowAuctionModal(false);
-            setSelectedListingForAuction(null);
-          }}
-        />
       )}
 
       {/* Edit Listing Modal */}
@@ -1648,31 +1829,46 @@ export function ProviderDashboardClient({
             <div className="p-6 space-y-4">
               {editListingMessage && (
                 <div
-                  className={`rounded-lg p-3 text-sm ${editListingMessage.error
-                    ? "bg-rose-50 text-rose-700"
-                    : "bg-emerald-50 text-emerald-700"
-                    }`}
+                  className={`rounded-lg p-3 text-sm ${
+                    editListingMessage.error
+                      ? "bg-rose-50 text-rose-700"
+                      : "bg-emerald-50 text-emerald-700"
+                  }`}
                 >
                   {editListingMessage.error || editListingMessage.message}
                 </div>
               )}
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1 text-xs">Title</label>
+                <label className="block font-semibold text-slate-700 mb-1 text-xs">
+                  Title
+                </label>
                 <input
                   type="text"
                   value={editListingForm.title}
-                  onChange={(e) => setEditListingForm({ ...editListingForm, title: e.target.value })}
+                  onChange={(e) =>
+                    setEditListingForm({
+                      ...editListingForm,
+                      title: e.target.value,
+                    })
+                  }
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
                   placeholder="Enter listing title"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1 text-xs">Description</label>
+                <label className="block font-semibold text-slate-700 mb-1 text-xs">
+                  Description
+                </label>
                 <textarea
                   value={editListingForm.description}
-                  onChange={(e) => setEditListingForm({ ...editListingForm, description: e.target.value })}
+                  onChange={(e) =>
+                    setEditListingForm({
+                      ...editListingForm,
+                      description: e.target.value,
+                    })
+                  }
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white min-h-[120px]"
                   placeholder="Enter detailed description"
                   rows={4}
@@ -1681,21 +1877,35 @@ export function ProviderDashboardClient({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1 text-xs">City</label>
+                  <label className="block font-semibold text-slate-700 mb-1 text-xs">
+                    City
+                  </label>
                   <input
                     type="text"
                     value={editListingForm.city}
-                    onChange={(e) => setEditListingForm({ ...editListingForm, city: e.target.value })}
+                    onChange={(e) =>
+                      setEditListingForm({
+                        ...editListingForm,
+                        city: e.target.value,
+                      })
+                    }
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
                     placeholder="City"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1 text-xs">Region</label>
+                  <label className="block font-semibold text-slate-700 mb-1 text-xs">
+                    Region
+                  </label>
                   <input
                     type="text"
                     value={editListingForm.region}
-                    onChange={(e) => setEditListingForm({ ...editListingForm, region: e.target.value })}
+                    onChange={(e) =>
+                      setEditListingForm({
+                        ...editListingForm,
+                        region: e.target.value,
+                      })
+                    }
                     className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
                     placeholder="Region"
                   />
@@ -1703,25 +1913,37 @@ export function ProviderDashboardClient({
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1 text-xs">Address</label>
+                <label className="block font-semibold text-slate-700 mb-1 text-xs">
+                  Address
+                </label>
                 <input
                   type="text"
                   value={editListingForm.address}
-                  onChange={(e) => setEditListingForm({ ...editListingForm, address: e.target.value })}
+                  onChange={(e) =>
+                    setEditListingForm({
+                      ...editListingForm,
+                      address: e.target.value,
+                    })
+                  }
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
                   placeholder="Full address"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1 text-xs">Features (comma-separated)</label>
+                <label className="block font-semibold text-slate-700 mb-1 text-xs">
+                  Features (comma-separated)
+                </label>
                 <input
                   type="text"
                   value={editListingForm.features.join(", ")}
                   onChange={(e) =>
                     setEditListingForm({
                       ...editListingForm,
-                      features: e.target.value.split(",").map((f) => f.trim()).filter(Boolean),
+                      features: e.target.value
+                        .split(",")
+                        .map((f) => f.trim())
+                        .filter(Boolean),
                     })
                   }
                   className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 transition bg-white"
@@ -1744,16 +1966,19 @@ export function ProviderDashboardClient({
                   disabled={isPending}
                   onClick={() => {
                     startTransition(async () => {
-                      const result = await updateListingAction(selectedListingForEdit.id, editListingForm);
+                      const result = await updateListingAction(
+                        selectedListingForEdit.id,
+                        editListingForm,
+                      );
                       setEditListingMessage(result);
                       if (result.success) {
                         // Update local state instead of full page refresh
-                        setLocalListings(prevListings =>
-                          prevListings.map(l =>
+                        setLocalListings((prevListings) =>
+                          prevListings.map((l) =>
                             l.id === selectedListingForEdit.id
                               ? { ...l, ...editListingForm }
-                              : l
-                          )
+                              : l,
+                          ),
                         );
                         setTimeout(() => {
                           setShowEditListingModal(false);
@@ -1805,8 +2030,6 @@ export function ProviderDashboardClient({
           icon={successDialogData.icon}
         />
       )}
-
-
     </div>
   );
 }
