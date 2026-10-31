@@ -172,7 +172,7 @@ async function closeAuction(auctionId: string, now: Date) {
 
       // 3. Find the winning top bid
       const top = await tx.bid.findFirst({
-        where: { auctionId },
+        where: { auctionId, status: "APPROVED" },
         orderBy: [{ amount: "desc" }, { createdAt: "asc" }],
       });
 

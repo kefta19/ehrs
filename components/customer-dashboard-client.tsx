@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   LayoutDashboard,
   Compass,
@@ -25,12 +26,15 @@ import {
   Check,
   Menu,
   Trash2,
+  ArrowLeft,
+  CalendarDays,
+  ExternalLink,
+  FileText,
 } from "lucide-react";
 import { ETHomeLogo } from "./ethome-brand";
 import { LogoutButton } from "./logout-button";
 import { ThemeToggle } from "./theme-toggle";
 import {
-  placeBidAction,
   toggleWatchlistAction,
   submitPaymentAction,
   submitComplaintTicketAction,
@@ -38,7 +42,6 @@ import {
   markNotificationReadAction,
   deleteNotificationAction,
 } from "@/app/actions/buyer";
-import { checkEntranceFeeStatusAction } from "@/app/actions/payment";
 import { AccountManagement } from "@/components/account-management";
 import {
   EntryFeePaymentClient,
@@ -69,18 +72,30 @@ type DashboardListing = {
   id: string;
   title: string;
   description?: string;
+  condition?: string;
   city: string;
   region?: string | null;
   address?: string | null;
+  country?: string;
   referenceNumber?: string | null;
+  videoUrl?: string | null;
+  attributes?: Record<string, unknown> | null;
   category: {
     id?: string;
     slug?: string;
     name: string;
+    icon?: string | null;
   };
-  images?: Array<{ url?: string | null }>;
+  images?: Array<{ id?: string; url?: string | null; isPrimary?: boolean }>;
   features?: string[];
   status: string;
+  seller?: {
+    name: string;
+    sellerProfile?: {
+      businessName?: string | null;
+      status?: string;
+    } | null;
+  };
 };
 
 type DashboardAuction = {
@@ -91,10 +106,16 @@ type DashboardAuction = {
   startingPrice: number | string;
   currentHighestBid?: number | string | null;
   minBidIncrement: number | string;
+  reservePrice?: number | string | null;
   entryFeeStatus?: string;
   highestBidderId?: string | null;
   listing: DashboardListing;
   terms?: string;
+  bids?: Array<{
+    id: string;
+    amount: number | string;
+    createdAt: string;
+  }>;
 };
 
 type DashboardBid = {
@@ -194,6 +215,7 @@ export function CustomerDashboardClient({
     | "account"
     | "notifications"
     | "entry-fee"
+    | "preview"
   >(() => {
     const validTabs = [
       "dashboard",
@@ -223,6 +245,15 @@ export function CustomerDashboardClient({
   };
   const [entryFeeAuction, setEntryFeeAuction] =
     useState<DashboardAuction | null>(null);
+  const [previewAuction, setPreviewAuction] =
+    useState<DashboardAuction | null>(null);
+  const [selectedPreviewImageUrl, setSelectedPreviewImageUrl] = useState<
+    string | null
+  >(null);
+  const [previewReturnTab, setPreviewReturnTab] =
+    useState<typeof activeTab>("browse");
+  const [previewBidAmount, setPreviewBidAmount] = useState("");
+  const [previewBidError, setPreviewBidError] = useState("");
   const [entryFeeReturnTab, setEntryFeeReturnTab] =
     useState<typeof activeTab>("browse");
   const [isPending, startTransition] = useTransition();
@@ -246,16 +277,6 @@ export function CustomerDashboardClient({
     setEntryFeeAuction(auction);
     selectTab("entry-fee");
   };
-
-  // Modals
-  const [biddingAuction, setBiddingAuction] = useState<DashboardAuction | null>(
-    null,
-  );
-  const [bidAmount, setBidAmount] = useState<string>("");
-  const [bidMsg, setBidMsg] = useState<{
-    error?: string;
-    success?: string;
-  } | null>(null);
 
   // Payment Modal
   const [payingResult, setPayingResult] = useState<WonAuctionResult | null>(
@@ -284,14 +305,25 @@ export function CustomerDashboardClient({
     new Set(watchlist.map((w) => w.auctionId)),
   );
 
-  // Handle Bid Now click - check entrance fee before navigation
-  const handleBidNowClick = async (auctionId: string) => {
-    const result = await checkEntranceFeeStatusAction(auctionId);
-    if (result.success && result.redirectUrl) {
-      openEntryFee(auctionId);
-    } else {
+  const handleBidNowClick = (auctionId: string) => {
+    const auction = auctions.find((item) => item.id === auctionId);
+    if (!auction) {
       router.push(`/auction/${auctionId}`);
+      return;
     }
+    setPreviewReturnTab(activeTab === "preview" ? "browse" : activeTab);
+    setPreviewAuction(auction);
+    setSelectedPreviewImageUrl(null);
+    setPreviewBidError("");
+    const currentBid = Number(auction.currentHighestBid || 0);
+    setPreviewBidAmount(
+      (
+        currentBid > 0
+          ? currentBid + Number(auction.minBidIncrement)
+          : Number(auction.startingPrice)
+      ).toString(),
+    );
+    selectTab("preview");
   };
 
   useEffect(() => {
@@ -334,6 +366,18 @@ export function CustomerDashboardClient({
   const upcomingAuctions = auctions.filter(
     (a) => a.status === "SCHEDULED" || new Date(a.startAt) > new Date(),
   );
+  useEffect(() => {
+    const activeAuctions = auctions.filter((auction) => auction.status === "ACTIVE");
+    if (activeAuctions.length === 0) return;
+
+    const nextEndAt = Math.min(
+      ...activeAuctions.map((auction) => new Date(auction.endAt).getTime()),
+    );
+    const timeUntilEnd = nextEndAt - Date.now();
+    const refreshDelay = timeUntilEnd > 0 ? timeUntilEnd + 1000 : 30_000;
+    const timeout = setTimeout(() => router.refresh(), refreshDelay);
+    return () => clearTimeout(timeout);
+  }, [auctions, router]);
 
   // Pagination States for Customer Tabs
   const [browsePage, setBrowsePage] = useState(1);
@@ -439,50 +483,32 @@ export function CustomerDashboardClient({
     });
   };
 
-  // Open Bid Dialog Directly
-  const openBidDialog = (auction: DashboardAuction) => {
-    setBiddingAuction(auction);
-    const curr = Number(auction.currentHighestBid);
-    const minInc = Number(auction.minBidIncrement);
-    const startP = Number(auction.startingPrice);
-    const minBid = curr > 0 ? curr + minInc : startP;
-    setBidAmount(minBid.toString());
-    setBidMsg(null);
+  const handleOpenBid = (auction: DashboardAuction) => {
+    handleBidNowClick(auction.id);
   };
 
-  // Check entrance fee payment before allowing to increase or place bid
-  const handleOpenBid = (auction: DashboardAuction) => {
-    const isPaid = paidFeeAuctionIds.has(auction.id);
-    if (!isPaid) {
-      openEntryFee(auction.id);
+  const handlePreviewBid = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!previewAuction) return;
+    const amount = Number(previewBidAmount);
+    const currentBid = Number(previewAuction.currentHighestBid || 0);
+    const minimumBid =
+      currentBid > 0
+        ? currentBid + Number(previewAuction.minBidIncrement)
+        : Number(previewAuction.startingPrice);
+    if (!Number.isFinite(amount) || amount < minimumBid) {
+      setPreviewBidError(
+        `Enter a bid of at least ${minimumBid.toLocaleString()} ETB.`,
+      );
       return;
     }
-
-    openBidDialog(auction);
-  };
-
-  // Submit Bid
-  const handleSubmitBid = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!biddingAuction) return;
-    setBidMsg(null);
-
-    const formData = new FormData();
-    formData.append("auctionId", biddingAuction.id);
-    formData.append("amount", bidAmount);
-
-    startTransition(async () => {
-      const res = await placeBidAction(formData);
-      if (res.success) {
-        setBidMsg({ success: res.message });
-        setTimeout(() => {
-          setBiddingAuction(null);
-          setBidMsg(null);
-        }, 1800);
-      } else {
-        setBidMsg({ error: res.error });
-      }
-    });
+    if (!paidFeeAuctionIds.has(previewAuction.id)) {
+      openEntryFee(previewAuction.id);
+      return;
+    }
+    router.push(
+      `/payment/bid?auctionId=${encodeURIComponent(previewAuction.id)}&bidAmount=${encodeURIComponent(previewBidAmount)}`,
+    );
   };
 
   // Format Time Remaining
@@ -495,6 +521,21 @@ export function CustomerDashboardClient({
     if (days > 0) return `${days}d ${hours}h`;
     return `${hours}h ${mins}m`;
   };
+  const previewImages =
+    previewAuction?.listing.images?.filter(
+      (image): image is typeof image & { url: string } => Boolean(image.url),
+    ) ?? [];
+  const previewHeroImage =
+    previewImages.find((image) => image.url === selectedPreviewImageUrl)?.url ??
+    previewImages[0]?.url;
+  const previewReturnLabel =
+    previewReturnTab === "bids"
+      ? "My Bids"
+      : previewReturnTab === "dashboard"
+        ? "Dashboard"
+        : previewReturnTab === "watchlist"
+          ? "Watchlist"
+          : "Auctions";
 
   return (
     <div className="flex min-h-screen bg-background text-slate-800 dark:text-slate-100 transition-colors">
@@ -722,6 +763,7 @@ export function CustomerDashboardClient({
               {activeTab === "account" && "Manage Account"}
               {activeTab === "notifications" && "Notification Center"}
               {activeTab === "entry-fee" && "Pay Entrance Fee"}
+              {activeTab === "preview" && "Auction Preview"}
             </h1>
           </div>
 
@@ -817,6 +859,458 @@ export function CustomerDashboardClient({
                 router.refresh();
               }}
             />
+          )}
+
+          {activeTab === "preview" && previewAuction && (
+            <div className="mx-auto w-full max-w-7xl space-y-6">
+              <button
+                type="button"
+                onClick={() => selectTab(previewReturnTab)}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <ArrowLeft size={16} />
+                Back to {previewReturnLabel}
+              </button>
+
+              <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="grid lg:grid-cols-[1.4fr_0.8fr]">
+                  <div className="relative min-h-72 bg-slate-100 dark:bg-slate-800 lg:min-h-[420px]">
+                    {previewHeroImage ? (
+                      <Image
+                        src={previewHeroImage}
+                        alt={previewAuction.listing.title}
+                        fill
+                        unoptimized
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-slate-400">
+                        <Compass size={48} />
+                      </div>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/85 via-slate-950/30 to-transparent p-6 pt-24 text-white sm:p-8">
+                      <div className="mb-3 flex flex-wrap gap-2">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${
+                            previewAuction.status === "ACTIVE"
+                              ? "bg-emerald-500 text-white"
+                              : "bg-blue-600 text-white"
+                          }`}
+                        >
+                          {previewAuction.status === "ACTIVE"
+                            ? "LIVE AUCTION"
+                            : previewAuction.status.replaceAll("_", " ")}
+                        </span>
+                        <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold backdrop-blur">
+                          {previewAuction.listing.category.icon}{" "}
+                          {previewAuction.listing.category.name}
+                        </span>
+                      </div>
+                      <h2 className="text-2xl font-bold tracking-tight sm:text-4xl">
+                        {previewAuction.listing.title}
+                      </h2>
+                      <p className="mt-2 flex items-center gap-2 text-sm text-white/85">
+                        <MapPin size={16} />
+                        {[
+                          previewAuction.listing.address,
+                          previewAuction.listing.city,
+                          previewAuction.listing.region,
+                          previewAuction.listing.country,
+                        ]
+                          .filter(Boolean)
+                          .join(", ")}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col justify-between bg-gradient-to-br from-blue-50 to-white p-6 dark:from-slate-800 dark:to-slate-900 sm:p-8">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">
+                        {previewAuction.status === "ACTIVE"
+                          ? "Current highest bid"
+                          : "Starting price"}
+                      </p>
+                      <p className="mt-2 text-4xl font-extrabold tracking-tight text-slate-950 dark:text-white">
+                        {Number(
+                          previewAuction.currentHighestBid ||
+                            previewAuction.startingPrice,
+                        ).toLocaleString()}
+                        <span className="ml-2 text-base font-semibold text-slate-500">
+                          ETB
+                        </span>
+                      </p>
+                      <div className="mt-6 grid grid-cols-2 gap-3">
+                        <div className="rounded-2xl border border-white bg-white/80 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                          <span className="text-xs text-slate-500">
+                            Minimum increment
+                          </span>
+                          <p className="mt-1 font-bold text-slate-900 dark:text-white">
+                            {Number(
+                              previewAuction.minBidIncrement,
+                            ).toLocaleString()}{" "}
+                            ETB
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-white bg-white/80 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                          <span className="text-xs text-slate-500">
+                            Bidding closes
+                          </span>
+                          <p className="mt-1 font-bold text-slate-900 dark:text-white">
+                            {formatTimeLeft(previewAuction.endAt)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {previewAuction.status === "ACTIVE" &&
+                    new Date(previewAuction.endAt).getTime() > now ? (
+                      <form
+                        onSubmit={handlePreviewBid}
+                        className="mt-6 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800"
+                      >
+                        <label
+                          htmlFor="preview-bid-amount"
+                          className="text-sm font-bold text-slate-900 dark:text-white"
+                        >
+                          {Number(previewAuction.currentHighestBid || 0) > 0
+                            ? "Increase your bid"
+                            : "Place your bid"}
+                        </label>
+                        <div className="mt-2 flex items-center rounded-xl border border-slate-200 bg-white px-3 focus-within:border-blue-500 dark:border-slate-600 dark:bg-slate-900">
+                          <input
+                            id="preview-bid-amount"
+                            type="number"
+                            min={
+                              Number(previewAuction.currentHighestBid || 0) > 0
+                                ? Number(previewAuction.currentHighestBid) +
+                                  Number(previewAuction.minBidIncrement)
+                                : Number(previewAuction.startingPrice)
+                            }
+                            step="0.01"
+                            required
+                            value={previewBidAmount}
+                            onChange={(event) => {
+                              setPreviewBidAmount(event.target.value);
+                              setPreviewBidError("");
+                            }}
+                            className="min-w-0 flex-1 bg-transparent py-3 text-lg font-bold text-slate-900 outline-none dark:text-white"
+                            aria-describedby="preview-bid-help"
+                          />
+                          <span className="text-sm font-semibold text-slate-500">
+                            ETB
+                          </span>
+                        </div>
+                        <p
+                          id="preview-bid-help"
+                          className="mt-2 text-xs text-slate-500"
+                        >
+                          Minimum bid:{" "}
+                          {(
+                            Number(previewAuction.currentHighestBid || 0) > 0
+                              ? Number(previewAuction.currentHighestBid) +
+                                Number(previewAuction.minBidIncrement)
+                              : Number(previewAuction.startingPrice)
+                          ).toLocaleString()}{" "}
+                          ETB. Payment evidence is required before your bid is
+                          reviewed.
+                        </p>
+                        {previewBidError && (
+                          <p role="alert" className="mt-2 text-xs text-rose-600">
+                            {previewBidError}
+                          </p>
+                        )}
+                        <button
+                          type="submit"
+                          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+                        >
+                          <Gavel size={17} />
+                          {paidFeeAuctionIds.has(previewAuction.id)
+                            ? "Continue to payment"
+                            : "Pay entry fee to bid"}
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        {previewAuction.status === "SCHEDULED"
+                          ? "This auction has not started yet. You can review the listing and return when bidding opens."
+                          : "Bidding is closed for this auction."}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {previewImages.length > 1 && (
+                    <div className="border-t border-slate-100 p-4 dark:border-slate-800 sm:p-6">
+                      <div
+                        aria-label="Listing photos; scroll horizontally to see more"
+                        className="flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-3 [scrollbar-color:#94a3b8_transparent] [scrollbar-width:thin] dark:[scrollbar-color:#475569_transparent]"
+                      >
+                        {previewImages.map((image, index) => (
+                          <button
+                            key={image.id || image.url}
+                            type="button"
+                            onClick={() =>
+                              setSelectedPreviewImageUrl(image.url)
+                            }
+                            aria-label={`Show listing photo ${index + 1}`}
+                            aria-pressed={previewHeroImage === image.url}
+                            className={`relative h-20 w-28 shrink-0 snap-start overflow-hidden rounded-xl bg-slate-100 transition dark:bg-slate-800 ${
+                              previewHeroImage === image.url
+                                ? "ring-2 ring-blue-600 ring-offset-2 dark:ring-offset-slate-900"
+                                : "ring-1 ring-slate-200 hover:ring-2 hover:ring-blue-400 dark:ring-slate-700"
+                            }`}
+                          >
+                            <Image
+                              src={image.url}
+                              alt={`${previewAuction.listing.title} photo ${index + 1}`}
+                              fill
+                              unoptimized
+                              sizes="112px"
+                              className="object-cover"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {previewImages.length} photos · Scroll horizontally or
+                        select a photo to view it
+                      </p>
+                    </div>
+                  )}
+              </section>
+
+              <div className="grid gap-6 lg:grid-cols-[1.5fr_0.8fr]">
+                <div className="space-y-6">
+                  <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-8">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-xl bg-blue-50 p-2.5 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                        <FileText size={20} />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                          About this listing
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Full description and property information
+                        </p>
+                      </div>
+                    </div>
+                    <p className="mt-5 whitespace-pre-wrap text-sm leading-7 text-slate-600 dark:text-slate-300">
+                      {previewAuction.listing.description ||
+                        "No description was provided for this listing."}
+                    </p>
+
+                    {previewAuction.listing.features &&
+                      previewAuction.listing.features.length > 0 && (
+                        <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
+                          <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                            Key features
+                          </h4>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {previewAuction.listing.features.map((feature) => (
+                              <span
+                                key={feature}
+                                className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 dark:bg-blue-950/60 dark:text-blue-200"
+                              >
+                                {feature}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                    {previewAuction.listing.attributes &&
+                      Object.keys(previewAuction.listing.attributes).length >
+                        0 && (
+                        <dl className="mt-6 grid gap-3 border-t border-slate-100 pt-5 sm:grid-cols-2 dark:border-slate-800">
+                          {Object.entries(
+                            previewAuction.listing.attributes,
+                          ).map(([name, value]) => (
+                            <div
+                              key={name}
+                              className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800"
+                            >
+                              <dt className="text-xs text-slate-500">
+                                {name.replaceAll(/([A-Z])/g, " $1")}
+                              </dt>
+                              <dd className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                                {typeof value === "string" ||
+                                typeof value === "number" ||
+                                typeof value === "boolean"
+                                  ? String(value)
+                                  : JSON.stringify(value)}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      )}
+                  </section>
+
+                  <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-8">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-xl bg-violet-50 p-2.5 text-violet-700 dark:bg-violet-950 dark:text-violet-300">
+                        <CalendarDays size={20} />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                          Auction information
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Important dates and bidding terms
+                        </p>
+                      </div>
+                    </div>
+                    <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-800">
+                        <dt className="text-xs text-slate-500">Auction starts</dt>
+                        <dd className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                          {new Date(previewAuction.startAt).toLocaleString()}
+                        </dd>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-800">
+                        <dt className="text-xs text-slate-500">Auction ends</dt>
+                        <dd className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                          {new Date(previewAuction.endAt).toLocaleString()}
+                        </dd>
+                      </div>
+                      {previewAuction.listing.condition && (
+                        <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-800">
+                          <dt className="text-xs text-slate-500">
+                            Listing condition
+                          </dt>
+                          <dd className="mt-1 text-sm font-semibold capitalize text-slate-900 dark:text-white">
+                            {previewAuction.listing.condition
+                              .replaceAll("_", " ")
+                              .toLowerCase()}
+                          </dd>
+                        </div>
+                      )}
+                      {previewAuction.listing.referenceNumber && (
+                        <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-800">
+                          <dt className="text-xs text-slate-500">
+                            Reference number
+                          </dt>
+                          <dd className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                            {previewAuction.listing.referenceNumber}
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                    {previewAuction.terms && (
+                      <div className="mt-5 rounded-xl border border-amber-100 bg-amber-50/70 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+                        <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                          Auction terms
+                        </h4>
+                        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-amber-900/80 dark:text-amber-100/80">
+                          {previewAuction.terms}
+                        </p>
+                      </div>
+                    )}
+                    {previewAuction.listing.videoUrl && (
+                      <a
+                        href={previewAuction.listing.videoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:underline dark:text-blue-300"
+                      >
+                        <ExternalLink size={16} />
+                        View listing video
+                      </a>
+                    )}
+                  </section>
+                </div>
+
+                <div className="space-y-6">
+                  <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                      Seller
+                    </h3>
+                    <div className="mt-4 flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                        {(
+                          previewAuction.listing.seller?.sellerProfile
+                            ?.businessName ||
+                          previewAuction.listing.seller?.name ||
+                          "S"
+                        )
+                          .charAt(0)
+                          .toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-900 dark:text-white">
+                          {previewAuction.listing.seller?.sellerProfile
+                            ?.businessName ||
+                            previewAuction.listing.seller?.name ||
+                            "Verified seller"}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {previewAuction.listing.seller?.sellerProfile
+                            ?.status === "APPROVED"
+                            ? "Identity verified"
+                            : "Marketplace seller"}
+                        </p>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                          Recent bids
+                        </h3>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Approved bids only
+                        </p>
+                      </div>
+                      <Gavel className="text-blue-600" size={19} />
+                    </div>
+                    {previewAuction.bids?.length ? (
+                      <div className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
+                        {previewAuction.bids.map((bid, index) => (
+                          <div
+                            key={bid.id}
+                            className="flex items-center justify-between gap-3 py-3"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                {index + 1}
+                              </span>
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                                  {Number(bid.amount).toLocaleString()} ETB
+                                </p>
+                                <p className="text-[11px] text-slate-500">
+                                  {new Date(bid.createdAt).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                            {index === 0 && (
+                              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                                Highest
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-500 dark:bg-slate-800">
+                        No approved bids yet. Be the first to participate.
+                      </p>
+                    )}
+                  </section>
+
+                  <p className="flex items-start gap-2 rounded-2xl bg-slate-100 p-4 text-xs leading-5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    <ShieldCheck
+                      size={16}
+                      className="mt-0.5 shrink-0 text-emerald-600"
+                    />
+                    Your bid is only added to the auction after payment
+                    evidence is reviewed and approved.
+                  </p>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* ══════════════════ TAB 1: DASHBOARD HOME ══════════════════ */}
@@ -1996,7 +2490,7 @@ export function CustomerDashboardClient({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {payments.map((p) => (
+                    {paginatedPayments.map((p) => (
                       <tr key={p.id} className="hover:bg-slate-50">
                         <td className="py-3 font-mono text-slate-700 font-semibold">
                           {p.transactionRef || "N/A"}
@@ -2033,14 +2527,14 @@ export function CustomerDashboardClient({
                 </table>
               </div>
               <Pagination
-                currentPage={bidsPage}
-                totalPages={bidsTotalPages}
-                totalItems={bidsTotal}
-                pageSize={bidsPageSize}
-                onPageChange={setBidsPage}
-                onPageSizeChange={setBidsPageSize}
+                currentPage={paymentsPage}
+                totalPages={paymentsTotalPages}
+                totalItems={paymentsTotal}
+                pageSize={paymentsPageSize}
+                onPageChange={setPaymentsPage}
+                onPageSizeChange={setPaymentsPageSize}
                 pageSizeOptions={[5, 10, 20]}
-                itemName="bids"
+                itemName="payments"
                 className="pt-2 border-t border-slate-100"
               />
             </div>
@@ -2290,120 +2784,6 @@ export function CustomerDashboardClient({
           )}
         </main>
       </div>
-
-      {/* ─────────────────── MODAL: PLACE BID ─────────────────── */}
-      {biddingAuction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2 text-blue-600 font-bold">
-                <Gavel size={20} />
-                <span>Place Live Bid</span>
-              </div>
-              <button
-                onClick={() => setBiddingAuction(null)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div>
-              <h3 className="font-bold text-slate-900 text-base">
-                {biddingAuction.listing.title}
-              </h3>
-              <p className="text-xs text-slate-500">
-                {biddingAuction.listing.city} •{" "}
-                {biddingAuction.listing.category.name}
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-slate-50 p-4 text-xs space-y-2">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Current Highest Bid:</span>
-                <span className="font-bold text-slate-900">
-                  {Number(
-                    biddingAuction.currentHighestBid ||
-                      biddingAuction.startingPrice,
-                  ).toLocaleString()}{" "}
-                  ETB
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Minimum Bid Increment:</span>
-                <span className="font-bold text-blue-600">
-                  + {Number(biddingAuction.minBidIncrement).toLocaleString()}{" "}
-                  ETB
-                </span>
-              </div>
-              <div className="flex justify-between border-t border-slate-200 pt-2 font-semibold">
-                <span className="text-slate-700">Minimum Required Bid:</span>
-                <span className="text-slate-900">
-                  {(
-                    Number(
-                      biddingAuction.currentHighestBid ||
-                        biddingAuction.startingPrice,
-                    ) + Number(biddingAuction.minBidIncrement)
-                  ).toLocaleString()}{" "}
-                  ETB
-                </span>
-              </div>
-            </div>
-
-            {bidMsg && (
-              <div
-                className={`rounded-xl p-3 text-xs ${
-                  bidMsg.error
-                    ? "bg-rose-50 text-rose-700"
-                    : "bg-emerald-50 text-emerald-700"
-                }`}
-              >
-                {bidMsg.error || bidMsg.success}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmitBid} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Your Bid Amount (ETB)
-                </label>
-                <input
-                  type="number"
-                  value={bidAmount}
-                  onChange={(e) => setBidAmount(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-lg font-bold text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-                  required
-                />
-              </div>
-
-              <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
-                <Clock size={13} className="text-blue-500" />
-                <span>
-                  Anti-sniping soft close enabled: Bids placed in final 5m
-                  extend timer.
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setBiddingAuction(null)}
-                  className="flex-1 rounded-xl border border-slate-200 py-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="flex-1 rounded-xl bg-blue-600 py-3 text-xs font-bold text-white shadow hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {isPending ? "Submitting..." : "Confirm & Place Bid"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ─────────────────── MODAL: SUBMIT PAYMENT ─────────────────── */}
       {payingResult && (

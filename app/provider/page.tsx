@@ -22,8 +22,9 @@ export default async function ProviderPage({
       ? resolvedParams.tab
       : undefined;
 
-  // Run auction status sync in background without blocking page render
-  syncAuctionStatuses().catch((e) => console.error("Auction sync error:", e));
+  await syncAuctionStatuses().catch((e) =>
+    console.error("Auction sync error:", e),
+  );
 
   // Fetch critical data first (listings, categories, seller profile)
   const [sellerProfile, listings, categories] = await Promise.all([

@@ -21,17 +21,22 @@ export default async function AdminPage({
   if (user.role !== "ADMIN") redirect(roleHome(user.role));
   const { tab: initialTab } = searchParams ? await searchParams : {};
 
-  // Run auction status sync in background without blocking page render
-  syncAuctionStatuses().catch((e) => console.error("Auction sync error:", e));
+  await syncAuctionStatuses().catch((e) =>
+    console.error("Auction sync error:", e),
+  );
 
   // Fetch critical stats first (for dashboard overview)
-  const [totalUsers, pendingListingsCount, activeAuctionsCount, openTicketsCount] =
-    await Promise.all([
-      prisma.user.count(),
-      prisma.listing.count({ where: { status: "PENDING_REVIEW" } }),
-      prisma.auction.count({ where: { status: "ACTIVE" } }),
-      prisma.ticket.count({ where: { status: "OPEN" } }),
-    ]);
+  const [
+    totalUsers,
+    pendingListingsCount,
+    activeAuctionsCount,
+    openTicketsCount,
+  ] = await Promise.all([
+    prisma.user.count(),
+    prisma.listing.count({ where: { status: "PENDING_REVIEW" } }),
+    prisma.auction.count({ where: { status: "ACTIVE" } }),
+    prisma.ticket.count({ where: { status: "OPEN" } }),
+  ]);
 
   // Fetch non-critical data in parallel
   const [
@@ -144,6 +149,13 @@ export default async function AdminPage({
         seller: { include: { sellerProfile: true } },
         entryFees: { orderBy: { createdAt: "desc" }, take: 3 },
         bids: { take: 10, orderBy: { createdAt: "desc" } },
+        result: {
+          select: {
+            winningAmount: true,
+            reserveMet: true,
+            winningBidder: { select: { id: true, name: true } },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
       take: 50,
@@ -436,8 +448,8 @@ export default async function AdminPage({
     .reduce((sum, p) => sum + Number(p.amount), 0);
 
   const registeredBuyerKeys = new Set(
-    buyerRegistrations.map((registration) =>
-      `${registration.auctionId}:${registration.buyerId}`,
+    buyerRegistrations.map(
+      (registration) => `${registration.auctionId}:${registration.buyerId}`,
     ),
   );
   const entryFeePayments = [
@@ -465,8 +477,7 @@ export default async function AdminPage({
         businessName: null,
         taxId: null,
         identityAddress: null,
-        idDocumentUrl:
-          registration.buyer.buyerProfile?.idDocumentUrl ?? null,
+        idDocumentUrl: registration.buyer.buyerProfile?.idDocumentUrl ?? null,
         verificationStatus: null,
       },
       confirmedAt: registration.paidAt?.toISOString() ?? null,
@@ -493,8 +504,7 @@ export default async function AdminPage({
           joinedAt: fee.buyer.createdAt.toISOString(),
           emailVerified: Boolean(fee.buyer.emailVerifiedAt),
           address: fee.buyer.buyerProfile?.address ?? null,
-          preferredLocation:
-            fee.buyer.buyerProfile?.preferredLocation ?? null,
+          preferredLocation: fee.buyer.buyerProfile?.preferredLocation ?? null,
           isVerified: fee.buyer.buyerProfile?.isVerified ?? false,
           nationalIdNumber: null,
           businessName: null,
@@ -525,8 +535,7 @@ export default async function AdminPage({
         address: null,
         preferredLocation: null,
         isVerified: fee.payer.sellerProfile?.status === "APPROVED",
-        nationalIdNumber:
-          fee.payer.sellerProfile?.nationalIdNumber ?? null,
+        nationalIdNumber: fee.payer.sellerProfile?.nationalIdNumber ?? null,
         businessName: fee.payer.sellerProfile?.businessName ?? null,
         taxId: fee.payer.sellerProfile?.taxId ?? null,
         identityAddress: fee.payer.sellerProfile?.address ?? null,

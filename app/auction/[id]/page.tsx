@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AuctionDetailClient } from "@/components/auction-detail-client";
+import { syncAuctionStatuses } from "@/lib/auction-lifecycle";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,9 @@ export default async function AuctionDetailPage({
 }) {
   const { id } = await params;
   const user = await getCurrentUser();
+  await syncAuctionStatuses().catch((error) =>
+    console.error("Auction sync error:", error),
+  );
 
   const auction = await prisma.auction.findUnique({
     where: { id },
@@ -53,6 +57,13 @@ export default async function AuctionDetailPage({
       currentHighestBid: true,
       minBidIncrement: true,
       terms: true,
+      result: {
+        select: {
+          winningAmount: true,
+          reserveMet: true,
+          winningBidder: { select: { id: true, name: true } },
+        },
+      },
       listing: {
         select: {
           id: true,
@@ -113,7 +124,10 @@ export default async function AuctionDetailPage({
   }
 
   // Only show approved auctions to public
-  if (auction.listing.status !== "APPROVED") {
+  if (
+    auction.listing.status !== "APPROVED" &&
+    !(auction.listing.status === "AUCTIONED" && auction.result?.reserveMet)
+  ) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-foreground transition-colors">
         <div className="text-center">

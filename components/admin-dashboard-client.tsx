@@ -55,6 +55,10 @@ import {
   manageCategoryAction,
   updateSystemSettingsAction,
 } from "@/app/actions/admin";
+import {
+  approveBidPaymentAction,
+  rejectBidPaymentAction,
+} from "@/app/actions/bid-payment";
 import { deleteNotificationAction } from "@/app/actions/buyer";
 import { AccountManagement } from "@/components/account-management";
 import { adminConfirmBuyerRegistrationAction } from "@/app/actions/bid-registration";
@@ -221,6 +225,12 @@ type AdminAuction = {
   seller: AdminUser;
   startingPrice: number | string;
   status: string;
+  endAt: string;
+  result?: {
+    winningAmount: number | string;
+    reserveMet: boolean;
+    winningBidder: { id: string; name: string };
+  } | null;
 };
 
 type AdminBid = {
@@ -454,6 +464,21 @@ export function AdminDashboardClient({
   });
 
   const [isPending, startTransition] = useTransition();
+  useEffect(() => {
+    const activeAuctions = allAuctions.filter(
+      (auction) => auction.status === "ACTIVE" && !auction.result,
+    );
+    if (activeAuctions.length === 0) return;
+
+    const nextEndAt = Math.min(
+      ...activeAuctions.map((auction) => new Date(auction.endAt).getTime()),
+    );
+    const timeUntilEnd = nextEndAt - Date.now();
+    const refreshDelay = timeUntilEnd > 0 ? timeUntilEnd + 1000 : 30_000;
+    const timeout = setTimeout(() => router.refresh(), refreshDelay);
+    return () => clearTimeout(timeout);
+  }, [allAuctions, router]);
+
   const [selectedBid, setSelectedBid] = useState<AdminBid | null>(null);
   const selectedBidListing = selectedBid?.auction?.listing;
   const selectedBidSeller =
@@ -525,6 +550,7 @@ export function AdminDashboardClient({
     setActiveTab(tab);
     setMobileMenuOpen(false);
     setProfileMenuOpen(false);
+    router.replace(`/admin?tab=${tab}`, { scroll: false });
   };
 
   const filteredUsers = usersList.filter((u) => {
@@ -547,6 +573,40 @@ export function AdminDashboardClient({
   const paginatedUsers = filteredUsers.slice(
     (usersPage - 1) * usersPageSize,
     usersPage * usersPageSize,
+  );
+
+  const [sellerProfilesPage, setSellerProfilesPage] = useState(1);
+  const [sellerProfilesPageSize, setSellerProfilesPageSize] = useState(10);
+  const sellerProfilesTotalPages = Math.max(
+    1,
+    Math.ceil(sellerProfiles.length / sellerProfilesPageSize),
+  );
+  const paginatedSellerProfiles = sellerProfiles.slice(
+    (sellerProfilesPage - 1) * sellerProfilesPageSize,
+    sellerProfilesPage * sellerProfilesPageSize,
+  );
+
+  const [buyerRegistrationsPage, setBuyerRegistrationsPage] = useState(1);
+  const [buyerRegistrationsPageSize, setBuyerRegistrationsPageSize] =
+    useState(10);
+  const buyerRegistrationsTotalPages = Math.max(
+    1,
+    Math.ceil(buyerRegistrations.length / buyerRegistrationsPageSize),
+  );
+  const paginatedBuyerRegistrations = buyerRegistrations.slice(
+    (buyerRegistrationsPage - 1) * buyerRegistrationsPageSize,
+    buyerRegistrationsPage * buyerRegistrationsPageSize,
+  );
+
+  const [categoriesPage, setCategoriesPage] = useState(1);
+  const [categoriesPageSize, setCategoriesPageSize] = useState(9);
+  const categoriesTotalPages = Math.max(
+    1,
+    Math.ceil(categories.length / categoriesPageSize),
+  );
+  const paginatedCategories = categories.slice(
+    (categoriesPage - 1) * categoriesPageSize,
+    categoriesPage * categoriesPageSize,
   );
 
   const [listingsPage, setListingsPage] = useState(1);
@@ -1367,7 +1427,7 @@ export function AdminDashboardClient({
                 </p>
               ) : (
                 <div className="space-y-4">
-                  {sellerProfiles.map((seller) => (
+                  {paginatedSellerProfiles.map((seller) => (
                     <section
                       key={seller.id}
                       className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
@@ -1495,11 +1555,27 @@ export function AdminDashboardClient({
                   ))}
                 </div>
               )}
+              <Pagination
+                currentPage={sellerProfilesPage}
+                totalPages={sellerProfilesTotalPages}
+                totalItems={sellerProfiles.length}
+                pageSize={sellerProfilesPageSize}
+                onPageChange={setSellerProfilesPage}
+                onPageSizeChange={setSellerProfilesPageSize}
+                pageSizeOptions={[10, 20, 50]}
+                itemName="seller profiles"
+                className="pt-2 border-t border-slate-100"
+              />
             </div>
           )}
 
           {activeTab === "buyers" && (
             <div className="space-y-5">
+              <div
+                className={
+                  selectedBuyerRegistration ? "hidden" : "space-y-5"
+                }
+              >
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
                   Buyer Registration List
@@ -1528,7 +1604,7 @@ export function AdminDashboardClient({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {buyerRegistrations.map((registration) => (
+                      {paginatedBuyerRegistrations.map((registration) => (
                         <tr
                           key={registration.id}
                           className="hover:bg-slate-50"
@@ -1587,22 +1663,26 @@ export function AdminDashboardClient({
                   </table>
                 </div>
               )}
+              <Pagination
+                currentPage={buyerRegistrationsPage}
+                totalPages={buyerRegistrationsTotalPages}
+                totalItems={buyerRegistrations.length}
+                pageSize={buyerRegistrationsPageSize}
+                onPageChange={setBuyerRegistrationsPage}
+                onPageSizeChange={setBuyerRegistrationsPageSize}
+                pageSizeOptions={[10, 20, 50]}
+                itemName="buyer registrations"
+                className="pt-2 border-t border-slate-100"
+              />
+              </div>
 
               {selectedBuyerRegistration && (
                 <div
-                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-                  role="presentation"
-                  onMouseDown={(event) => {
-                    if (event.target === event.currentTarget) {
-                      setSelectedBuyerRegistration(null);
-                    }
-                  }}
+                  className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
                 >
                   <section
-                    role="dialog"
-                    aria-modal="true"
                     aria-labelledby="buyer-review-title"
-                    className="max-h-[90vh] w-full max-w-2xl space-y-5 overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+                    className="mx-auto max-w-3xl space-y-5"
                   >
                     <div className="flex items-start justify-between border-b border-slate-100 pb-4">
                       <div>
@@ -1620,10 +1700,9 @@ export function AdminDashboardClient({
                       <button
                         type="button"
                         onClick={() => setSelectedBuyerRegistration(null)}
-                        aria-label="Close buyer review"
-                        className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"
+                        className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                       >
-                        <X size={18} />
+                        Back to buyer registrations
                       </button>
                     </div>
 
@@ -2009,6 +2088,7 @@ export function AdminDashboardClient({
                       <th className="pb-3 font-semibold">Seller</th>
                       <th className="pb-3 font-semibold">Starting Price</th>
                       <th className="pb-3 font-semibold">Status</th>
+                      <th className="pb-3 font-semibold">Winner</th>
                       <th className="pb-3 font-semibold text-right">
                         Moderation Actions
                       </th>
@@ -2028,6 +2108,16 @@ export function AdminDashboardClient({
                           <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
                             {a.status}
                           </span>
+                        </td>
+                        <td className="py-3 text-slate-600">
+                          {a.result?.reserveMet
+                            ? `${a.result.winningBidder.name} · ${Number(a.result.winningAmount).toLocaleString()} ETB`
+                            : a.result
+                              ? "Reserve not met"
+                              : a.status === "CLOSED" ||
+                                  new Date(a.endAt) <= new Date()
+                                ? "No winner"
+                                : "Bidding in progress"}
                         </td>
                         <td className="py-3 text-right space-x-2">
                           {a.status !== "ACTIVE" && (
@@ -2166,7 +2256,9 @@ export function AdminDashboardClient({
           {/* ══════════════════ TAB 7: MANAGE PAYMENTS ══════════════════ */}
           {activeTab === "payments" && (
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
-              <section className="space-y-4">
+                <section
+                  className={selectedEntryFee ? "hidden" : "space-y-4"}
+                >
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">
                     Buyer &amp; Seller Entry Fee Payers
@@ -2388,23 +2480,15 @@ export function AdminDashboardClient({
                   itemName="entry-fee records"
                   className="pt-2 border-t border-slate-100"
                 />
-              </section>
+                </section>
 
               {selectedEntryFee && (
                 <div
-                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-                  role="presentation"
-                  onMouseDown={(event) => {
-                    if (event.target === event.currentTarget) {
-                      setSelectedEntryFee(null);
-                    }
-                  }}
+                  className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
                 >
                   <section
-                    role="dialog"
-                    aria-modal="true"
                     aria-labelledby="entry-fee-details-title"
-                    className="max-h-[90vh] w-full max-w-3xl space-y-5 overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+                    className="mx-auto max-w-4xl space-y-5"
                   >
                     <div className="flex items-start justify-between border-b border-slate-100 pb-4">
                       <div>
@@ -2430,10 +2514,9 @@ export function AdminDashboardClient({
                       <button
                         type="button"
                         onClick={() => setSelectedEntryFee(null)}
-                        aria-label="Close payment details"
-                        className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"
+                        className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                       >
-                        <X size={18} />
+                        Back to entry-fee records
                       </button>
                     </div>
 
@@ -2815,7 +2898,7 @@ export function AdminDashboardClient({
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                {categories.map((c) => (
+                {paginatedCategories.map((c) => (
                   <div
                     key={c.id}
                     className="flex items-center justify-between rounded-xl border border-slate-100 p-4 bg-slate-50"
@@ -2837,6 +2920,17 @@ export function AdminDashboardClient({
                   </div>
                 ))}
               </div>
+              <Pagination
+                currentPage={categoriesPage}
+                totalPages={categoriesTotalPages}
+                totalItems={categories.length}
+                pageSize={categoriesPageSize}
+                onPageChange={setCategoriesPage}
+                onPageSizeChange={setCategoriesPageSize}
+                pageSizeOptions={[9, 18, 36]}
+                itemName="categories"
+                className="pt-2 border-t border-slate-100"
+              />
             </div>
           )}
 
@@ -4453,6 +4547,54 @@ export function AdminDashboardClient({
                           Open payment evidence
                         </a>
                       )}
+                    </div>
+                  )}
+                  {(selectedBid.payment.status === "PENDING" ||
+                    selectedBid.payment.status === "UNDER_REVIEW") && (
+                    <div className="mt-5 flex flex-wrap gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
+                      <button
+                        type="button"
+                        disabled={isPending}
+                        onClick={() =>
+                          startTransition(async () => {
+                            const result = await approveBidPaymentAction(
+                              selectedBid.payment!.id,
+                            );
+                            setActionMsg(result);
+                            if (result.success) {
+                              setSelectedBid(null);
+                              router.refresh();
+                            }
+                          })
+                        }
+                        className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        Approve payment and place bid
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isPending}
+                        onClick={() => {
+                          const reason = window.prompt(
+                            "Reason for rejecting this bid payment:",
+                          );
+                          if (!reason?.trim()) return;
+                          startTransition(async () => {
+                            const result = await rejectBidPaymentAction(
+                              selectedBid.payment!.id,
+                              reason.trim(),
+                            );
+                            setActionMsg(result);
+                            if (result.success) {
+                              setSelectedBid(null);
+                              router.refresh();
+                            }
+                          });
+                        }}
+                        className="rounded-lg border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                      >
+                        Reject payment
+                      </button>
                     </div>
                   )}
                 </>

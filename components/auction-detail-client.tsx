@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pagination } from "./pagination";
 import {
-  placeBidAction,
   submitAuctionInquiryAction,
 } from "@/app/actions/buyer";
 import {
@@ -35,6 +34,11 @@ interface AuctionDetail {
   currentHighestBid: number | string;
   minBidIncrement: number | string;
   terms: string | null;
+  result: {
+    winningAmount: number | string;
+    reserveMet: boolean;
+    winningBidder: { id: string; name: string };
+  } | null;
   listing: {
     id: string;
     title: string;
@@ -101,6 +105,16 @@ export function AuctionDetailClient({
   const [inquiryMessage, setInquiryMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [bidsPage, setBidsPage] = useState(1);
   const [bidsPageSize, setBidsPageSize] = useState(10);
+  useEffect(() => {
+    if (auction.status !== "ACTIVE" || auction.result) return;
+
+    const timeUntilEnd = new Date(auction.endAt).getTime() - Date.now();
+    const refreshDelay =
+      timeUntilEnd > 0 ? timeUntilEnd + 1000 : 30_000;
+    const timeout = setTimeout(() => router.refresh(), refreshDelay);
+    return () => clearTimeout(timeout);
+  }, [auction.endAt, auction.result, auction.status, router]);
+
   const totalBids = auction.bids.length;
   const totalBidsPages = Math.max(1, Math.ceil(totalBids / bidsPageSize));
   const paginatedBids = auction.bids.slice(
@@ -116,7 +130,7 @@ export function AuctionDetailClient({
     router.push(`/payment/entry-fee?auctionId=${auction.id}`);
   };
   
-  const handlePlaceBid = async (e: React.FormEvent) => {
+  const handlePlaceBid = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
       router.push(`/login?redirect=/auction/${auction.id}`);
@@ -124,35 +138,24 @@ export function AuctionDetailClient({
     }
 
     if (!hasPaidEntranceFee) {
-      setMessage({ type: "error", text: "You must pay the entrance fee before placing a bid." });
+      router.push(`/payment/entry-fee?auctionId=${auction.id}`);
+      return;
+    }
+
+    setMessage(null);
+    const amount = Number(bidAmount);
+    if (!Number.isFinite(amount) || amount < minRequired) {
+      setMessage({
+        type: "error",
+        text: `Your bid must be at least ${minRequired.toLocaleString()} ETB.`,
+      });
       return;
     }
 
     setIsPlacingBid(true);
-    setMessage(null);
-
-    const formData = new FormData();
-    formData.append("auctionId", auction.id);
-    formData.append("amount", bidAmount);
-
-    const result = await placeBidAction(formData);
-
-    if (result.success) {
-      setMessage({ type: "success", text: result.message || "Bid placed successfully" });
-      setBidAmount("");
-      router.refresh();
-    } else if (result.error === "ENTRANCE_FEE_REQUIRED") {
-      // Redirect to entrance fee payment page
-      router.push(`/payment/entry-fee?auctionId=${auction.id}`);
-    } else if (result.error === "BID_PAYMENT_REQUIRED") {
-      // Redirect to bid payment page
-      const bidAmount = formData.get("amount");
-      router.push(`/payment/bid?auctionId=${auction.id}&bidAmount=${bidAmount}`);
-    } else {
-      setMessage({ type: "error", text: result.error || "Failed to place bid" });
-    }
-
-    setIsPlacingBid(false);
+    router.push(
+      `/payment/bid?auctionId=${encodeURIComponent(auction.id)}&bidAmount=${encodeURIComponent(bidAmount)}`,
+    );
   };
 
   const handleSendInquiry = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -238,6 +241,39 @@ export function AuctionDetailClient({
             <MapPin size={16} className="shrink-0 text-blue-600" />
             {auction.listing.city}, {auction.listing.region}, {auction.listing.country}
           </p>
+          {auction.result ? (
+            <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/40">
+              <h2 className="text-sm font-bold text-emerald-900 dark:text-emerald-200">
+                {auction.result.reserveMet
+                  ? "Auction winner"
+                  : "Auction ended — reserve not met"}
+              </h2>
+              <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-300">
+                {auction.result.reserveMet ? "Winning bid: " : "Highest bid: "}
+                {Number(auction.result.winningAmount).toLocaleString()} ETB
+              </p>
+              {auction.result.reserveMet && (
+                <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-300">
+                  Winning bidder:{" "}
+                  {user?.id === auction.result.winningBidder.id
+                    ? "You"
+                    : user?.role === "ADMIN" ||
+                        user?.id === auction.listing.seller.id
+                      ? auction.result.winningBidder.name
+                      : "Winner confirmed"}
+                </p>
+              )}
+              {!auction.result.reserveMet && (
+                <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-300">
+                  No winner was confirmed for this auction.
+                </p>
+              )}
+            </section>
+          ) : auction.status === "CLOSED" ? (
+            <p className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              Bidding has ended. No bids were placed, so there is no winner.
+            </p>
+          ) : null}
         </header>
 
         <div className="grid gap-8 lg:grid-cols-3">
@@ -576,7 +612,9 @@ export function AuctionDetailClient({
             {/* Place Bid Form */}
             {user?.role === "BUYER" && hasPaidEntranceFee && isActive && !hasEnded && (
               <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Place your bid</h2>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                  {currentBid > 0 ? "Increase your bid" : "Place your bid"}
+                </h2>
                 <form onSubmit={handlePlaceBid} className="space-y-4">
                   <div>
                     <label htmlFor="bidAmount" className="mb-1 mt-4 block text-sm font-medium text-slate-800 dark:text-slate-200">
@@ -608,7 +646,7 @@ export function AuctionDetailClient({
                         Placing Bid...
                       </>
                     ) : (
-                      "Place Bid"
+                      "Continue to Bid Payment"
                     )}
                   </button>
                 </form>

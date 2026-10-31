@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   LayoutDashboard,
   PackagePlus,
@@ -171,6 +171,8 @@ type Auction = {
     winningAmount?: number | string;
     depositDue?: number | string;
     isSettled?: boolean;
+    reserveMet?: boolean;
+    winningBidder?: { name: string };
     [key: string]: unknown;
   };
   startAt?: string;
@@ -416,6 +418,25 @@ export function ProviderDashboardClient({
   );
 
   const wonAuctionsList = auctions.filter((a) => a.status === "COMPLETED" || a.result);
+  useEffect(() => {
+    const activeAuctions = auctions.filter(
+      (auction) => auction.status === "ACTIVE" && !auction.result,
+    );
+    if (activeAuctions.length === 0) return;
+
+    const nextEndAt = Math.min(
+      ...activeAuctions.map((auction) =>
+        auction.endAt ? new Date(auction.endAt).getTime() : Number.POSITIVE_INFINITY,
+      ),
+    );
+    if (!Number.isFinite(nextEndAt)) return;
+
+    const timeUntilEnd = nextEndAt - Date.now();
+    const refreshDelay = timeUntilEnd > 0 ? timeUntilEnd + 1000 : 30_000;
+    const timeout = setTimeout(() => router.refresh(), refreshDelay);
+    return () => clearTimeout(timeout);
+  }, [auctions, router]);
+
   const [winnersPage, setWinnersPage] = useState(1);
   const [winnersPageSize, setWinnersPageSize] = useState(6);
   const winnersTotal = wonAuctionsList.length;
@@ -1098,7 +1119,7 @@ export function ProviderDashboardClient({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {auctions.map((auc) => (
+                    {paginatedAuctions.map((auc) => (
                       <tr key={auc.id} className="hover:bg-slate-50">
                         <td className="py-3 font-semibold text-slate-900">
                           {auc.listing?.title}
@@ -1295,8 +1316,16 @@ export function ProviderDashboardClient({
                       className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="rounded bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
-                          Concluded Winner
+                        <span
+                          className={`rounded px-2.5 py-0.5 text-xs font-bold ${
+                            auc.result?.reserveMet
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {auc.result?.reserveMet
+                            ? "Concluded Winner"
+                            : "Reserve Not Met"}
                         </span>
                         <span className="text-xs text-slate-400">
                           {auc.endAt
@@ -1312,7 +1341,19 @@ export function ProviderDashboardClient({
                       <div className="rounded-xl bg-slate-50 p-4 text-xs space-y-2">
                         <div className="flex justify-between">
                           <span className="text-slate-500">
-                            Winning Amount:
+                            {auc.result?.reserveMet
+                              ? "Winning bidder:"
+                              : "Highest bidder:"}
+                          </span>
+                          <span className="font-bold text-slate-900">
+                            {auc.result?.winningBidder?.name || "Not available"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">
+                            {auc.result?.reserveMet
+                              ? "Winning Amount:"
+                              : "Highest Bid:"}
                           </span>
                           <span className="font-bold text-slate-900">
                             {Number(

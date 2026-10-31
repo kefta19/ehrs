@@ -66,7 +66,7 @@ export function BidPaymentClient({
       if (result.success) {
         setSuccess(true);
         setTimeout(() => {
-          router.push("/buyer");
+          router.push("/buyer?tab=bids");
         }, 3000);
       } else {
         setError(result.error || "Payment submission failed. Please try again.");
@@ -269,7 +269,7 @@ export function BidPaymentClient({
 
             {/* Info */}
             <p className="text-xs text-slate-500 dark:text-slate-500 text-center mt-4">
-              Your payment will be reviewed by admin. Once approved, your bid will be placed.
+              This submits payment evidence for admin review. Your bid becomes active only after approval.
             </p>
           </div>
         </div>

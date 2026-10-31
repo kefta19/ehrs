@@ -21,8 +21,9 @@ export default async function CustomerPage({
   const resolvedParams = searchParams ? await searchParams : {};
   const initialTab = resolvedParams?.tab || "dashboard";
 
-  // Run auction status sync in background without blocking page render
-  syncAuctionStatuses().catch((e) => console.error("Auction sync error:", e));
+  await syncAuctionStatuses().catch((e) =>
+    console.error("Auction sync error:", e),
+  );
 
   // cspell:disable
   // Fetch critical data first (auctions, categories, user profile)
@@ -44,14 +45,35 @@ export default async function CustomerPage({
           select: {
             id: true,
             title: true,
+            description: true,
+            condition: true,
+            address: true,
             city: true,
             region: true,
+            country: true,
+            referenceNumber: true,
             features: true,
-            images: { orderBy: { displayOrder: "asc" }, take: 3 },
+            attributes: true,
+            videoUrl: true,
+            images: { orderBy: { displayOrder: "asc" }, take: 8 },
             category: {
               select: { id: true, name: true, slug: true, icon: true },
             },
+            seller: {
+              select: {
+                name: true,
+                sellerProfile: {
+                  select: { businessName: true, status: true },
+                },
+              },
+            },
           },
+        },
+        bids: {
+          where: { status: "APPROVED" },
+          orderBy: [{ amount: "desc" }, { createdAt: "asc" }],
+          take: 10,
+          select: { id: true, amount: true, createdAt: true },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -110,7 +132,7 @@ export default async function CustomerPage({
         take: 50,
       }),
       prisma.auctionResult.findMany({
-        where: { winningBidderId: user.id },
+        where: { winningBidderId: user.id, reserveMet: true },
         include: {
           auction: {
             include: {
