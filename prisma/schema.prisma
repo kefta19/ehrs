@@ -53,6 +53,18 @@ enum AuctionStatus {
   COMPLETED
 }
 
+enum AuctionType {
+  FORWARD
+  REVERSE
+}
+
+enum WinnerReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  NOT_REQUIRED
+}
+
 enum PaymentStatus {
   PENDING
   PAID
@@ -152,6 +164,7 @@ model User {
   webauthnChallenges     WebAuthnChallenge[]
   buyerRegistrations     BuyerBidRegistration[]  @relation("BuyerRegistrations")
   buyerEntryFees         BuyerAuctionEntryFee[]  @relation("BuyerEntryFees")
+  reviewedAuctionResults AuctionResult[]         @relation("AuctionResultReviewer")
 
   @@index([role, status])
   @@index([tenantId])
@@ -172,15 +185,15 @@ model Session {
 }
 
 model VerificationToken {
-  id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      TokenType
-  tokenHash String    @unique
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         TokenType
+  tokenHash    String    @unique
   pendingEmail String?
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
+  expiresAt    DateTime
+  usedAt       DateTime?
+  createdAt    DateTime  @default(now())
 
   @@index([userId, type])
 }
@@ -314,6 +327,8 @@ model Auction {
   currentHighestBid Decimal       @default(0) @db.Decimal(14, 2)
   highestBidderId   String?
   highestBidder     User?         @relation("HighestBidderAuctions", fields: [highestBidderId], references: [id], onDelete: SetNull)
+  type              AuctionType   @default(FORWARD)
+  extensionCount    Int           @default(0)
   startAt           DateTime
   endAt             DateTime
   status            AuctionStatus @default(DRAFT)
@@ -329,10 +344,26 @@ model Auction {
   tickets            Ticket[]
   watchers           WatchlistItem[]
   buyerRegistrations BuyerBidRegistration[]
+  extensions         AuctionExtension[]
 
   @@index([status, startAt, endAt])
   @@index([sellerId, status])
   @@index([listingId])
+}
+
+model AuctionExtension {
+  id            String   @id @default(cuid())
+  auctionId     String
+  auction       Auction  @relation(fields: [auctionId], references: [id], onDelete: Restrict)
+  bidId         String
+  bid           Bid      @relation(fields: [bidId], references: [id], onDelete: Restrict)
+  previousEndAt DateTime
+  newEndAt      DateTime
+  extensionNo   Int
+  createdAt     DateTime @default(now())
+
+  @@unique([auctionId, extensionNo])
+  @@index([auctionId, createdAt])
 }
 
 model Bid {
@@ -348,7 +379,8 @@ model Bid {
   approvedAt   DateTime?
   createdAt    DateTime  @default(now())
 
-  payment BidPayment?
+  payment    BidPayment?
+  extensions AuctionExtension[]
 
   @@index([auctionId, amount(sort: Desc)])
   @@index([bidderId])
@@ -432,19 +464,23 @@ model WatchlistItem {
 }
 
 model AuctionResult {
-  id                 String   @id @default(cuid())
-  auctionId          String   @unique
-  auction            Auction  @relation(fields: [auctionId], references: [id], onDelete: Restrict)
+  id                 String             @id @default(cuid())
+  auctionId          String             @unique
+  auction            Auction            @relation(fields: [auctionId], references: [id], onDelete: Restrict)
   winningBidderId    String
-  winningBidder      User     @relation("WinningBidderResults", fields: [winningBidderId], references: [id], onDelete: Restrict)
-  winningAmount      Decimal  @db.Decimal(14, 2)
-  reserveMet         Boolean  @default(true)
-  depositDue         Decimal  @db.Decimal(14, 2)
+  winningBidder      User               @relation("WinningBidderResults", fields: [winningBidderId], references: [id], onDelete: Restrict)
+  winningAmount      Decimal            @db.Decimal(14, 2)
+  reserveMet         Boolean            @default(true)
+  depositDue         Decimal            @db.Decimal(14, 2)
   settlementDeadline DateTime
-  isSettled          Boolean  @default(false)
+  winnerReviewStatus WinnerReviewStatus @default(APPROVED)
+  winnerReviewedAt   DateTime?
+  winnerReviewedById String?
+  winnerReviewedBy   User?              @relation("AuctionResultReviewer", fields: [winnerReviewedById], references: [id], onDelete: SetNull)
+  isSettled          Boolean            @default(false)
   reminder24hSentAt  DateTime?
   deadlineSentAt     DateTime?
-  createdAt          DateTime @default(now())
+  createdAt          DateTime           @default(now())
 
   payments Payment[]
 
@@ -685,30 +721,30 @@ enum EntryFeeMethod {
 }
 
 model AuctionEntryFee {
-  id            String          @id @default(cuid())
-  tenantId      String
-  listingId     String
-  listing       Listing         @relation(fields: [listingId], references: [id], onDelete: Restrict)
-  auctionId     String
-  auction       Auction         @relation(fields: [auctionId], references: [id], onDelete: Restrict)
-  payerId       String
-  payer         User            @relation("EntryFeePayer", fields: [payerId], references: [id], onDelete: Restrict)
-  basisAmount   Decimal         @db.Decimal(14, 2)
-  ratePercent   Decimal         @db.Decimal(5, 2)
-  amount        Decimal         @db.Decimal(14, 2)
-  currency      String          @default("ETB")
-  method        EntryFeeMethod?
-  status        EntryFeeStatus  @default(UNPAID)
-  txRef         String          @unique
-  providerRef   String?
-  bankReference String?         @unique
+  id                  String          @id @default(cuid())
+  tenantId            String
+  listingId           String
+  listing             Listing         @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  auctionId           String
+  auction             Auction         @relation(fields: [auctionId], references: [id], onDelete: Restrict)
+  payerId             String
+  payer               User            @relation("EntryFeePayer", fields: [payerId], references: [id], onDelete: Restrict)
+  basisAmount         Decimal         @db.Decimal(14, 2)
+  ratePercent         Decimal         @db.Decimal(5, 2)
+  amount              Decimal         @db.Decimal(14, 2)
+  currency            String          @default("ETB")
+  method              EntryFeeMethod?
+  status              EntryFeeStatus  @default(UNPAID)
+  txRef               String          @unique
+  providerRef         String?
+  bankReference       String?         @unique
   transactionUrl      String?
   paymentProofMediaId String?
-  verifiedById  String?
-  confirmedAt   DateTime?
-  failureReason String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  verifiedById        String?
+  confirmedAt         DateTime?
+  failureReason       String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
   @@index([auctionId, status])
   @@index([listingId, status])

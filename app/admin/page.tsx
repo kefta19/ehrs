@@ -151,8 +151,12 @@ export default async function AdminPage({
         bids: { take: 10, orderBy: { createdAt: "desc" } },
         result: {
           select: {
+            id: true,
             winningAmount: true,
             reserveMet: true,
+            winnerReviewStatus: true,
+            winnerReviewedAt: true,
+            winnerReviewedById: true,
             winningBidder: { select: { id: true, name: true } },
           },
         },

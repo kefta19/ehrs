@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { notify } from "@/lib/notify";
-import { notifyAuctionParticipant } from "@/lib/auction-notifications";
+import { notify, notifyAdmins } from "@/lib/notify";
 import { logAudit } from "@/lib/security";
 import { deleteFile } from "@/lib/storage";
+import { winningBidOrder } from "@/lib/auction-bidding";
 
 const SETTLEMENT_WINDOW_MS = 72 * 60 * 60 * 1000;
 
@@ -77,6 +77,7 @@ async function sendSettlementReminders(now: Date) {
       where: {
         isSettled: false,
         reserveMet: true,
+        winnerReviewStatus: "APPROVED",
         ...reminder.where,
       },
       select: {
@@ -167,14 +168,61 @@ async function closeAuction(auctionId: string, now: Date) {
 
       const auction = await tx.auction.findUniqueOrThrow({
         where: { id: auctionId },
-        include: { listing: { select: { id: true, title: true } } },
+        include: {
+          listing: {
+            select: {
+              id: true,
+              title: true,
+              tenantId: true,
+              entryFeeStatus: true,
+            },
+          },
+        },
       });
 
-      // 3. Find the winning top bid
-      const top = await tx.bid.findFirst({
-        where: { auctionId, status: "APPROVED" },
-        orderBy: [{ amount: "desc" }, { createdAt: "asc" }],
+      // 3. Select the best bid whose bidder is still eligible for this auction.
+      const candidates = await tx.bid.findMany({
+        where: {
+          auctionId,
+          status: "APPROVED",
+          bidder: {
+            role: "BUYER",
+            status: "ACTIVE",
+            deletedAt: null,
+            AND: [
+              {
+                OR: [
+                  { tenantId: null },
+                  { tenantId: auction.listing.tenantId },
+                ],
+              },
+              {
+                OR: [
+                  {
+                    buyerRegistrations: {
+                      some: {
+                        auctionId,
+                        status: { in: ["PAID", "WAIVED"] },
+                      },
+                    },
+                  },
+                  {
+                    buyerEntryFees: {
+                      some: { auctionId, status: "CONFIRMED" },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        orderBy: [
+          { amount: winningBidOrder(auction.type) },
+          { createdAt: "asc" },
+        ],
+        take: 100,
       });
+      const top = candidates[0] ?? null;
 
       if (!top) {
         return {
@@ -206,6 +254,7 @@ async function closeAuction(auctionId: string, now: Date) {
           reserveMet,
           depositDue,
           settlementDeadline: new Date(now.getTime() + SETTLEMENT_WINDOW_MS),
+          winnerReviewStatus: reserveMet ? "PENDING" : "NOT_REQUIRED",
         },
         update: {},
       });
@@ -214,13 +263,6 @@ async function closeAuction(auctionId: string, now: Date) {
         where: { id: auctionId },
         data: { highestBidderId: top.bidderId, currentHighestBid: top.amount },
       });
-
-      if (reserveMet) {
-        await tx.listing.update({
-          where: { id: auction.listingId },
-          data: { status: "AUCTIONED" },
-        });
-      }
 
       return {
         auction,
@@ -233,7 +275,12 @@ async function closeAuction(auctionId: string, now: Date) {
 
     if (!outcome || outcome.alreadyExisted) return false;
 
-    const { auction, winnerId, amount, reserveMet } = outcome;
+    const {
+      auction,
+      winnerId,
+      amount,
+      reserveMet,
+    } = outcome;
     const title = auction.listing.title;
 
     await logAudit({
@@ -244,23 +291,23 @@ async function closeAuction(auctionId: string, now: Date) {
       newValue: { winnerId, amount, reserveMet },
     });
 
+    const direction = auction.type === "REVERSE" ? "lowest" : "highest";
     await notify(auction.sellerId, {
       type: "AUCTION_CLOSED",
       title: "Auction closed",
       body: !winnerId
         ? `Bidding on "${title}" has ended with no bids.`
         : reserveMet
-          ? `Bidding on "${title}" has ended. Winning bid: ${amount}.`
-          : `Bidding on "${title}" has ended. The highest bid (${amount}) did not meet your reserve price.`,
+          ? `Bidding on "${title}" has ended. The proposed ${direction} bid is ${amount} and is awaiting administrator review.`
+          : `Bidding on "${title}" has ended. The ${direction} bid (${amount}) did not meet your reserve price.`,
       link: "/seller",
     });
-
     if (winnerId && reserveMet) {
-      await notifyAuctionParticipant(winnerId, {
-        type: "AUCTION_WON",
-        title: "You won the auction!",
-        body: `Your bid of ${amount} on "${title}" won. Complete the deposit within 72 hours.`,
-        link: "/buyer?tab=payments",
+      await notifyAdmins({
+        type: "AUCTION_WINNER_REVIEW",
+        title: "Auction winner needs review",
+        body: `Review the proposed ${direction} bidder for "${title}" before settlement.`,
+        link: "/admin?tab=auctions",
       });
     }
 

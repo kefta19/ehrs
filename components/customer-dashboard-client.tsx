@@ -41,6 +41,7 @@ import {
   updateBuyerProfileAction,
   markNotificationReadAction,
   deleteNotificationAction,
+  placeBuyerBidAction,
 } from "@/app/actions/buyer";
 import { AccountManagement } from "@/components/account-management";
 import {
@@ -101,6 +102,7 @@ type DashboardListing = {
 type DashboardAuction = {
   id: string;
   status: string;
+  type: "FORWARD" | "REVERSE";
   startAt: string;
   endAt: string;
   startingPrice: number | string;
@@ -254,6 +256,7 @@ export function CustomerDashboardClient({
     useState<typeof activeTab>("browse");
   const [previewBidAmount, setPreviewBidAmount] = useState("");
   const [previewBidError, setPreviewBidError] = useState("");
+  const [previewBidSuccess, setPreviewBidSuccess] = useState("");
   const [entryFeeReturnTab, setEntryFeeReturnTab] =
     useState<typeof activeTab>("browse");
   const [isPending, startTransition] = useTransition();
@@ -287,8 +290,6 @@ export function CustomerDashboardClient({
     success?: string;
   } | null>(null);
 
-  // Ticket Modal
-  const [showTicketModal, setShowTicketModal] = useState(false);
   const [ticketMsg, setTicketMsg] = useState<{
     error?: string;
     success?: string;
@@ -315,11 +316,15 @@ export function CustomerDashboardClient({
     setPreviewAuction(auction);
     setSelectedPreviewImageUrl(null);
     setPreviewBidError("");
+    setPreviewBidSuccess("");
     const currentBid = Number(auction.currentHighestBid || 0);
     setPreviewBidAmount(
       (
         currentBid > 0
-          ? currentBid + Number(auction.minBidIncrement)
+          ? currentBid +
+            (auction.type === "REVERSE"
+              ? -Number(auction.minBidIncrement)
+              : Number(auction.minBidIncrement))
           : Number(auction.startingPrice)
       ).toString(),
     );
@@ -492,23 +497,66 @@ export function CustomerDashboardClient({
     if (!previewAuction) return;
     const amount = Number(previewBidAmount);
     const currentBid = Number(previewAuction.currentHighestBid || 0);
-    const minimumBid =
+    const boundary =
       currentBid > 0
-        ? currentBid + Number(previewAuction.minBidIncrement)
-        : Number(previewAuction.startingPrice);
-    if (!Number.isFinite(amount) || amount < minimumBid) {
-      setPreviewBidError(
-        `Enter a bid of at least ${minimumBid.toLocaleString()} ETB.`,
-      );
-      return;
-    }
+      ? currentBid +
+        (previewAuction.type === "REVERSE"
+          ? -Number(previewAuction.minBidIncrement)
+          : Number(previewAuction.minBidIncrement))
+      : Number(previewAuction.startingPrice);
+    const validBid =
+      Number.isFinite(amount) &&
+      amount > 0 &&
+      (previewAuction.type === "REVERSE" ? amount <= boundary : amount >= boundary);
     if (!paidFeeAuctionIds.has(previewAuction.id)) {
+      if (!validBid) {
+      setPreviewBidAmount(boundary.toString());
+      }
       openEntryFee(previewAuction.id);
       return;
     }
-    router.push(
-      `/payment/bid?auctionId=${encodeURIComponent(previewAuction.id)}&bidAmount=${encodeURIComponent(previewBidAmount)}`,
-    );
+
+    setPreviewBidError("");
+    setPreviewBidSuccess("");
+    startTransition(async () => {
+      const result = await placeBuyerBidAction(
+        previewAuction.id,
+        previewBidAmount,
+      );
+      if (!result.success) {
+        setPreviewBidError(result.error);
+        return;
+      }
+
+      setPreviewAuction((current) =>
+        current?.id === previewAuction.id
+          ? {
+              ...current,
+              currentHighestBid: result.amount,
+              highestBidderId: user.id,
+              endAt: result.endAt,
+              bids: [
+                {
+                  id: result.bidId,
+                  amount: result.amount,
+                  createdAt: result.createdAt,
+                },
+                ...(current.bids ?? []),
+              ],
+            }
+          : current,
+      );
+      setPreviewBidAmount(
+        (
+          result.amount +
+          (previewAuction.type === "REVERSE"
+            ? -Number(previewAuction.minBidIncrement)
+            : Number(previewAuction.minBidIncrement))
+        ).toString(),
+      );
+      setPreviewBidSuccess(result.message);
+      router.refresh();
+    });
   };
 
   // Format Time Remaining
@@ -927,8 +975,10 @@ export function CustomerDashboardClient({
                     <div>
                       <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">
                         {previewAuction.status === "ACTIVE"
-                          ? "Current highest bid"
-                          : "Starting price"}
+                          ? `Current ${previewAuction.type === "REVERSE" ? "lowest" : "highest"} bid`
+                          : previewAuction.type === "REVERSE"
+                            ? "Maximum opening bid"
+                            : "Starting price"}
                       </p>
                       <p className="mt-2 text-4xl font-extrabold tracking-tight text-slate-950 dark:text-white">
                         {Number(
@@ -973,25 +1023,22 @@ export function CustomerDashboardClient({
                           className="text-sm font-bold text-slate-900 dark:text-white"
                         >
                           {Number(previewAuction.currentHighestBid || 0) > 0
-                            ? "Increase your bid"
+                            ? previewAuction.type === "REVERSE"
+                              ? "Lower your bid"
+                              : "Increase your bid"
                             : "Place your bid"}
                         </label>
                         <div className="mt-2 flex items-center rounded-xl border border-slate-200 bg-white px-3 focus-within:border-blue-500 dark:border-slate-600 dark:bg-slate-900">
                           <input
                             id="preview-bid-amount"
                             type="number"
-                            min={
-                              Number(previewAuction.currentHighestBid || 0) > 0
-                                ? Number(previewAuction.currentHighestBid) +
-                                  Number(previewAuction.minBidIncrement)
-                                : Number(previewAuction.startingPrice)
-                            }
                             step="0.01"
                             required
                             value={previewBidAmount}
                             onChange={(event) => {
                               setPreviewBidAmount(event.target.value);
                               setPreviewBidError("");
+                              setPreviewBidSuccess("");
                             }}
                             className="min-w-0 flex-1 bg-transparent py-3 text-lg font-bold text-slate-900 outline-none dark:text-white"
                             aria-describedby="preview-bid-help"
@@ -1004,29 +1051,50 @@ export function CustomerDashboardClient({
                           id="preview-bid-help"
                           className="mt-2 text-xs text-slate-500"
                         >
-                          Minimum bid:{" "}
+                          {previewAuction.type === "REVERSE"
+                            ? "Maximum valid bid: "
+                            : "Minimum valid bid: "}
                           {(
                             Number(previewAuction.currentHighestBid || 0) > 0
                               ? Number(previewAuction.currentHighestBid) +
-                                Number(previewAuction.minBidIncrement)
+                                (previewAuction.type === "REVERSE"
+                                  ? -Number(previewAuction.minBidIncrement)
+                                  : Number(previewAuction.minBidIncrement))
                               : Number(previewAuction.startingPrice)
                           ).toLocaleString()}{" "}
-                          ETB. Payment evidence is required before your bid is
-                          reviewed.
+                          ETB.
+                          {paidFeeAuctionIds.has(previewAuction.id)
+                            ? " Your approved entrance fee lets you place or increase a bid immediately."
+                            : " Pay the entrance fee to unlock bidding."}
                         </p>
                         {previewBidError && (
                           <p role="alert" className="mt-2 text-xs text-rose-600">
                             {previewBidError}
                           </p>
                         )}
+                        {previewBidSuccess && (
+                          <p
+                            role="status"
+                            className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300"
+                          >
+                            {previewBidSuccess}
+                          </p>
+                        )}
                         <button
                           type="submit"
-                          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
+                          disabled={isPending}
+                          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70"
                         >
                           <Gavel size={17} />
-                          {paidFeeAuctionIds.has(previewAuction.id)
-                            ? "Continue to payment"
-                            : "Pay entry fee to bid"}
+                          {isPending
+                            ? "Updating bid..."
+                            : paidFeeAuctionIds.has(previewAuction.id)
+                              ? Number(previewAuction.currentHighestBid || 0) > 0
+                                ? previewAuction.type === "REVERSE"
+                                  ? "Lower bid"
+                                  : "Increase bid"
+                                : "Place bid"
+                              : "Pay entry fee to bid"}
                         </button>
                       </form>
                     ) : (
@@ -1881,7 +1949,10 @@ export function CustomerDashboardClient({
                   </div>
                 </div>
                 <button
-                  onClick={() => setShowTicketModal(true)}
+                  onClick={() => {
+                    setTicketMsg(null);
+                    selectTab("tickets");
+                  }}
                   className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white shadow hover:bg-blue-700 transition-colors shrink-0"
                 >
                   Contact Support
@@ -2542,40 +2613,154 @@ export function CustomerDashboardClient({
 
           {/* ══════════════════ TAB 7: TICKETS / COMPLAINTS ══════════════════ */}
           {activeTab === "tickets" && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
-              <div className="flex items-center justify-between">
+            <div className="mx-auto w-full max-w-4xl space-y-6">
+              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-8">
+                <div className="mb-6 flex items-center gap-3 border-b border-slate-100 pb-5 dark:border-slate-800">
+                  <div className="rounded-xl bg-cyan-50 p-2.5 text-cyan-600 dark:bg-cyan-950/50 dark:text-cyan-300">
+                    <MessageSquareWarning size={22} />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-cyan-600 dark:text-cyan-300">
+                      File Support Ticket / Complaint
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Tell us what happened and our support team will review
+                      your request.
+                    </p>
+                  </div>
+                </div>
+
+                {ticketMsg && (
+                  <div
+                    role={ticketMsg.error ? "alert" : "status"}
+                    className={`mb-5 rounded-xl p-3 text-sm ${
+                      ticketMsg.error
+                        ? "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
+                        : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                    }`}
+                  >
+                    {ticketMsg.error || ticketMsg.success}
+                  </div>
+                )}
+
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const formData = new FormData(event.currentTarget);
+                    startTransition(async () => {
+                      const result = await submitComplaintTicketAction(formData);
+                      if (result.success) {
+                        setTicketMsg({ success: result.message });
+                        router.refresh();
+                      } else {
+                        setTicketMsg({ error: result.error });
+                      }
+                    });
+                  }}
+                  className="space-y-5"
+                >
+                  <div>
+                    <label
+                      htmlFor="support-ticket-type"
+                      className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200"
+                    >
+                      Ticket Type
+                    </label>
+                    <select
+                      id="support-ticket-type"
+                      name="type"
+                      required
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/15 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    >
+                      <option value="COMPLAINT">Seller / Listing Complaint</option>
+                      <option value="DISPUTE">Escrow / Payment Dispute</option>
+                      <option value="SUPPORT">
+                        General Inquiry / Bidding Help
+                      </option>
+                      <option value="PROBLEM_REPORT">
+                        Platform Bug / Problem Report
+                      </option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="support-ticket-subject"
+                      className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200"
+                    >
+                      Subject
+                    </label>
+                    <input
+                      id="support-ticket-subject"
+                      name="subject"
+                      placeholder="Summary of issue"
+                      required
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/15 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="support-ticket-description"
+                      className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200"
+                    >
+                      Detailed Description
+                    </label>
+                    <textarea
+                      id="support-ticket-description"
+                      name="description"
+                      rows={5}
+                      placeholder="Provide all facts and relevant information..."
+                      required
+                      className="w-full resize-y rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/15 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                  </div>
+
+                  <div className="flex flex-col-reverse gap-3 pt-1 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTicketMsg(null);
+                        selectTab("dashboard");
+                      }}
+                      className="flex-1 rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isPending}
+                      className="flex-1 rounded-xl bg-cyan-500 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-cyan-600 disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {isPending ? "Submitting..." : "Submit Ticket"}
+                    </button>
+                  </div>
+                </form>
+              </section>
+
+              <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900">
-                    Complaints & Support Tickets
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                    Your Support Tickets
                   </h2>
-                  <p className="text-xs text-slate-500">
-                    Submit dispute requests or inquiries regarding auctions,
-                    title verification, or sellers.
+                  <p className="mt-1 text-sm text-slate-500">
+                    Track submitted complaints and support requests.
                   </p>
                 </div>
-                <button
-                  onClick={() => setShowTicketModal(true)}
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-blue-700"
-                >
-                  File Complaint / Ticket
-                </button>
-              </div>
-
-              <div className="space-y-3">
                 {paginatedTickets.map((t) => (
                   <div
                     key={t.id}
-                    className="rounded-xl border border-slate-200 p-4 hover:border-slate-300 transition-colors space-y-2 text-xs"
+                    className="space-y-2 rounded-xl border border-slate-200 p-4 text-sm transition-colors hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-bold text-blue-600">
                           {t.number}
                         </span>
-                        <span className="rounded bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
+                        <span className="rounded bg-slate-100 px-2 py-0.5 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                           {t.type}
                         </span>
-                        <span className="font-semibold text-slate-900">
+                        <span className="font-semibold text-slate-900 dark:text-white">
                           {t.subject}
                         </span>
                       </div>
@@ -2591,7 +2776,7 @@ export function CustomerDashboardClient({
                         {t.status}
                       </span>
                     </div>
-                    <p className="text-slate-600">{t.description}</p>
+                    <p className="text-slate-600 dark:text-slate-300">{t.description}</p>
                     {t.resolution && (
                       <div className="mt-2 rounded-lg bg-emerald-50 p-2.5 text-emerald-800">
                         <strong>Admin Resolution:</strong> {t.resolution}
@@ -2599,7 +2784,7 @@ export function CustomerDashboardClient({
                     )}
                   </div>
                 ))}
-              </div>
+              </section>
               <Pagination
                 currentPage={ticketsPage}
                 totalPages={ticketsTotalPages}
@@ -2901,118 +3086,6 @@ export function CustomerDashboardClient({
         </div>
       )}
 
-      {/* ─────────────────── MODAL: COMPLAINT / SUPPORT ─────────────────── */}
-      {showTicketModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-5 animate-in fade-in">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2 font-bold text-blue-600">
-                <MessageSquareWarning size={20} />
-                <span>File Support Ticket / Complaint</span>
-              </div>
-              <button
-                onClick={() => setShowTicketModal(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {ticketMsg && (
-              <div
-                className={`rounded-xl p-3 text-xs ${
-                  ticketMsg.error
-                    ? "bg-rose-50 text-rose-700"
-                    : "bg-emerald-50 text-emerald-700"
-                }`}
-              >
-                {ticketMsg.error || ticketMsg.success}
-              </div>
-            )}
-
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const formData = new FormData(e.currentTarget);
-                startTransition(async () => {
-                  const res = await submitComplaintTicketAction(formData);
-                  if (res.success) {
-                    setTicketMsg({ success: res.message });
-                    setTimeout(() => {
-                      setShowTicketModal(false);
-                      setTicketMsg(null);
-                    }, 1800);
-                  } else {
-                    setTicketMsg({ error: res.error });
-                  }
-                });
-              }}
-              className="space-y-4 text-xs"
-            >
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Ticket Type
-                </label>
-                <select
-                  name="type"
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                >
-                  <option value="COMPLAINT">Seller / Listing Complaint</option>
-                  <option value="DISPUTE">Escrow / Payment Dispute</option>
-                  <option value="SUPPORT">
-                    General Inquiry / Bidding Help
-                  </option>
-                  <option value="PROBLEM_REPORT">
-                    Platform Bug / Problem Report
-                  </option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Subject
-                </label>
-                <input
-                  name="subject"
-                  placeholder="Summary of issue"
-                  required
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Detailed Description
-                </label>
-                <textarea
-                  name="description"
-                  rows={4}
-                  placeholder="Provide all facts and relevant information..."
-                  required
-                  className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-600"
-                />
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowTicketModal(false)}
-                  className="flex-1 rounded-xl border border-slate-200 py-3 font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="flex-1 rounded-xl bg-blue-600 py-3 font-bold text-white shadow hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {isPending ? "Submitting..." : "Submit Ticket"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

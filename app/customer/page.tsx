@@ -71,7 +71,7 @@ export default async function CustomerPage({
         },
         bids: {
           where: { status: "APPROVED" },
-          orderBy: [{ amount: "desc" }, { createdAt: "asc" }],
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: 10,
           select: { id: true, amount: true, createdAt: true },
         },
@@ -132,7 +132,11 @@ export default async function CustomerPage({
         take: 50,
       }),
       prisma.auctionResult.findMany({
-        where: { winningBidderId: user.id, reserveMet: true },
+        where: {
+          winningBidderId: user.id,
+          reserveMet: true,
+          winnerReviewStatus: "APPROVED",
+        },
         include: {
           auction: {
             include: {

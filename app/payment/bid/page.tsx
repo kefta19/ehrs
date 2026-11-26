@@ -46,7 +46,7 @@ export default async function BidPaymentPage({
 
   if (auction.sellerId === user.id) redirect(`/auction/${auction.id}`);
   if (auction.status !== "ACTIVE" || auction.endAt <= new Date()) {
-    redirect(`/auction/${auction.id}`);
+    redirect("/customer?tab=browse");
   }
 
   const amount = Number(bidAmount);
@@ -73,17 +73,28 @@ export default async function BidPaymentPage({
   }
 
   const currentBid = Number(auction.currentHighestBid);
-  const minimumRequired =
+  const bidBoundary =
     currentBid > 0
-      ? currentBid + Number(auction.minBidIncrement)
+      ? currentBid +
+        (auction.type === "REVERSE"
+          ? -Number(auction.minBidIncrement)
+          : Number(auction.minBidIncrement))
       : Number(auction.startingPrice);
-  if (amount < minimumRequired) redirect(`/auction/${auction.id}`);
+  if (auction.type === "REVERSE" && bidBoundary <= 0)
+    redirect(`/auction/${auction.id}`);
+  const updatedBidAmount =
+    auction.type === "REVERSE"
+      ? Math.min(amount, bidBoundary)
+      : Math.max(amount, bidBoundary);
 
   return (
     <BidPaymentClient
-      user={JSON.parse(JSON.stringify(user))}
       auction={JSON.parse(JSON.stringify(auction))}
-      bidAmount={amount}
+      bidAmount={updatedBidAmount}
+      auctionType={auction.type}
+      bidBoundary={bidBoundary}
+      endAt={auction.endAt.toISOString()}
+      bidAmountUpdated={updatedBidAmount !== amount}
     />
   );
 }

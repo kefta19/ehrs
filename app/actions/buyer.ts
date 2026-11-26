@@ -3,8 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/app/generated/prisma/client";
 import { notify, notifyAdmins } from "@/lib/notify";
-import { logAudit } from "@/lib/security";
+import { notifyAuctionParticipant } from "@/lib/auction-notifications";
+import {
+  bidBoundary,
+  extendedDeadline,
+  isValidBid,
+} from "@/lib/auction-bidding";
+import { bidEligibility } from "@/lib/auction-eligibility";
+import { logAudit, rateLimit } from "@/lib/security";
 import {
   bidSchema,
   paymentSettlementSchema,
@@ -45,6 +53,260 @@ export async function toggleWatchlistAction(auctionId: string) {
   }
 }
 
+export async function placeBuyerBidAction(auctionId: string, amountInput: string) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "BUYER") {
+    return { success: false as const, error: "Only signed-in buyers can bid." };
+  }
+  if (!auctionId || !/^\d{1,12}(\.\d{1,2})?$/.test(amountInput.trim())) {
+    return { success: false as const, error: "Enter a valid bid amount." };
+  }
+  if (!rateLimit(`buyer-bid:${user.id}`, 10, 60_000)) {
+    return {
+      success: false as const,
+      error: "Too many bids. Please wait a moment before bidding again.",
+    };
+  }
+
+  const requestedAmount = new Prisma.Decimal(amountInput.trim());
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Auction" WHERE "id" = ${auctionId} FOR UPDATE`;
+      const auction = await tx.auction.findUnique({
+        where: { id: auctionId },
+        include: {
+          listing: {
+            select: {
+              title: true,
+              tenantId: true,
+              status: true,
+              entryFeeStatus: true,
+            },
+          },
+        },
+      });
+
+      if (!auction) {
+        return { success: false as const, error: "Auction not found." };
+      }
+      if (
+        user.tenantId &&
+        auction.listing.tenantId &&
+        user.tenantId !== auction.listing.tenantId
+      ) {
+        return { success: false as const, error: "Auction not found." };
+      }
+      if (auction.sellerId === user.id) {
+        return { success: false as const, error: "You cannot bid on your own auction." };
+      }
+
+      const now = new Date();
+      const eligibility = bidEligibility(
+        {
+          auctionStatus: auction.status,
+          listingStatus: auction.listing.status,
+          entryFeeStatus: auction.listing.entryFeeStatus,
+          startAt: auction.startAt,
+          endAt: auction.endAt,
+        },
+        now,
+      );
+      if (!eligibility.ok)
+        return { success: false as const, error: eligibility.message };
+
+      const [entryFee, registration, pendingBid] = await Promise.all([
+        tx.buyerAuctionEntryFee.findUnique({
+          where: { auctionId_buyerId: { auctionId, buyerId: user.id } },
+          select: { status: true },
+        }),
+        tx.buyerBidRegistration.findUnique({
+          where: { auctionId_buyerId: { auctionId, buyerId: user.id } },
+          select: { status: true },
+        }),
+        tx.bid.findFirst({
+          where: {
+            auctionId,
+            bidderId: user.id,
+            status: "PENDING",
+            payment: { status: { in: ["PENDING", "UNDER_REVIEW"] } },
+          },
+          select: { id: true },
+        }),
+      ]);
+
+      if (
+        entryFee?.status !== "CONFIRMED" &&
+        registration?.status !== "PAID" &&
+        registration?.status !== "WAIVED"
+      ) {
+        return {
+          success: false as const,
+          error: "Your entrance fee must be approved before you can bid.",
+        };
+      }
+      if (pendingBid) {
+        return {
+          success: false as const,
+          error: "A previous bid is still under review. Wait for its review before bidding again.",
+        };
+      }
+
+      const amount = requestedAmount;
+      const boundary = bidBoundary({
+        type: auction.type,
+        current: auction.currentHighestBid,
+        startingPrice: auction.startingPrice,
+        increment: auction.minBidIncrement,
+      });
+      if (
+        !isValidBid({
+          type: auction.type,
+          amount,
+          current: auction.currentHighestBid,
+          startingPrice: auction.startingPrice,
+          increment: auction.minBidIncrement,
+        })
+      ) {
+        return {
+          success: false as const,
+          error:
+            auction.type === "REVERSE"
+              ? `Your bid must be no more than ${Number(boundary.toFixed(2)).toLocaleString()} ETB.`
+              : `Your bid must be at least ${Number(boundary.toFixed(2)).toLocaleString()} ETB.`,
+        };
+      }
+
+      const endAt =
+        extendedDeadline({
+          endAt: auction.endAt,
+          now,
+          extensionCount: auction.extensionCount,
+        }) ?? auction.endAt;
+      const didExtend = endAt.getTime() !== auction.endAt.getTime();
+
+      const bid = await tx.bid.create({
+        data: {
+          auctionId,
+          bidderId: user.id,
+          amount,
+          status: "APPROVED",
+          approvedAt: now,
+        },
+        select: { id: true, createdAt: true },
+      });
+      if (didExtend) {
+        await tx.auctionExtension.create({
+          data: {
+            auctionId,
+            bidId: bid.id,
+            previousEndAt: auction.endAt,
+            newEndAt: endAt,
+            extensionNo: auction.extensionCount + 1,
+          },
+        });
+      }
+      await tx.auction.update({
+        where: { id: auctionId },
+        data: {
+          currentHighestBid: amount,
+          highestBidderId: user.id,
+          endAt,
+          ...(didExtend ? { extensionCount: { increment: 1 } } : {}),
+        },
+      });
+
+      return {
+        success: true as const,
+        amount: Number(amount),
+        endAt: endAt.toISOString(),
+        bidId: bid.id,
+        createdAt: bid.createdAt.toISOString(),
+        previousBidderId: auction.highestBidderId,
+        sellerId: auction.sellerId,
+        title: auction.listing.title,
+        type: auction.type,
+      };
+    });
+
+    if (!result.success) return result;
+
+    const participants = await prisma.bid.findMany({
+      where: { auctionId, status: "APPROVED" },
+      select: { bidderId: true },
+      distinct: ["bidderId"],
+    });
+    const notificationResults = await Promise.allSettled([
+      ...participants.map(({ bidderId }) =>
+        notifyAuctionParticipant(bidderId, {
+          type: "AUCTION_BID_UPDATE",
+          title:
+            bidderId === user.id
+              ? "Your bid was updated"
+              : bidderId === result.previousBidderId
+                ? "You were outbid"
+                : "New bid placed",
+          body:
+            bidderId === user.id
+              ? `Your bid of ${result.amount.toLocaleString()} ETB on "${result.title}" is now the ${result.type === "REVERSE" ? "lowest" : "highest"} bid.`
+              : bidderId === result.previousBidderId
+                ? `A new bid of ${result.amount.toLocaleString()} ETB was placed on "${result.title}". You are no longer the current ${result.type === "REVERSE" ? "lowest" : "highest"} bidder.`
+                : `A new bid of ${result.amount.toLocaleString()} ETB was placed on "${result.title}".`,
+          link: `/auction/${auctionId}`,
+        }),
+      ),
+      notify(result.sellerId, {
+        type: "NEW_BID",
+        title: "New bid received",
+        body: `${user.name} placed a new ${result.type === "REVERSE" ? "lowest" : "highest"} bid of ${result.amount.toLocaleString()} ETB on "${result.title}".`,
+        link: "/seller?tab=auctions",
+      }),
+      notifyAdmins({
+        type: "NEW_BID",
+        title: "Auction bid updated",
+        body: `${user.name} placed a new ${result.type === "REVERSE" ? "lowest" : "highest"} bid of ${result.amount.toLocaleString()} ETB on "${result.title}".`,
+        link: "/admin?tab=auctions",
+      }),
+    ]);
+    notificationResults.forEach((notificationResult) => {
+      if (notificationResult.status === "rejected") {
+        console.error(
+          "Failed to send a bid update notification:",
+          notificationResult.reason,
+        );
+      }
+    });
+
+    await logAudit({
+      actorId: user.id,
+      action: "BID_PLACED",
+      module: "BIDS",
+      entityType: "Auction",
+      entityId: auctionId,
+      newValue: { amount: result.amount, endAt: result.endAt },
+    });
+    revalidatePath("/customer");
+    revalidatePath("/buyer");
+    revalidatePath("/seller");
+    revalidatePath(`/auction/${auctionId}`);
+
+    return {
+      success: true as const,
+      amount: result.amount,
+      endAt: result.endAt,
+      bidId: result.bidId,
+      createdAt: result.createdAt,
+      message: `Your bid of ${result.amount.toLocaleString()} ETB is now the current ${result.type === "REVERSE" ? "lowest" : "highest"} bid.`,
+    };
+  } catch (error) {
+    console.error("Buyer bid error:", error);
+    return {
+      success: false as const,
+      error: "Could not update your bid. Please refresh and try again.",
+    };
+  }
+}
+
 export async function submitPaymentAction(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Unauthorized" };
@@ -71,10 +333,15 @@ export async function submitPaymentAction(formData: FormData) {
     include: { auction: { include: { listing: true } } },
   });
 
-  if (!result || result.winningBidderId !== user.id) {
+  if (
+    !result ||
+    result.winningBidderId !== user.id ||
+    result.winnerReviewStatus !== "APPROVED" ||
+    !result.reserveMet
+  ) {
     return {
       success: false,
-      error: "Only the winning bidder can submit payment for this auction.",
+      error: "Only an administrator-approved winner can submit payment for this auction.",
     };
   }
 

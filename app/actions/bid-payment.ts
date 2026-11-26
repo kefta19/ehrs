@@ -3,7 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/app/generated/prisma/client";
 import { logAudit } from "@/lib/security";
+import {
+  bidBoundary,
+  extendedDeadline,
+  isValidBid,
+} from "@/lib/auction-bidding";
+import { bidEligibility } from "@/lib/auction-eligibility";
 
 export async function initiateBidPaymentAction(formData: FormData) {
   const user = await getCurrentUser();
@@ -16,7 +23,10 @@ export async function initiateBidPaymentAction(formData: FormData) {
 
   const auctionId = formData.get("auctionId") as string;
   const bidAmountStr = formData.get("bidAmount") as string;
-  const method = formData.get("method") as "TELEBIRR" | "CHAPA" | "BANK_TRANSFER";
+  const method = formData.get("method") as
+    | "TELEBIRR"
+    | "CHAPA"
+    | "BANK_TRANSFER";
   const transactionRefValue = formData.get("transactionRef");
   const transactionRef =
     typeof transactionRefValue === "string" ? transactionRefValue.trim() : "";
@@ -31,112 +41,150 @@ export async function initiateBidPaymentAction(formData: FormData) {
   }
 
   if (typeof bankReferenceUrl !== "string" || !bankReferenceUrl.trim()) {
-    return { success: false, error: "Please provide a URL to your payment evidence." };
+    return {
+      success: false,
+      error: "Please provide a URL to your payment evidence.",
+    };
   }
 
   try {
     const evidenceUrl = new URL(bankReferenceUrl.trim());
     if (evidenceUrl.protocol !== "https:") throw new Error("Invalid protocol");
   } catch {
-    return { success: false, error: "Please provide a valid HTTPS URL for your payment evidence." };
+    return {
+      success: false,
+      error: "Please provide a valid HTTPS URL for your payment evidence.",
+    };
   }
 
-  const bidAmount = Number(bidAmountStr);
-  if (!Number.isFinite(bidAmount) || bidAmount <= 0) {
+  if (!/^\d{1,10}(\.\d{1,2})?$/.test(bidAmountStr.trim())) {
     return { success: false, error: "Invalid bid amount." };
   }
 
-  const auction = await prisma.auction.findUnique({
-    where: { id: auctionId },
-    include: { listing: true },
-  });
-
-  if (!auction) {
-    return { success: false, error: "Auction not found." };
-  }
-
-  const now = new Date();
-  if (
-    auction.sellerId === user.id ||
-    auction.status !== "ACTIVE" ||
-    auction.startAt > now ||
-    auction.endAt <= now
-  ) {
-    return { success: false, error: "This auction is not accepting bids." };
-  }
-
-  const [entryFee, registration] = await Promise.all([
-    prisma.buyerAuctionEntryFee.findUnique({
-      where: { auctionId_buyerId: { auctionId, buyerId: user.id } },
-      select: { status: true },
-    }),
-    prisma.buyerBidRegistration.findUnique({
-      where: { auctionId_buyerId: { auctionId, buyerId: user.id } },
-      select: { status: true },
-    }),
-  ]);
-  if (
-    entryFee?.status !== "CONFIRMED" &&
-    registration?.status !== "PAID" &&
-    registration?.status !== "WAIVED"
-  ) {
-    return {
-      success: false,
-      error: "Pay the auction entrance fee before submitting a bid.",
-    };
-  }
-
-  const existingPendingBid = await prisma.bid.findFirst({
-    where: {
-      auctionId,
-      bidderId: user.id,
-      status: "PENDING",
-      payment: { status: { in: ["PENDING", "UNDER_REVIEW"] } },
-    },
-    select: { id: true },
-  });
-  if (existingPendingBid) {
-    return {
-      success: false,
-      error: "You already have a bid payment waiting for admin review.",
-    };
-  }
-
-  const currentBid = Number(auction.currentHighestBid);
-  const minIncrement = Number(auction.minBidIncrement);
-  const startingPrice = Number(auction.startingPrice);
-  const minimumRequired = currentBid > 0 ? currentBid + minIncrement : startingPrice;
-
-  if (bidAmount < minimumRequired) {
-    return {
-      success: false,
-      error: `Bid must be at least ${minimumRequired.toLocaleString()} ETB`,
-    };
-  }
-
   try {
+    const amount = new Prisma.Decimal(bidAmountStr.trim());
     const txRef =
       transactionRef ||
       `BP-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
-    await prisma.bid.create({
-      data: {
-        auctionId,
-        bidderId: user.id,
-        amount: bidAmount,
-        status: "PENDING",
-        payment: {
-          create: {
-            amount: bidAmount,
-            currency: "ETB",
-            method,
-            status: method === "BANK_TRANSFER" ? "UNDER_REVIEW" : "PENDING",
-            transactionRef: txRef,
-            bankReferenceUrl: bankReferenceUrl.trim(),
+    const submission = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Auction" WHERE "id" = ${auctionId} FOR UPDATE`;
+      const auction = await tx.auction.findUnique({
+        where: { id: auctionId },
+        include: {
+          listing: {
+            select: {
+              title: true,
+              tenantId: true,
+              status: true,
+              entryFeeStatus: true,
+            },
           },
         },
-      },
+      });
+      if (!auction) return { success: false as const, error: "Auction not found." };
+      if (auction.sellerId === user.id)
+        return { success: false as const, error: "You cannot bid on your own auction." };
+      if (
+        user.tenantId &&
+        auction.listing.tenantId &&
+        user.tenantId !== auction.listing.tenantId
+      )
+        return { success: false as const, error: "Auction not found." };
+
+      const now = new Date();
+      const eligibility = bidEligibility(
+        {
+          auctionStatus: auction.status,
+          listingStatus: auction.listing.status,
+          entryFeeStatus: auction.listing.entryFeeStatus,
+          startAt: auction.startAt,
+          endAt: auction.endAt,
+        },
+        now,
+      );
+      if (!eligibility.ok)
+        return { success: false as const, error: eligibility.message };
+
+      const [entryFee, registration, existingPendingBid] = await Promise.all([
+        tx.buyerAuctionEntryFee.findUnique({
+          where: { auctionId_buyerId: { auctionId, buyerId: user.id } },
+          select: { status: true },
+        }),
+        tx.buyerBidRegistration.findUnique({
+          where: { auctionId_buyerId: { auctionId, buyerId: user.id } },
+          select: { status: true },
+        }),
+        tx.bid.findFirst({
+          where: {
+            auctionId,
+            bidderId: user.id,
+            status: "PENDING",
+            payment: { status: { in: ["PENDING", "UNDER_REVIEW"] } },
+          },
+          select: { id: true },
+        }),
+      ]);
+      if (
+        entryFee?.status !== "CONFIRMED" &&
+        registration?.status !== "PAID" &&
+        registration?.status !== "WAIVED"
+      )
+        return {
+          success: false as const,
+          error: "Pay the auction entrance fee before submitting a bid.",
+        };
+      if (existingPendingBid)
+        return {
+          success: false as const,
+          error: "You already have a bid payment waiting for admin review.",
+        };
+
+      const boundary = bidBoundary({
+        type: auction.type,
+        current: auction.currentHighestBid,
+        startingPrice: auction.startingPrice,
+        increment: auction.minBidIncrement,
+      });
+      if (
+        !isValidBid({
+          type: auction.type,
+          amount,
+          current: auction.currentHighestBid,
+          startingPrice: auction.startingPrice,
+          increment: auction.minBidIncrement,
+        })
+      )
+        return {
+          success: false as const,
+          bidBoundary: Number(boundary.toFixed(2)),
+          error:
+            auction.type === "REVERSE"
+              ? `Bid must be no more than ${Number(boundary.toFixed(2)).toLocaleString()} ETB.`
+              : `Bid must be at least ${Number(boundary.toFixed(2)).toLocaleString()} ETB.`,
+        };
+
+      await tx.bid.create({
+        data: {
+          auctionId,
+          bidderId: user.id,
+          amount,
+          status: "PENDING",
+          payment: {
+            create: {
+              amount,
+              currency: "ETB",
+              method,
+              status: method === "BANK_TRANSFER" ? "UNDER_REVIEW" : "PENDING",
+              transactionRef: txRef,
+              bankReferenceUrl: bankReferenceUrl.trim(),
+            },
+          },
+        },
+      });
+      return { success: true as const };
     });
+    if (!submission.success) return submission;
 
     // Log audit
     await logAudit({
@@ -146,7 +194,7 @@ export async function initiateBidPaymentAction(formData: FormData) {
       entityType: "BidPayment",
       newValue: {
         auctionId,
-        bidAmount,
+        bidAmount: amount.toFixed(2),
         method,
       },
     });
@@ -162,7 +210,10 @@ export async function initiateBidPaymentAction(formData: FormData) {
     };
   } catch (error) {
     console.error("Bid payment error:", error);
-    return { success: false, error: "Failed to submit payment. Please try again." };
+    return {
+      success: false,
+      error: "Failed to submit payment. Please try again.",
+    };
   }
 }
 
@@ -173,16 +224,23 @@ export async function approveBidPaymentAction(paymentId: string) {
   }
 
   try {
-    const now = new Date();
     const approval = await prisma.$transaction(async (tx) => {
-      const payment = await tx.bidPayment.findUnique({
+      const paymentReference = await tx.bidPayment.findUnique({
         where: { id: paymentId },
-        include: { bid: { include: { auction: true } } },
+        select: { bid: { select: { auctionId: true } } },
       });
-
-      if (!payment) {
+      if (!paymentReference) {
         return { success: false as const, error: "Payment not found." };
       }
+      const auctionId = paymentReference.bid.auctionId;
+      await tx.$queryRaw`SELECT "id" FROM "Auction" WHERE "id" = ${auctionId} FOR UPDATE`;
+
+      const payment = await tx.bidPayment.findUnique({
+        where: { id: paymentId },
+        include: { bid: true },
+      });
+      if (!payment)
+        return { success: false as const, error: "Payment not found." };
       if (payment.status !== "PENDING" && payment.status !== "UNDER_REVIEW") {
         return { success: false as const, error: "Payment already processed." };
       }
@@ -190,52 +248,133 @@ export async function approveBidPaymentAction(paymentId: string) {
         return { success: false as const, error: "Bid already processed." };
       }
 
-      const auction = payment.bid.auction;
-      if (auction.status !== "ACTIVE" || auction.endAt <= now) {
+      const [auction, bidder, entryFee, registration] = await Promise.all([
+        tx.auction.findUnique({
+          where: { id: auctionId },
+          include: {
+            listing: {
+              select: {
+                title: true,
+                status: true,
+                tenantId: true,
+                entryFeeStatus: true,
+              },
+            },
+          },
+        }),
+        tx.user.findUnique({
+          where: { id: payment.bid.bidderId },
+          select: { id: true, role: true, status: true, deletedAt: true, tenantId: true },
+        }),
+        tx.buyerAuctionEntryFee.findUnique({
+          where: {
+            auctionId_buyerId: {
+              auctionId,
+              buyerId: payment.bid.bidderId,
+            },
+          },
+          select: { status: true },
+        }),
+        tx.buyerBidRegistration.findUnique({
+          where: {
+            auctionId_buyerId: {
+              auctionId,
+              buyerId: payment.bid.bidderId,
+            },
+          },
+          select: { status: true },
+        }),
+      ]);
+      if (!auction)
+        return { success: false as const, error: "Auction not found." };
+      if (
+        !bidder ||
+        bidder.role !== "BUYER" ||
+        bidder.status !== "ACTIVE" ||
+        bidder.deletedAt
+      )
+        return { success: false as const, error: "This bidder is no longer eligible." };
+      if (
+        bidder.tenantId &&
+        auction.listing.tenantId &&
+        bidder.tenantId !== auction.listing.tenantId
+      )
+        return { success: false as const, error: "This bidder is no longer eligible." };
+      if (
+        entryFee?.status !== "CONFIRMED" &&
+        registration?.status !== "PAID" &&
+        registration?.status !== "WAIVED"
+      )
+        return { success: false as const, error: "The bidder's entrance fee is not approved." };
+
+      const now = new Date();
+      const eligibility = bidEligibility(
+        {
+          auctionStatus: auction.status,
+          listingStatus: auction.listing.status,
+          entryFeeStatus: auction.listing.entryFeeStatus,
+          startAt: auction.startAt,
+          endAt: auction.endAt,
+        },
+        now,
+      );
+      if (!eligibility.ok)
         return {
           success: false as const,
-          error: "The auction has ended; this bid can no longer be approved.",
+          error: `The bid can no longer be approved: ${eligibility.message}`,
         };
-      }
 
-      const currentBid = Number(auction.currentHighestBid);
-      const minimumRequired =
-        currentBid > 0
-          ? currentBid + Number(auction.minBidIncrement)
-          : Number(auction.startingPrice);
+      const boundary = bidBoundary({
+        type: auction.type,
+        current: auction.currentHighestBid,
+        startingPrice: auction.startingPrice,
+        increment: auction.minBidIncrement,
+      });
       if (
-        Number(payment.amount) !== Number(payment.bid.amount) ||
-        Number(payment.bid.amount) < minimumRequired
+        !payment.amount.equals(payment.bid.amount) ||
+        !isValidBid({
+          type: auction.type,
+          amount: payment.bid.amount,
+          current: auction.currentHighestBid,
+          startingPrice: auction.startingPrice,
+          increment: auction.minBidIncrement,
+        })
       ) {
         return {
           success: false as const,
-          error: `This bid is no longer high enough. The current minimum is ${minimumRequired.toLocaleString()} ETB.`,
+          error:
+            auction.type === "REVERSE"
+              ? `This bid is no longer low enough. The current maximum is ${Number(boundary.toFixed(2)).toLocaleString()} ETB.`
+              : `This bid is no longer high enough. The current minimum is ${Number(boundary.toFixed(2)).toLocaleString()} ETB.`,
         };
       }
 
-      const timeLeftMs = auction.endAt.getTime() - now.getTime();
       const newEndAt =
-        timeLeftMs > 0 && timeLeftMs < 5 * 60 * 1000
-          ? new Date(now.getTime() + 5 * 60 * 1000)
-          : auction.endAt;
-      const claimed = await tx.auction.updateMany({
-        where: {
-          id: auction.id,
-          status: "ACTIVE",
-          endAt: { gt: now },
-          currentHighestBid: auction.currentHighestBid,
-        },
+        extendedDeadline({
+          endAt: auction.endAt,
+          now,
+          extensionCount: auction.extensionCount,
+        }) ?? auction.endAt;
+      const didExtend = newEndAt.getTime() !== auction.endAt.getTime();
+      await tx.auction.update({
+        where: { id: auctionId },
         data: {
           currentHighestBid: payment.bid.amount,
           highestBidderId: payment.bid.bidderId,
           endAt: newEndAt,
+          ...(didExtend ? { extensionCount: { increment: 1 } } : {}),
         },
       });
-      if (claimed.count !== 1) {
-        return {
-          success: false as const,
-          error: "The auction changed while reviewing this bid. Refresh and try again.",
-        };
+      if (didExtend) {
+        await tx.auctionExtension.create({
+          data: {
+            auctionId,
+            bidId: payment.bidId,
+            previousEndAt: auction.endAt,
+            newEndAt,
+            extensionNo: auction.extensionCount + 1,
+          },
+        });
       }
 
       await tx.bidPayment.update({
@@ -248,7 +387,7 @@ export async function approveBidPaymentAction(paymentId: string) {
       });
       return {
         success: true as const,
-        auctionId: auction.id,
+        auctionId,
       };
     });
 
@@ -269,14 +408,20 @@ export async function approveBidPaymentAction(paymentId: string) {
     revalidatePath("/customer");
     revalidatePath("/provider");
 
-    return { success: true, message: "Payment approved and bid is now active." };
+    return {
+      success: true,
+      message: "Payment approved and bid is now active.",
+    };
   } catch (error) {
     console.error("Approval error:", error);
     return { success: false, error: "Failed to approve payment." };
   }
 }
 
-export async function rejectBidPaymentAction(paymentId: string, reason: string) {
+export async function rejectBidPaymentAction(
+  paymentId: string,
+  reason: string,
+) {
   const user = await getCurrentUser();
   if (!user || user.role !== "ADMIN") {
     return { success: false, error: "Unauthorized." };
@@ -287,37 +432,41 @@ export async function rejectBidPaymentAction(paymentId: string, reason: string) 
       return { success: false, error: "A rejection reason is required." };
     }
 
-    const payment = await prisma.bidPayment.findUnique({
+    const paymentReference = await prisma.bidPayment.findUnique({
       where: { id: paymentId },
-      include: { bid: true },
+      select: { bid: { select: { auctionId: true } } },
     });
-
-    if (!payment) {
+    if (!paymentReference)
       return { success: false, error: "Payment not found." };
-    }
+    const rejection = await prisma.$transaction(async (tx) => {
+      const auctionId = paymentReference.bid.auctionId;
+      await tx.$queryRaw`SELECT "id" FROM "Auction" WHERE "id" = ${auctionId} FOR UPDATE`;
+      const payment = await tx.bidPayment.findUnique({
+        where: { id: paymentId },
+        include: { bid: true },
+      });
+      if (!payment)
+        return { success: false as const, error: "Payment not found." };
+      if (payment.status === "APPROVED" || payment.status === "REJECTED")
+        return { success: false as const, error: "Payment already processed." };
 
-    if (payment.status === "APPROVED" || payment.status === "REJECTED") {
-      return { success: false, error: "Payment already processed." };
-    }
-
-    // Update payment status
-    await prisma.bidPayment.update({
-      where: { id: paymentId },
-      data: {
-        status: "REJECTED",
-        verifiedById: user.id,
-        verifiedAt: new Date(),
-        rejectionReason: reason,
-      },
+      const now = new Date();
+      await tx.bidPayment.update({
+        where: { id: paymentId },
+        data: {
+          status: "REJECTED",
+          verifiedById: user.id,
+          verifiedAt: now,
+          rejectionReason: reason,
+        },
+      });
+      await tx.bid.update({
+        where: { id: payment.bidId },
+        data: { status: "REJECTED" },
+      });
+      return { success: true as const, auctionId, bidId: payment.bidId };
     });
-
-    // Update bid status
-    await prisma.bid.update({
-      where: { id: payment.bidId },
-      data: {
-        status: "REJECTED",
-      },
-    });
+    if (!rejection.success) return rejection;
 
     // Log audit
     await logAudit({
@@ -326,10 +475,11 @@ export async function rejectBidPaymentAction(paymentId: string, reason: string) 
       module: "PAYMENTS",
       entityType: "BidPayment",
       entityId: paymentId,
-      newValue: { reason },
+      newValue: { reason, auctionId: rejection.auctionId, bidId: rejection.bidId },
     });
 
     revalidatePath("/admin");
+    revalidatePath(`/auction/${rejection.auctionId}`);
     revalidatePath("/buyer");
     revalidatePath("/customer");
 

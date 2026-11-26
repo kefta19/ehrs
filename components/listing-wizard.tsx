@@ -185,6 +185,9 @@ export function ListingWizard({
   const [startingPrice, setStartingPrice] = useState("");
   const [minBidIncrement, setMinBidIncrement] = useState("");
   const [reservePrice, setReservePrice] = useState("");
+  const [auctionType, setAuctionType] = useState<"FORWARD" | "REVERSE">(
+    "FORWARD",
+  );
   const [terms, setTerms] = useState("");
   const [showScheduleGuide, setShowScheduleGuide] = useState(false);
   const [copiedBank, setCopiedBank] = useState<string | null>(null);
@@ -376,6 +379,7 @@ export function ListingWizard({
     }
 
     const fd = new FormData(e.currentTarget);
+    fd.set("type", auctionType);
     fd.set("startAt", sDate.toISOString());
     fd.set("endAt", eDate.toISOString());
     if (startingPrice) fd.set("startingPrice", startingPrice);
@@ -1032,10 +1036,8 @@ export function ListingWizard({
                             Anti-Sniping Soft-Close Protection
                           </strong>
                           <p className="text-emerald-800 mt-0.5">
-                            The platform includes automatic soft-close. If a bid
-                            is submitted in the final 2 minutes, the timer
-                            automatically extends by 2 minutes, preventing bot
-                            sniping.
+                            A valid bid submitted in the final 5 minutes adds 5
+                            minutes to the deadline, up to 10 times.
                           </p>
                         </div>
                       </div>
@@ -1142,6 +1144,37 @@ export function ListingWizard({
                 </select>
               </div>
 
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <label htmlFor="auctionType" className={label}>
+                  Auction type *
+                </label>
+                <select
+                  id="auctionType"
+                  name="type"
+                  value={auctionType}
+                  onChange={(event) => {
+                    if (
+                      event.target.value === "FORWARD" ||
+                      event.target.value === "REVERSE"
+                    )
+                      setAuctionType(event.target.value);
+                  }}
+                  className={input}
+                >
+                  <option value="FORWARD">
+                    Forward auction — highest eligible bid wins
+                  </option>
+                  <option value="REVERSE">
+                    Reverse auction — lowest eligible bid wins
+                  </option>
+                </select>
+                <p className="mt-1 text-[10px] text-slate-500">
+                  {auctionType === "FORWARD"
+                    ? "Bids must meet or exceed the current price plus the minimum increment."
+                    : "The opening price is the maximum first bid; each later bid must be lower by at least the minimum increment."}
+                </p>
+              </div>
+
               {/* Pricing & Increment Card */}
               <div
                 className={`rounded-2xl border bg-white p-4 shadow-sm space-y-4 sm:p-5 ${styles.section}`}
@@ -1159,7 +1192,11 @@ export function ListingWizard({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className={label}>Starting price * (ETB)</label>
+                      <label className={label}>
+                        {auctionType === "REVERSE"
+                          ? "Maximum opening bid * (ETB)"
+                          : "Starting price * (ETB)"}
+                      </label>
                     </div>
                     <div className="relative">
                       <input
@@ -1178,7 +1215,9 @@ export function ListingWizard({
                       </span>
                     </div>
                     <p className="mt-1 text-[10px] text-slate-400">
-                      Opening price for the first bidder to meet.
+                      {auctionType === "REVERSE"
+                        ? "Highest amount accepted for the first reverse bid."
+                        : "Opening price the first forward bidder must meet."}
                     </p>
                   </div>
 
@@ -1240,7 +1279,9 @@ export function ListingWizard({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className={label}>
-                      Confidential reserve price (Optional)
+                      {auctionType === "REVERSE"
+                        ? "Minimum acceptable price (Optional)"
+                        : "Confidential reserve price (Optional)"}
                     </label>
                     <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full">
                       🔒 Kept 100% Secret
@@ -1262,8 +1303,9 @@ export function ListingWizard({
                     </span>
                   </div>
                   <p className="mt-1 text-[10px] text-slate-400">
-                    Bidders will never see this amount. If bidding ends below
-                    your reserve, you are under no legal obligation to sell.
+                    {auctionType === "REVERSE"
+                      ? "Bids below this seller-approved minimum will not qualify as a winner."
+                      : "Bidders will never see this amount. If bidding ends below your reserve, you are under no legal obligation to sell."}
                   </p>
                 </div>
               </div>

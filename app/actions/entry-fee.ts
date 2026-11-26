@@ -118,6 +118,7 @@ export async function createAuctionDraftAction(
 
   const parsed = submitAuctionSchema.safeParse({
     listingId: str(formData, "listingId"),
+    type: str(formData, "type") || "FORWARD",
     startingPrice: str(formData, "startingPrice"),
     reservePrice: str(formData, "reservePrice"),
     minBidIncrement: str(formData, "minBidIncrement"),
@@ -176,6 +177,7 @@ export async function createAuctionDraftAction(
     );
 
   const data = {
+    type: d.type,
     startingPrice: new Prisma.Decimal(d.startingPrice),
     reservePrice:
       d.reservePrice === undefined
@@ -193,7 +195,7 @@ export async function createAuctionDraftAction(
       const auction = draft
         ? await tx.auction.update({
             where: { id: draft.id, sellerId: user.id },
-            data: { ...data },
+            data: { ...data, extensionCount: 0 },
           })
         : await tx.auction.create({
             data: {

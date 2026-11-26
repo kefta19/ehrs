@@ -4,14 +4,19 @@ import {
   ArrowRight,
   BadgeCheck,
   ChevronDown,
+  Check,
   CircleHelp,
+  Clock3,
   ClipboardCheck,
   FileCheck2,
   Gavel,
   Handshake,
+  Image as ImageIcon,
+  ListChecks,
   Search,
   ShieldCheck,
   Store,
+  TrendingUp,
   UserRound,
 } from "lucide-react";
 import { HomeHeader } from "@/components/home-header";
@@ -27,27 +32,61 @@ export const metadata: Metadata = {
     "Learn how ETHome connects buyers and sellers through reviewed listings and online auctions.",
 };
 
-const steps = [
+const customerFlow = [
   {
-    number: "01",
-    icon: FileCheck2,
-    title: "Listings are reviewed",
-    description:
-      "Sellers submit an asset and its supporting information. The platform reviews submissions before approved listings are published.",
+    icon: UserRound,
+    title: "Create a buyer account",
+    description: "Register, sign in, and open your customer dashboard.",
   },
   {
-    number: "02",
     icon: Search,
-    title: "Explore the marketplace",
-    description:
-      "Browse available properties and assets, review each listing, and check its auction schedule and participation requirements.",
+    title: "Explore and review",
+    description: "Browse listings and check photos, details, auction terms, and dates.",
   },
   {
-    number: "03",
+    icon: ClipboardCheck,
+    title: "Get bidding access",
+    description: "Submit the auction entry fee and wait for its approval.",
+  },
+  {
     icon: Gavel,
-    title: "Participate in an auction",
+    title: "Place or increase your bid",
     description:
-      "Sign in to view participation steps and place bids on active auctions. Any registration or entry-fee requirements are shown for the auction.",
+      "After approval, your qualifying bid updates the live auction immediately. No separate bid-payment upload is needed.",
+  },
+  {
+    icon: BadgeCheck,
+    title: "Win and complete payment",
+    description:
+      "If your approved bid is highest and meets the reserve, you are notified and can submit the required deposit within 72 hours.",
+  },
+];
+
+const sellerFlow = [
+  {
+    icon: UserRound,
+    title: "Create a seller account",
+    description: "Register as a seller and open your seller dashboard.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Complete seller verification",
+    description: "Submit identity and business details for administrator review.",
+  },
+  {
+    icon: ImageIcon,
+    title: "Prepare your listing",
+    description: "Add accurate details, photos, supporting documents, and requested verification.",
+  },
+  {
+    icon: FileCheck2,
+    title: "Submit for review",
+    description: "Set up the auction and submit the listing and schedule for approval.",
+  },
+  {
+    icon: TrendingUp,
+    title: "Publish and follow results",
+    description: "Once approved, monitor bids, notifications, auction close, and the winner in your dashboard.",
   },
 ];
 
@@ -71,19 +110,19 @@ const roleGuides = [
           "Open Browse Properties, then search by title or location and filter by category or auction status. Open a listing to review its description, photos, public specifications, video, auction terms, price, and schedule. Seller identity and ownership documents are reviewed privately by the platform and are not shared with buyers.",
       },
       {
-        title: "Get ready to bid",
+        title: "Pay the entry fee and wait for approval",
         description:
-          "Check the auction details for registration and entrance-fee requirements. Complete any required registration or payment before bidding is enabled.",
+          "Submit the auction entry fee and payment evidence if required. Bidding is enabled after an administrator approves the fee.",
       },
       {
-        title: "Place and follow your bids",
+        title: "Place or increase your bid",
         description:
-          "When an auction is live, submit a bid that meets the displayed minimum. Save auctions to your Watchlist and check My Bids and Notifications for updates.",
+          "When the auction is live and your entry fee is approved, enter a bid that meets the displayed minimum. The bid updates the auction immediately; no separate bid-payment upload is needed. Follow activity in My Bids and Notifications.",
       },
       {
-        title: "Manage the outcome",
+        title: "Follow the result and pay if you win",
         description:
-          "Review Won Auctions and Payment Records in your dashboard for any next steps. Use Complaints & Support to submit a question or dispute.",
+          "The highest qualifying bid wins when the auction closes and meets the reserve price. If you win, check Won Auctions and Payments, then submit the required deposit within 72 hours.",
       },
     ],
     href: "/register",
@@ -116,9 +155,9 @@ const roleGuides = [
           "Add the asset category, description, location, at least three photos, a valid social video post link, your ID document, and fingerprint verification. Include ownership documents when available.",
       },
       {
-        title: "Set up the auction",
+        title: "Set up and submit the auction",
         description:
-          "After creating the listing, continue through the auction setup to enter the starting price and schedule. Review the entry-fee instructions and submit the auction for administrator review.",
+          "Enter the starting price and schedule, review any seller entry-fee instructions, and submit the listing and auction for administrator review.",
       },
       {
         title: "Track review and activity",
@@ -312,34 +351,263 @@ export default async function AboutPage() {
                 How it works
               </p>
               <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
-                From submission to auction participation
+                Two clear journeys. One trusted marketplace.
               </h2>
               <p className="mt-4 leading-7 text-slate-600 dark:text-slate-300">
-                Clear steps help sellers prepare listings and buyers know
-                where to find the information they need.
+                Follow the visual walkthroughs below to see what buyers and
+                sellers do at each stage, from account setup to auction close.
               </p>
             </div>
 
-            <div className="mt-10 grid gap-5 md:grid-cols-3">
-              {steps.map(({ number, icon: Icon, title, description }) => (
-                <article
-                  key={number}
-                  className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900"
-                >
+            <div className="mt-12 grid gap-6 lg:grid-cols-2">
+              <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-950 p-6 text-white sm:p-8">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold tracking-widest text-blue-600 dark:text-blue-400">
-                      {number}
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-200">
+                        Customer journey
+                      </p>
+                      <h3 className="mt-2 text-2xl font-bold">
+                        Discover. Bid. Win.
+                      </h3>
+                    </div>
+                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
+                      <UserRound size={25} />
                     </span>
-                    <Icon size={22} className="text-slate-400" />
                   </div>
-                  <h3 className="mt-5 text-lg font-bold text-slate-900 dark:text-white">
-                    {title}
-                  </h3>
-                  <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-400">
-                    {description}
-                  </p>
-                </article>
-              ))}
+
+                  <div
+                    role="img"
+                    aria-label="Illustration of the customer dashboard showing a live auction and an increase bid action"
+                    className="mt-6 overflow-hidden rounded-2xl border border-white/15 bg-slate-50 text-slate-800 shadow-xl"
+                  >
+                    <div className="flex items-center gap-1.5 border-b border-slate-200 bg-white px-4 py-3">
+                      <span className="h-2 w-2 rounded-full bg-rose-400" />
+                      <span className="h-2 w-2 rounded-full bg-amber-400" />
+                      <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                      <span className="ml-3 text-[10px] font-semibold tracking-wide text-slate-500">
+                        CUSTOMER DASHBOARD / LIVE AUCTIONS
+                      </span>
+                    </div>
+                    <div className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:p-5">
+                      <div className="flex gap-3">
+                        <div className="flex h-16 w-20 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-200 via-blue-300 to-slate-400 text-white">
+                          <Store size={25} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-bold text-emerald-700">
+                              LIVE
+                            </span>
+                            <span className="text-[9px] text-slate-500">
+                              Residential property
+                            </span>
+                          </div>
+                          <p className="mt-1 truncate text-sm font-bold">
+                            Reviewed auction listing
+                          </p>
+                          <p className="mt-1 text-[10px] text-slate-500">
+                            Photos · details · auction terms
+                          </p>
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-blue-100 bg-white p-3 sm:min-w-40">
+                        <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+                          Current highest bid
+                        </p>
+                        <p className="mt-1 text-lg font-extrabold text-slate-900">
+                          9,200,000{" "}
+                          <span className="text-[10px] font-medium text-slate-500">
+                            ETB
+                          </span>
+                        </p>
+                        <div className="mt-2 inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-[10px] font-bold text-white">
+                          <Gavel size={11} /> Increase bid
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 bg-white px-4 py-3 text-[10px] text-slate-600 sm:px-5">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">
+                        <Check size={11} /> Entry fee approved
+                      </span>
+                      <ArrowRight size={13} className="text-slate-400" />
+                      <span className="font-semibold">
+                        Bid updates immediately
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <ol className="space-y-0 p-6 sm:p-8">
+                  {customerFlow.map(({ icon: Icon, title, description }, index) => (
+                    <li key={title} className="relative flex gap-4 pb-6 last:pb-0">
+                      {index < customerFlow.length - 1 && (
+                        <span
+                          aria-hidden="true"
+                          className="absolute left-4 top-9 h-[calc(100%-0.5rem)] w-px bg-blue-100 dark:bg-slate-700"
+                        />
+                      )}
+                      <span className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-700 ring-4 ring-white dark:bg-blue-950 dark:text-blue-300 dark:ring-slate-900">
+                        <Icon size={15} />
+                      </span>
+                      <div className="pt-0.5">
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                          <span className="mr-2 text-xs font-semibold text-blue-600 dark:text-blue-400">
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          {title}
+                        </h4>
+                        <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-400">
+                          {description}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+                <div className="flex flex-col gap-3 border-t border-slate-100 p-6 pt-5 dark:border-slate-800 sm:flex-row">
+                  <Link
+                    href="/buyer?tab=browse"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+                  >
+                    Browse auctions <ArrowRight size={15} />
+                  </Link>
+                  <Link
+                    href="/register"
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    Create buyer account
+                  </Link>
+                </div>
+              </article>
+
+              <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="bg-gradient-to-br from-emerald-700 via-teal-800 to-slate-950 p-6 text-white sm:p-8">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-200">
+                        Seller journey
+                      </p>
+                      <h3 className="mt-2 text-2xl font-bold">
+                        Verify. List. Sell.
+                      </h3>
+                    </div>
+                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
+                      <Store size={25} />
+                    </span>
+                  </div>
+
+                  <div
+                    role="img"
+                    aria-label="Illustration of the seller dashboard showing listing review and auction setup progress"
+                    className="mt-6 overflow-hidden rounded-2xl border border-white/15 bg-slate-50 text-slate-800 shadow-xl"
+                  >
+                    <div className="flex items-center gap-1.5 border-b border-slate-200 bg-white px-4 py-3">
+                      <span className="h-2 w-2 rounded-full bg-rose-400" />
+                      <span className="h-2 w-2 rounded-full bg-amber-400" />
+                      <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                      <span className="ml-3 text-[10px] font-semibold tracking-wide text-slate-500">
+                        SELLER DASHBOARD / LISTING REVIEW
+                      </span>
+                    </div>
+                    <div className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:p-5">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                            <ListChecks size={17} />
+                          </span>
+                          <div>
+                            <p className="text-xs font-bold text-slate-900">
+                              Listing submission
+                            </p>
+                            <p className="text-[9px] text-slate-500">
+                              Complete each step before review
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-4 space-y-2.5">
+                          {[
+                            "Seller verification",
+                            "Listing details and photos",
+                            "Auction schedule",
+                          ].map((item, index) => (
+                            <div
+                              key={item}
+                              className="flex items-center gap-2 text-[10px] text-slate-600"
+                            >
+                              <span
+                                className={`flex h-4 w-4 items-center justify-center rounded-full ${
+                                  index < 2
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : "bg-amber-100 text-amber-700"
+                                }`}
+                              >
+                                {index < 2 ? <Check size={10} /> : <Clock3 size={9} />}
+                              </span>
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex flex-col justify-center rounded-xl border border-emerald-100 bg-white p-3 sm:min-w-36">
+                        <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+                          Review status
+                        </p>
+                        <span className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700">
+                          <Clock3 size={11} /> In review
+                        </span>
+                        <p className="mt-2 text-[9px] leading-4 text-slate-500">
+                          Approved listings become available to buyers.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 border-t border-slate-200 bg-white px-4 py-3 text-[10px] text-slate-600 sm:px-5">
+                      <ShieldCheck size={13} className="text-emerald-600" />
+                      Administrator review before publication
+                    </div>
+                  </div>
+                </div>
+
+                <ol className="space-y-0 p-6 sm:p-8">
+                  {sellerFlow.map(({ icon: Icon, title, description }, index) => (
+                    <li key={title} className="relative flex gap-4 pb-6 last:pb-0">
+                      {index < sellerFlow.length - 1 && (
+                        <span
+                          aria-hidden="true"
+                          className="absolute left-4 top-9 h-[calc(100%-0.5rem)] w-px bg-emerald-100 dark:bg-slate-700"
+                        />
+                      )}
+                      <span className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 ring-4 ring-white dark:bg-emerald-950 dark:text-emerald-300 dark:ring-slate-900">
+                        <Icon size={15} />
+                      </span>
+                      <div className="pt-0.5">
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                          <span className="mr-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          {title}
+                        </h4>
+                        <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-400">
+                          {description}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+                <div className="flex flex-col gap-3 border-t border-slate-100 p-6 pt-5 dark:border-slate-800 sm:flex-row">
+                  <Link
+                    href="/register"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                  >
+                    Start selling <ArrowRight size={15} />
+                  </Link>
+                  <Link
+                    href="/seller"
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    Seller dashboard
+                  </Link>
+                </div>
+              </article>
             </div>
           </div>
         </section>

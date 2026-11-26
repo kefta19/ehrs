@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CreditCard, Smartphone, Building2, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { initiateBidPaymentAction } from "@/app/actions/bid-payment";
 
 type Auction = {
   id: string;
+  type: "FORWARD" | "REVERSE";
   listing: {
     title: string;
     category: { name: string };
@@ -16,30 +17,67 @@ type Auction = {
   startingPrice: number | string;
 };
 
-type User = {
-  id: string;
-  name: string;
-  email: string;
-};
-
 export function BidPaymentClient({
-  user,
   auction,
   bidAmount,
+  auctionType,
+  bidBoundary,
+  endAt,
+  bidAmountUpdated,
 }: {
-  user: User;
   auction: Auction;
   bidAmount: number;
+  auctionType: "FORWARD" | "REVERSE";
+  bidBoundary: number;
+  endAt: string;
+  bidAmountUpdated: boolean;
 }) {
   const router = useRouter();
+  const [amount, setAmount] = useState(bidAmount);
+  const [boundaryOverride, setBoundaryOverride] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const [selectedMethod, setSelectedMethod] = useState<"TELEBIRR" | "CHAPA" | "BANK_TRANSFER" | null>(null);
   const [transactionRef, setTransactionRef] = useState("");
   const [paymentEvidenceUrl, setPaymentEvidenceUrl] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const isAuctionClosed = now >= new Date(endAt).getTime();
+  const requiredBoundary = boundaryOverride ?? bidBoundary;
+
+  useEffect(() => {
+    const timerId = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timerId);
+  }, []);
 
   const handlePayment = async () => {
+    if (Date.now() >= new Date(endAt).getTime()) {
+      setNow(Date.now());
+      setError("This auction has ended. Bid payment can no longer be submitted.");
+      return;
+    }
+
+    if (auctionType === "REVERSE" && requiredBoundary <= 0) {
+      setError("No positive valid bid can be submitted for this reverse auction.");
+      return;
+    }
+
+    const invalidBid =
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      (auctionType === "REVERSE"
+        ? amount > requiredBoundary
+        : amount < requiredBoundary);
+    if (invalidBid) {
+      setAmount(requiredBoundary);
+      setError(
+        auctionType === "REVERSE"
+          ? `The maximum valid bid changed. Your amount was updated to ${requiredBoundary.toLocaleString()} ETB.`
+          : `The minimum valid bid changed. Your amount was updated to ${requiredBoundary.toLocaleString()} ETB.`,
+      );
+      return;
+    }
+
     if (!selectedMethod) {
       setError("Please select a payment method");
       return;
@@ -56,7 +94,7 @@ export function BidPaymentClient({
     try {
       const formData = new FormData();
       formData.append("auctionId", auction.id);
-      formData.append("bidAmount", bidAmount.toString());
+      formData.append("bidAmount", amount.toString());
       formData.append("method", selectedMethod);
       formData.append("transactionRef", transactionRef);
       formData.append("bankReferenceUrl", paymentEvidenceUrl.trim());
@@ -69,9 +107,23 @@ export function BidPaymentClient({
           router.push("/buyer?tab=bids");
         }, 3000);
       } else {
+        if (
+          "bidBoundary" in result &&
+          typeof result.bidBoundary === "number"
+        ) {
+          const updatedBoundary = result.bidBoundary;
+          setBoundaryOverride(updatedBoundary);
+          if (auctionType !== "REVERSE" || updatedBoundary > 0) {
+            setAmount((current) =>
+              auctionType === "REVERSE"
+                ? Math.min(current, updatedBoundary)
+                : Math.max(current, updatedBoundary),
+            );
+          }
+        }
         setError(result.error || "Payment submission failed. Please try again.");
       }
-    } catch (err) {
+    } catch {
       setError("An unexpected error occurred. Please try again.");
     } finally {
       setIsProcessing(false);
@@ -89,10 +141,45 @@ export function BidPaymentClient({
           </div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Payment Submitted!</h2>
           <p className="text-slate-600 dark:text-slate-400 mb-6">
-            Your bid payment of {bidAmount.toLocaleString()} ETB has been submitted for admin review.
+            Your bid payment of {amount.toLocaleString()} ETB has been submitted for admin review.
             You will be notified once approved.
           </p>
           <p className="text-sm text-slate-500 dark:text-slate-500">Redirecting to dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isAuctionClosed) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4 dark:from-slate-900 dark:to-slate-800">
+        <div className="w-full max-w-lg rounded-2xl bg-white p-8 text-center shadow-xl dark:bg-slate-800">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
+            <AlertCircle className="h-9 w-9 text-amber-600 dark:text-amber-400" />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            Auction deadline reached
+          </h1>
+          <p className="mt-2 text-slate-600 dark:text-slate-300">
+            Bid payment is no longer available because this auction has ended.
+            Refresh to check whether the auction deadline was extended.
+          </p>
+          <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => router.refresh()}
+              className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              Refresh auction
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/customer?tab=browse")}
+              className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              Return to auctions
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -127,11 +214,45 @@ export function BidPaymentClient({
             </div>
 
             {/* Bid Amount */}
-            <div className="text-center mb-6">
-              <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Your Bid Amount</p>
-              <p className="text-4xl font-bold text-slate-900 dark:text-white">
-                {bidAmount.toLocaleString()} <span className="text-lg font-normal text-slate-500">ETB</span>
+            <div className="mb-6">
+              <label
+                htmlFor="bid-amount"
+                className="mb-2 block text-center text-sm text-slate-600 dark:text-slate-400"
+              >
+                Your Bid Amount
+              </label>
+              <div className="mx-auto flex max-w-sm items-center rounded-xl border border-slate-300 bg-white px-4 dark:border-slate-600 dark:bg-slate-900">
+                <input
+                  id="bid-amount"
+                  type="number"
+                  min={auctionType === "REVERSE" ? 0.01 : requiredBoundary}
+                  max={auctionType === "REVERSE" ? requiredBoundary : undefined}
+                  step="0.01"
+                  required
+                  value={amount}
+                  onChange={(event) => {
+                    setAmount(Number(event.target.value));
+                    setError(null);
+                  }}
+                  className="w-full min-w-0 bg-transparent py-3 text-center text-3xl font-bold text-slate-900 outline-none dark:text-white"
+                  aria-describedby="bid-minimum"
+                />
+                <span className="shrink-0 text-sm text-slate-500">ETB</span>
+              </div>
+              <p
+                id="bid-minimum"
+                className="mt-2 text-center text-xs text-slate-500"
+              >
+                {auctionType === "REVERSE" ? "Maximum valid bid" : "Minimum valid bid"}:{" "}
+                {requiredBoundary.toLocaleString()} ETB
               </p>
+              {bidAmountUpdated && (
+                <p className="mt-2 text-center text-sm font-medium text-amber-700 dark:text-amber-300">
+                  {auctionType === "REVERSE"
+                    ? "The current maximum changed, so your bid amount was adjusted. You can change it as long as it does not exceed the maximum."
+                    : "The current minimum increased, so your bid was automatically updated. You can change it as long as it meets the minimum."}
+                </p>
+              )}
             </div>
 
             {/* Payment Methods */}

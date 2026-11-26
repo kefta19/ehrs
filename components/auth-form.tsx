@@ -1,6 +1,5 @@
 "use client";
 
-import { useBranding } from "./branding-provider";
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import {
@@ -48,7 +47,6 @@ export function AuthForm({
   });
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const { companyName } = useBranding();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(
     googleError
@@ -120,32 +118,18 @@ export function AuthForm({
         <div className="flex justify-center mb-1.5">
           <ETHomeLogo size="sm" href="/" showTagline={false} />
         </div>
-        <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-          {mode === "login"
-            ? `Sign in to ${companyName}`
-            : "Create your account"}
-        </h2>
-        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-          {mode === "login"
-            ? "Enter your credentials to access your dashboard"
-            : "Select your role and enter your details to get started"}
-        </p>
+        {mode === "register" && (
+          <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            Create your account
+          </h2>
+        )}
       </div>
 
       {/* Role-Based System Selector (Register only) */}
       {mode === "register" && (
-        <div className="mt-2.5 mb-3.5">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Account Role
-            </span>
-            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">
-              {role === "BUYER" ? "Tenant / Buyer" : "Landlord / Owner"}
-            </span>
-          </div>
-
+        <div className="mt-3 mb-3.5">
           <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60">
-            {/* Tenant / Buyer Tab */}
+            {/* Bidder / Buyer Tab */}
             <button
               type="button"
               onClick={() => setRole("BUYER")}
@@ -156,10 +140,10 @@ export function AuthForm({
               }`}
             >
               <UserRound size={14} />
-              <span>Tenant</span>
+              <span>Bidder</span>
             </button>
 
-            {/* Landlord / Seller Tab */}
+            {/* Owner / Seller Tab */}
             <button
               type="button"
               onClick={() => setRole("SELLER")}
@@ -170,7 +154,7 @@ export function AuthForm({
               }`}
             >
               <Building2 size={14} />
-              <span>Landlord</span>
+              <span>Owner</span>
             </button>
           </div>
         </div>
@@ -197,7 +181,7 @@ export function AuthForm({
                     value={form.name}
                     onChange={(e) => set("name", e.target.value)}
                     placeholder="Getachew Abebe"
-                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-[10px] sm:text-[11px] text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
                   />
                 </div>
               </div>
@@ -217,13 +201,13 @@ export function AuthForm({
                     value={form.phone}
                     onChange={(e) => set("phone", e.target.value)}
                     placeholder="+251 91 122 3344"
-                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-[10px] sm:text-[11px] text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Landlord-specific business name field */}
+            {/* Owner-specific business name field */}
             {role === "SELLER" && (
               <div>
                 <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-0.5">
@@ -239,7 +223,7 @@ export function AuthForm({
                     value={form.businessName}
                     onChange={(e) => set("businessName", e.target.value)}
                     placeholder="Prime Real Estate LLC"
-                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-[10px] sm:text-[11px] text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
                   />
                 </div>
               </div>
@@ -262,7 +246,7 @@ export function AuthForm({
                     value={form.email}
                     onChange={(e) => set("email", e.target.value)}
                     placeholder="you@example.com"
-                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-[10px] sm:text-[11px] text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
                   />
                 </div>
               </div>
@@ -284,7 +268,7 @@ export function AuthForm({
                     value={form.password}
                     onChange={(e) => set("password", e.target.value)}
                     placeholder="Min. 8 characters"
-                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-9 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-9 text-[10px] sm:text-[11px] text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
                   />
                   <button
                     type="button"
@@ -316,7 +300,7 @@ export function AuthForm({
                   value={form.email}
                   onChange={(e) => set("email", e.target.value)}
                   placeholder="Enter your registered email"
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-[10px] sm:text-[11px] text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
                 />
               </div>
             </div>
@@ -336,7 +320,7 @@ export function AuthForm({
                   value={form.password}
                   onChange={(e) => set("password", e.target.value)}
                   placeholder="Enter your password"
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-9 text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-9 text-[10px] sm:text-[11px] text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition"
                 />
                 <button
                   type="button"
@@ -392,15 +376,6 @@ export function AuthForm({
 
         {/* Google Registration / Sign-in placed UNDER other inputs */}
         <div>
-          <div className="relative my-2 flex items-center justify-center">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-200 dark:border-slate-800" />
-            </div>
-            <span className="relative bg-white dark:bg-slate-900 px-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              or continue with
-            </span>
-          </div>
-
           <button
             type="button"
             onClick={continueWithGoogle}
@@ -432,7 +407,7 @@ export function AuthForm({
             <span>
               {mode === "login"
                 ? "Continue with Google"
-                : `Register as ${role === "SELLER" ? "Landlord" : "Tenant"} with Google`}
+                : `Register as ${role === "SELLER" ? "Owner" : "Bidder"} with Google`}
             </span>
           </button>
         </div>

@@ -93,6 +93,7 @@ export const listingDraftSchema = z.object({
 export const submitAuctionSchema = z
   .object({
     listingId: z.string().min(1, "Select a listing"),
+    type: z.enum(["FORWARD", "REVERSE"]).default("FORWARD"),
     startingPrice: money,
     reservePrice: z.preprocess(
       (v) => (v === "" || v == null ? undefined : v),
@@ -131,10 +132,17 @@ export const submitAuctionSchema = z
         message:
           "Minimum increment must be at least 0.5% of the starting price",
       });
-    if (v.reservePrice !== undefined && v.reservePrice < v.startingPrice)
+    if (
+      v.reservePrice !== undefined &&
+      ((v.type === "FORWARD" && v.reservePrice < v.startingPrice) ||
+        (v.type === "REVERSE" && v.reservePrice > v.startingPrice))
+    )
       ctx.addIssue({
         code: "custom",
         path: ["reservePrice"],
-        message: "Reserve price cannot be below the starting price",
+        message:
+          v.type === "REVERSE"
+            ? "Reserve price cannot be above the starting price"
+            : "Reserve price cannot be below the starting price",
       });
   });

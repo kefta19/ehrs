@@ -105,13 +105,6 @@ export default async function HomePage() {
   const totalLiveBidAmount = Number(
     liveAuctionAggregate._sum.currentHighestBid || 0,
   );
-  const heroImages = featuredAuctions.flatMap((auction) =>
-    auction.listing.images.map((image) => ({
-      id: image.id,
-      url: image.url,
-    })),
-  );
-
   const categoryImages: Record<string, string> = {
     homes:
       "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=400&q=80",
@@ -147,43 +140,28 @@ export default async function HomePage() {
       />
 
       {/* ─────────────────── HERO SECTION (Matching Screenshot) ─────────────────── */}
-      <section className="relative overflow-hidden bg-[#0A192F] text-white py-16 lg:py-24">
+      <section className="relative isolate flex min-h-[calc(100vh-72px)] items-center overflow-hidden bg-[#071426] text-white py-8 lg:py-10">
         <div aria-hidden="true" className={styles.heroBackground}>
-          {heroImages.length > 0 && (
-            <div className={styles.heroTrack}>
-              {[...heroImages, ...heroImages].map((image, index) => (
-                <div className={styles.heroSlide} key={`${image.id}-${index}`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={image.url}
-                    alt=""
-                    className={styles.heroImage}
-                    loading={index === 0 ? "eager" : "lazy"}
-                    decoding="async"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/ethiopian-auction-hero.svg"
+            alt=""
+            className={styles.heroFallbackImage}
+            loading="eager"
+            decoding="async"
+          />
           <div className={styles.heroScrim} />
         </div>
 
-        <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="max-w-2xl lg:max-w-3xl space-y-6">
-            <span className="inline-block text-xs font-semibold tracking-wider text-blue-400 uppercase">
-              Buy • Bid • Own
-            </span>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
+        <div className="relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="max-w-xl lg:max-w-2xl space-y-5">
+            <h1 className="max-w-xl text-4xl sm:text-5xl lg:text-[56px] font-extrabold tracking-[-0.035em] text-white leading-[1.02] drop-shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
               Find & Bid on <br />
-              What You <span className="text-blue-400">Need</span>
+              What You <span className="text-[#66B5F8]">Need</span>
             </h1>
-            <p className="text-base sm:text-lg text-slate-300 font-normal leading-relaxed">
-              Discover homes, cars, land, commercial properties, and other
-              assets through secure online auctions.
-            </p>
 
             {/* Hero Search Box (Matching Screenshot) */}
-            <div className="rounded-2xl bg-white p-2.5 shadow-2xl flex flex-col md:flex-row items-center gap-2 text-slate-800">
+            <div className="rounded-[18px] border border-white/15 bg-white p-2 shadow-[0_24px_70px_rgba(0,0,0,0.28)] flex flex-col md:flex-row items-center gap-1.5 text-slate-800">
               <div className="relative flex-1 w-full flex items-center">
                 <Search
                   size={18}
@@ -192,13 +170,13 @@ export default async function HomePage() {
                 <input
                   type="text"
                   placeholder="Search for property, car, land, etc..."
-                  className="w-full rounded-xl pl-10 pr-4 py-3 text-sm outline-none text-slate-900 placeholder:text-slate-400"
+                  className="w-full rounded-xl pl-10 pr-4 py-3 text-sm outline-none text-slate-900 placeholder:text-slate-400 focus:bg-slate-50"
                 />
               </div>
 
               <div className="hidden sm:block h-8 w-px bg-slate-200" />
 
-              <select className="w-full md:w-44 rounded-xl px-3 py-3 text-sm outline-none bg-transparent text-slate-700">
+              <select className="w-full md:w-40 rounded-xl px-3 py-3 text-sm outline-none bg-slate-50/70 text-slate-700">
                 <option value="ALL">All Categories</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.slug}>
@@ -209,7 +187,7 @@ export default async function HomePage() {
 
               <div className="hidden sm:block h-8 w-px bg-slate-200" />
 
-              <select className="w-full md:w-36 rounded-xl px-3 py-3 text-sm outline-none bg-transparent text-slate-700">
+              <select className="w-full md:w-32 rounded-xl px-3 py-3 text-sm outline-none bg-slate-50/70 text-slate-700">
                 <option value="ALL">Location</option>
                 <option value="Addis Ababa">Addis Ababa</option>
                 <option value="Mekelle">Mekelle</option>
@@ -219,17 +197,17 @@ export default async function HomePage() {
 
               <Link
                 href="/buyer?tab=browse"
-                className="w-full md:w-auto rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 shrink-0"
+                className="w-full md:w-auto rounded-xl bg-[#1588D8] px-5 py-3 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(21,136,216,0.35)] hover:bg-[#0877C2] transition-colors flex items-center justify-center gap-2 shrink-0"
               >
                 <Search size={16} /> Search
               </Link>
             </div>
 
             {/* Exact Live Platform Stats from Database */}
-            <div className="pt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <Link
                 href="/buyer?tab=browse"
-                className="group rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur-md p-3.5 transition-all hover:border-blue-400/50 hover:bg-white/[0.1] flex flex-col justify-between"
+                className="group min-h-24 rounded-2xl border border-white/10 bg-slate-950/25 backdrop-blur-xl p-3.5 shadow-[inset_0_1px_rgba(255,255,255,0.05)] transition-all hover:-translate-y-0.5 hover:border-sky-400/40 hover:bg-slate-900/35"
               >
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-400">
                   <span className="relative flex h-2 w-2">
@@ -246,12 +224,9 @@ export default async function HomePage() {
                     Active
                   </span>
                 </div>
-                <span className="text-[10px] text-slate-300 block mt-0.5 group-hover:text-blue-200 transition-colors">
-                  Open auctions
-                </span>
               </Link>
 
-              <div className="rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur-md p-3.5 transition-all hover:border-blue-400/50 hover:bg-white/[0.1] flex flex-col justify-between">
+              <div className="min-h-24 rounded-2xl border border-white/10 bg-slate-950/25 backdrop-blur-xl p-3.5 shadow-[inset_0_1px_rgba(255,255,255,0.05)] transition-all hover:-translate-y-0.5 hover:border-sky-400/40 hover:bg-slate-900/35">
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-400">
                   <Gavel size={13} className="text-blue-400" />
                   <span>Total Live Bids</span>
@@ -262,12 +237,9 @@ export default async function HomePage() {
                   </span>
                   <span className="text-[11px] text-slate-300">Bids</span>
                 </div>
-                <span className="text-[10px] text-slate-300 block mt-0.5">
-                  Placed on live items
-                </span>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur-md p-3.5 transition-all hover:border-blue-400/50 hover:bg-white/[0.1] flex flex-col justify-between">
+              <div className="min-h-24 rounded-2xl border border-white/10 bg-slate-950/25 backdrop-blur-xl p-3.5 shadow-[inset_0_1px_rgba(255,255,255,0.05)] transition-all hover:-translate-y-0.5 hover:border-sky-400/40 hover:bg-slate-900/35">
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-400">
                   <TrendingUp size={13} className="text-blue-400" />
                   <span>Total Bid Amount</span>
@@ -277,12 +249,9 @@ export default async function HomePage() {
                     {totalLiveBidAmount.toLocaleString()} ETB
                   </span>
                 </div>
-                <span className="text-[10px] text-slate-300 block mt-0.5">
-                  Live bidding volume
-                </span>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur-md p-3.5 transition-all hover:border-blue-400/50 hover:bg-white/[0.1] flex flex-col justify-between">
+              <div className="min-h-24 rounded-2xl border border-white/10 bg-slate-950/25 backdrop-blur-xl p-3.5 shadow-[inset_0_1px_rgba(255,255,255,0.05)] transition-all hover:-translate-y-0.5 hover:border-sky-400/40 hover:bg-slate-900/35">
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-400">
                   <Users size={13} className="text-blue-400" />
                   <span>Total Users</span>
@@ -293,9 +262,6 @@ export default async function HomePage() {
                   </span>
                   <span className="text-[11px] text-slate-300">Users</span>
                 </div>
-                <span className="text-[10px] text-slate-300 block mt-0.5">
-                  Registered on platform
-                </span>
               </div>
             </div>
 

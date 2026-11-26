@@ -48,6 +48,7 @@ import { LogoutButton } from "./logout-button";
 import { ThemeToggle } from "./theme-toggle";
 import {
   reviewListingAction,
+  reviewAuctionWinnerAction,
   updateAuctionStatusAction,
   updateTicketStatusAction,
   updateUserStatusAction,
@@ -221,14 +222,17 @@ function getListingStatusLabel(status: string) {
 
 type AdminAuction = {
   id: string;
+  type: "FORWARD" | "REVERSE";
   listing: { title: string };
   seller: AdminUser;
   startingPrice: number | string;
   status: string;
   endAt: string;
   result?: {
+    id: string;
     winningAmount: number | string;
     reserveMet: boolean;
+    winnerReviewStatus: "PENDING" | "APPROVED" | "REJECTED" | "NOT_REQUIRED";
     winningBidder: { id: string; name: string };
   } | null;
 };
@@ -2099,6 +2103,9 @@ export function AdminDashboardClient({
                       <tr key={a.id} className="hover:bg-slate-50">
                         <td className="py-3 font-semibold text-slate-900">
                           {a.listing.title}
+                          <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                            {a.type}
+                          </span>
                         </td>
                         <td className="py-3 text-slate-600">{a.seller.name}</td>
                         <td className="py-3 font-bold text-slate-900">
@@ -2110,16 +2117,63 @@ export function AdminDashboardClient({
                           </span>
                         </td>
                         <td className="py-3 text-slate-600">
-                          {a.result?.reserveMet
-                            ? `${a.result.winningBidder.name} · ${Number(a.result.winningAmount).toLocaleString()} ETB`
-                            : a.result
+                          {!a.result
+                            ? a.status === "CLOSED" ||
+                                new Date(a.endAt) <= new Date()
+                              ? "No eligible bids"
+                              : "Bidding in progress"
+                            : !a.result.reserveMet
                               ? "Reserve not met"
-                              : a.status === "CLOSED" ||
-                                  new Date(a.endAt) <= new Date()
-                                ? "No winner"
-                                : "Bidding in progress"}
+                              : a.result.winnerReviewStatus === "PENDING"
+                                ? `Review pending: ${a.result.winningBidder.name} · ${Number(a.result.winningAmount).toLocaleString()} ETB`
+                                : a.result.winnerReviewStatus === "REJECTED"
+                                  ? "Proposed winner rejected"
+                                  : a.result.winnerReviewStatus === "NOT_REQUIRED"
+                                    ? "No winner review required"
+                                    : `${a.result.winningBidder.name} · ${Number(a.result.winningAmount).toLocaleString()} ETB`}
                         </td>
                         <td className="py-3 text-right space-x-2">
+                          {a.result?.reserveMet &&
+                            a.result.winnerReviewStatus === "PENDING" && (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    const resultId = a.result?.id;
+                                    if (!resultId) return;
+                                    const formData = new FormData();
+                                    formData.append("resultId", resultId);
+                                    formData.append("decision", "APPROVED");
+                                    startTransition(async () => {
+                                      const res =
+                                        await reviewAuctionWinnerAction(formData);
+                                      setActionMsg(res);
+                                    });
+                                  }}
+                                  disabled={isPending}
+                                  className="text-emerald-700 font-semibold hover:underline disabled:opacity-50"
+                                >
+                                  Approve winner
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const resultId = a.result?.id;
+                                    if (!resultId) return;
+                                    const formData = new FormData();
+                                    formData.append("resultId", resultId);
+                                    formData.append("decision", "REJECTED");
+                                    startTransition(async () => {
+                                      const res =
+                                        await reviewAuctionWinnerAction(formData);
+                                      setActionMsg(res);
+                                    });
+                                  }}
+                                  disabled={isPending}
+                                  className="ml-2 text-rose-700 font-semibold hover:underline disabled:opacity-50"
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            )}
                           {a.status !== "ACTIVE" && (
                             <button
                               onClick={() => {

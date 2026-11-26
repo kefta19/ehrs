@@ -28,6 +28,7 @@ import {
 interface AuctionDetail {
   id: string;
   status: string;
+  type: "FORWARD" | "REVERSE";
   startAt: string;
   endAt: string;
   startingPrice: number | string;
@@ -37,7 +38,9 @@ interface AuctionDetail {
   result: {
     winningAmount: number | string;
     reserveMet: boolean;
-    winningBidder: { id: string; name: string };
+    winnerReviewStatus: "PENDING" | "APPROVED" | "REJECTED" | "NOT_REQUIRED";
+    isCurrentUserWinner: boolean;
+    winningBidderName: string | null;
   } | null;
   listing: {
     id: string;
@@ -90,6 +93,13 @@ interface AuctionDetailClientProps {
   } | null;
 }
 
+type LiveReverseBid = {
+  id: string;
+  amount: string;
+  createdAt: string;
+  companyName: string;
+};
+
 export function AuctionDetailClient({
   auction,
   user,
@@ -105,15 +115,68 @@ export function AuctionDetailClient({
   const [inquiryMessage, setInquiryMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [bidsPage, setBidsPage] = useState(1);
   const [bidsPageSize, setBidsPageSize] = useState(10);
+  const [liveBids, setLiveBids] = useState<LiveReverseBid[]>([]);
+  const [liveCurrentBid, setLiveCurrentBid] = useState<string | null>(null);
+  const [liveEndAt, setLiveEndAt] = useState<string | null>(null);
+  const [liveFeedError, setLiveFeedError] = useState<string | null>(null);
+  const canViewLiveReverseBids =
+    user?.role === "ADMIN" ||
+    user?.id === auction.listing.seller.id ||
+    (user?.role === "BUYER" && hasPaidEntranceFee);
+
+  useEffect(() => {
+    if (
+      auction.type !== "REVERSE" ||
+      auction.status !== "ACTIVE" ||
+      !canViewLiveReverseBids
+    )
+      return;
+
+    const controller = new AbortController();
+    const refreshLiveBids = async () => {
+      try {
+        const response = await fetch(
+          `/api/auctions/${encodeURIComponent(auction.id)}/live-bids`,
+          { cache: "no-store", signal: controller.signal },
+        );
+        const data = (await response.json()) as {
+          bids?: LiveReverseBid[];
+          currentBid?: string;
+          endAt?: string;
+          error?: string;
+        };
+        if (!response.ok)
+          throw new Error(data.error ?? "Could not load live bids.");
+        setLiveBids(data.bids ?? []);
+        setLiveCurrentBid(data.currentBid ?? "0");
+        setLiveEndAt(data.endAt ?? null);
+        setLiveFeedError(null);
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+        setLiveFeedError(
+          error instanceof Error ? error.message : "Could not load live bids.",
+        );
+      }
+    };
+
+    void refreshLiveBids();
+    const interval = setInterval(() => void refreshLiveBids(), 3000);
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
+  }, [auction.id, auction.status, auction.type, canViewLiveReverseBids]);
+
   useEffect(() => {
     if (auction.status !== "ACTIVE" || auction.result) return;
 
-    const timeUntilEnd = new Date(auction.endAt).getTime() - Date.now();
+    const timeUntilEnd =
+      new Date(liveEndAt ?? auction.endAt).getTime() - Date.now();
     const refreshDelay =
       timeUntilEnd > 0 ? timeUntilEnd + 1000 : 30_000;
     const timeout = setTimeout(() => router.refresh(), refreshDelay);
     return () => clearTimeout(timeout);
-  }, [auction.endAt, auction.result, auction.status, router]);
+  }, [auction.endAt, auction.result, auction.status, liveEndAt, router]);
 
   const totalBids = auction.bids.length;
   const totalBidsPages = Math.max(1, Math.ceil(totalBids / bidsPageSize));
@@ -144,10 +207,19 @@ export function AuctionDetailClient({
 
     setMessage(null);
     const amount = Number(bidAmount);
-    if (!Number.isFinite(amount) || amount < minRequired) {
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      (auction.type === "REVERSE"
+        ? amount > bidBoundary
+        : amount < bidBoundary)
+    ) {
       setMessage({
         type: "error",
-        text: `Your bid must be at least ${minRequired.toLocaleString()} ETB.`,
+        text:
+          auction.type === "REVERSE"
+            ? `Your bid must be no more than ${bidBoundary.toLocaleString()} ETB.`
+            : `Your bid must be at least ${bidBoundary.toLocaleString()} ETB.`,
       });
       return;
     }
@@ -187,20 +259,25 @@ export function AuctionDetailClient({
   const isActive = auction.status === "ACTIVE";
   const isScheduled = auction.status === "SCHEDULED";
   const hasStarted = now >= new Date(auction.startAt);
-  const hasEnded = now >= new Date(auction.endAt);
+  const currentEndAt = liveEndAt ?? auction.endAt;
+  const hasEnded = now >= new Date(currentEndAt);
 
   const formatTime = (date: Date | string) => {
     return new Date(date).toLocaleString();
   };
 
-  const timeLeft = Math.max(0, new Date(auction.endAt).getTime() - now.getTime());
+  const timeLeft = Math.max(0, new Date(currentEndAt).getTime() - now.getTime());
   const hoursLeft = Math.floor(timeLeft / (1000 * 60 * 60));
   const minutesLeft = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
 
-  const currentBid = Number(auction.currentHighestBid);
+  const currentBid = Number(liveCurrentBid ?? auction.currentHighestBid);
   const startingPrice = Number(auction.startingPrice);
   const minBidIncrement = Number(auction.minBidIncrement);
-  const minRequired = currentBid > 0 ? currentBid + minBidIncrement : startingPrice;
+  const bidBoundary =
+    currentBid > 0
+      ? currentBid +
+        (auction.type === "REVERSE" ? -minBidIncrement : minBidIncrement)
+      : startingPrice;
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors">
@@ -215,6 +292,9 @@ export function AuctionDetailClient({
               </span>
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 {auction.listing.category.name}
+              </span>
+              <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                {auction.type === "REVERSE" ? "Reverse auction" : "Forward auction"}
               </span>
               {auction.listing.seller.sellerProfile?.status === "APPROVED" && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800 dark:bg-teal-950 dark:text-teal-300">
@@ -241,7 +321,17 @@ export function AuctionDetailClient({
             <MapPin size={16} className="shrink-0 text-blue-600" />
             {auction.listing.city}, {auction.listing.region}, {auction.listing.country}
           </p>
-          {auction.result ? (
+          {auction.result?.reserveMet &&
+          auction.result.winnerReviewStatus === "PENDING" ? (
+            <p className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+              The final eligible bid is awaiting administrator review.
+            </p>
+          ) : auction.result?.reserveMet &&
+            auction.result.winnerReviewStatus === "REJECTED" ? (
+            <p className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              The administrator did not approve the proposed winner.
+            </p>
+          ) : auction.result ? (
             <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/40">
               <h2 className="text-sm font-bold text-emerald-900 dark:text-emerald-200">
                 {auction.result.reserveMet
@@ -249,18 +339,17 @@ export function AuctionDetailClient({
                   : "Auction ended — reserve not met"}
               </h2>
               <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-300">
-                {auction.result.reserveMet ? "Winning bid: " : "Highest bid: "}
+                {auction.result.reserveMet
+                  ? "Winning bid: "
+                  : `${auction.type === "REVERSE" ? "Lowest" : "Highest"} bid: `}
                 {Number(auction.result.winningAmount).toLocaleString()} ETB
               </p>
               {auction.result.reserveMet && (
                 <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-300">
                   Winning bidder:{" "}
-                  {user?.id === auction.result.winningBidder.id
+                  {auction.result.isCurrentUserWinner
                     ? "You"
-                    : user?.role === "ADMIN" ||
-                        user?.id === auction.listing.seller.id
-                      ? auction.result.winningBidder.name
-                      : "Winner confirmed"}
+                    : auction.result.winningBidderName ?? "Winner confirmed"}
                 </p>
               )}
               {!auction.result.reserveMet && (
@@ -398,7 +487,9 @@ export function AuctionDetailClient({
             </section>
 
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Bid history</h2>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                {auction.type === "REVERSE" ? "Reverse bid history" : "Bid history"}
+              </h2>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 {auction.bids.length} {auction.bids.length === 1 ? "bid" : "bids"} · Other bidders are anonymized.
               </p>
@@ -433,6 +524,47 @@ export function AuctionDetailClient({
                 <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">No bids yet. Be the first to participate.</p>
               )}
             </section>
+            {auction.type === "REVERSE" && (
+              <section className="rounded-3xl border border-indigo-200 bg-indigo-50/60 p-6 shadow-sm dark:border-indigo-900 dark:bg-indigo-950/20">
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                  Live reverse bids
+                </h2>
+                <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                  Authorized participants see approved company names and bid amounts. Updates refresh automatically.
+                </p>
+                {!canViewLiveReverseBids ? (
+                  <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
+                    Sign in and receive approval for this auction to view the live company bid feed.
+                  </p>
+                ) : liveFeedError ? (
+                  <p role="alert" className="mt-4 text-sm text-rose-700 dark:text-rose-300">
+                    {liveFeedError}
+                  </p>
+                ) : liveBids.length > 0 ? (
+                  <div className="mt-4 divide-y divide-indigo-100 dark:divide-indigo-900">
+                    {liveBids.map((bid) => (
+                      <div key={bid.id} className="flex items-center justify-between gap-4 py-3">
+                        <div>
+                          <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                            {bid.companyName}
+                          </span>
+                          <time className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400" dateTime={bid.createdAt}>
+                            {formatTime(bid.createdAt)}
+                          </time>
+                        </div>
+                        <span className="text-sm font-bold text-slate-900 dark:text-white">
+                          {Number(bid.amount).toLocaleString()} ETB
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+                    {isActive ? "Waiting for approved bids…" : "No approved bids yet."}
+                  </p>
+                )}
+              </section>
+            )}
           </div>
 
           {/* Sidebar */}
@@ -443,7 +575,9 @@ export function AuctionDetailClient({
                 <div className="flex items-start gap-3">
                   <DollarSign size={18} className="mt-0.5 text-blue-600" />
                   <div>
-                    <dt className="text-xs text-slate-500">Current bid</dt>
+                    <dt className="text-xs text-slate-500">
+                      Current {auction.type === "REVERSE" ? "lowest" : "highest"} bid
+                    </dt>
                     <dd className="font-bold text-slate-900 dark:text-white">
                       {currentBid > 0 ? `${currentBid.toLocaleString()} ETB` : `${startingPrice.toLocaleString()} ETB starting`}
                     </dd>
@@ -468,7 +602,7 @@ export function AuctionDetailClient({
                   <div>
                     <dt className="text-xs text-slate-500">Auction ends</dt>
                     <dd className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                      {hasEnded ? "Auction ended" : hasStarted ? `${hoursLeft}h ${minutesLeft}m remaining` : formatTime(auction.endAt)}
+                      {hasEnded ? "Auction ended" : hasStarted ? `${hoursLeft}h ${minutesLeft}m remaining` : formatTime(currentEndAt)}
                     </dd>
                   </div>
                 </div>
@@ -613,26 +747,34 @@ export function AuctionDetailClient({
             {user?.role === "BUYER" && hasPaidEntranceFee && isActive && !hasEnded && (
               <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                  {currentBid > 0 ? "Increase your bid" : "Place your bid"}
+                  {currentBid > 0
+                    ? auction.type === "REVERSE"
+                      ? "Lower your bid"
+                      : "Increase your bid"
+                    : "Place your bid"}
                 </h2>
                 <form onSubmit={handlePlaceBid} className="space-y-4">
                   <div>
                     <label htmlFor="bidAmount" className="mb-1 mt-4 block text-sm font-medium text-slate-800 dark:text-slate-200">
-                      Bid Amount (ETB)
+                      {auction.type === "REVERSE"
+                        ? "Reverse bid (ETB)"
+                        : "Bid Amount (ETB)"}
                     </label>
                     <input
                       id="bidAmount"
                       type="number"
                       step="0.01"
-                      min={minRequired}
+                      min={auction.type === "REVERSE" ? 0.01 : bidBoundary}
+                      max={auction.type === "REVERSE" ? bidBoundary : undefined}
                       value={bidAmount}
                       onChange={(e) => setBidAmount(e.target.value)}
-                      placeholder={`Minimum: ${minRequired.toLocaleString()} ETB`}
+                      placeholder={`${auction.type === "REVERSE" ? "Maximum" : "Minimum"}: ${bidBoundary.toLocaleString()} ETB`}
                       required
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     />
                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      Minimum bid: {minRequired.toLocaleString()} ETB
+                      {auction.type === "REVERSE" ? "Maximum" : "Minimum"} valid bid:{" "}
+                      {bidBoundary.toLocaleString()} ETB
                     </p>
                   </div>
                   <button

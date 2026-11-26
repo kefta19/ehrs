@@ -150,6 +150,7 @@ type Bid = {
 
 type Auction = {
   id: string;
+  type?: "FORWARD" | "REVERSE";
   status?: string;
   startingPrice?: number | string;
   currentHighestBid?: number | string;
@@ -172,6 +173,7 @@ type Auction = {
     depositDue?: number | string;
     isSettled?: boolean;
     reserveMet?: boolean;
+    winnerReviewStatus?: "PENDING" | "APPROVED" | "REJECTED" | "NOT_REQUIRED";
     winningBidder?: { name: string };
     [key: string]: unknown;
   };
@@ -1318,14 +1320,19 @@ export function ProviderDashboardClient({
                       <div className="flex items-center justify-between">
                         <span
                           className={`rounded px-2.5 py-0.5 text-xs font-bold ${
-                            auc.result?.reserveMet
+                            auc.result?.reserveMet &&
+                            auc.result.winnerReviewStatus === "APPROVED"
                               ? "bg-emerald-100 text-emerald-800"
                               : "bg-amber-100 text-amber-800"
                           }`}
                         >
-                          {auc.result?.reserveMet
-                            ? "Concluded Winner"
-                            : "Reserve Not Met"}
+                          {!auc.result?.reserveMet
+                            ? "Reserve Not Met"
+                            : auc.result.winnerReviewStatus === "PENDING"
+                              ? "Awaiting Admin Review"
+                              : auc.result.winnerReviewStatus === "REJECTED"
+                                ? "Proposed Winner Rejected"
+                                : "Approved Winner"}
                         </span>
                         <span className="text-xs text-slate-400">
                           {auc.endAt
@@ -1342,18 +1349,22 @@ export function ProviderDashboardClient({
                         <div className="flex justify-between">
                           <span className="text-slate-500">
                             {auc.result?.reserveMet
-                              ? "Winning bidder:"
-                              : "Highest bidder:"}
+                              ? auc.result.winnerReviewStatus === "PENDING"
+                                ? "Proposed bidder:"
+                                : "Winning bidder:"
+                              : `${auc.type === "REVERSE" ? "Lowest" : "Highest"} bidder:`}
                           </span>
                           <span className="font-bold text-slate-900">
-                            {auc.result?.winningBidder?.name || "Not available"}
+                            {auc.result?.reserveMet
+                              ? auc.result.winningBidder?.name || "Not available"
+                              : "No approved winner"}
                           </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-slate-500">
                             {auc.result?.reserveMet
                               ? "Winning Amount:"
-                              : "Highest Bid:"}
+                              : `${auc.type === "REVERSE" ? "Lowest" : "Highest"} Bid:`}
                           </span>
                           <span className="font-bold text-slate-900">
                             {Number(
@@ -1366,16 +1377,17 @@ export function ProviderDashboardClient({
                         <div className="flex justify-between">
                           <span className="text-slate-500">Deposit Due:</span>
                           <span className="font-bold text-blue-600">
-                            {Number(
-                              auc.result?.depositDue || 0,
-                            ).toLocaleString()}{" "}
-                            ETB
+                            {auc.result?.winnerReviewStatus === "APPROVED"
+                              ? `${Number(auc.result?.depositDue || 0).toLocaleString()} ETB`
+                              : "Available after approval"}
                           </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-slate-500">Escrow Status:</span>
                           <span className="font-bold text-emerald-600">
-                            {auc.result?.isSettled
+                            {auc.result?.winnerReviewStatus !== "APPROVED"
+                              ? "Awaiting winner review"
+                              : auc.result?.isSettled
                               ? "Settled & Verified"
                               : "Pending Deposit"}
                           </span>

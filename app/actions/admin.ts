@@ -6,7 +6,10 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notify";
+import { notifyAuctionParticipant } from "@/lib/auction-notifications";
 import { logAudit } from "@/lib/security";
+
+const WINNER_SETTLEMENT_WINDOW_MS = 72 * 60 * 60 * 1000;
 
 export async function updateAuctionStatusAction(formData: FormData) {
   const user = await getCurrentUser();
@@ -481,4 +484,182 @@ export async function verifySellerKycAction(formData: FormData) {
   revalidatePath("/admin");
   revalidatePath("/seller");
   return { success: true, message: `Seller KYC ${status.toLowerCase()}.` };
+}
+
+export async function reviewAuctionWinnerAction(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "ADMIN")
+    return { success: false, error: "Unauthorized." };
+
+  const resultId = formData.get("resultId");
+  const decision = formData.get("decision");
+  if (typeof resultId !== "string" || !resultId.trim())
+    return { success: false, error: "Auction result could not be identified." };
+  if (decision !== "APPROVED" && decision !== "REJECTED")
+    return { success: false, error: "Choose an approval decision." };
+
+  try {
+    const resultReference = await prisma.auctionResult.findUnique({
+      where: { id: resultId },
+      select: { auctionId: true },
+    });
+    if (!resultReference)
+      return { success: false, error: "Auction result not found." };
+
+    const review = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Auction" WHERE "id" = ${resultReference.auctionId} FOR UPDATE`;
+      const result = await tx.auctionResult.findUnique({
+        where: { id: resultId },
+        include: {
+          auction: {
+            include: {
+              listing: {
+                select: { id: true, title: true, tenantId: true },
+              },
+            },
+          },
+          winningBidder: {
+            select: { id: true, name: true, role: true, status: true, deletedAt: true, tenantId: true },
+          },
+        },
+      });
+      if (!result)
+        return { success: false as const, error: "Auction result not found." };
+      if (result.winnerReviewStatus !== "PENDING")
+        return { success: false as const, error: "This winner has already been reviewed." };
+      if (!result.reserveMet)
+        return { success: false as const, error: "The reserve was not met, so there is no winner to approve." };
+
+      const now = new Date();
+      if (decision === "APPROVED") {
+        const [eligibleBid, entryFee, registration] = await Promise.all([
+          tx.bid.findFirst({
+            where: {
+              auctionId: result.auctionId,
+              bidderId: result.winningBidderId,
+              amount: result.winningAmount,
+              status: "APPROVED",
+            },
+            select: { id: true },
+          }),
+          tx.buyerAuctionEntryFee.findUnique({
+            where: {
+              auctionId_buyerId: {
+                auctionId: result.auctionId,
+                buyerId: result.winningBidderId,
+              },
+            },
+            select: { status: true },
+          }),
+          tx.buyerBidRegistration.findUnique({
+            where: {
+              auctionId_buyerId: {
+                auctionId: result.auctionId,
+                buyerId: result.winningBidderId,
+              },
+            },
+            select: { status: true },
+          }),
+        ]);
+        if (
+          result.winningBidder.role !== "BUYER" ||
+          result.winningBidder.status !== "ACTIVE" ||
+          result.winningBidder.deletedAt ||
+          (result.winningBidder.tenantId &&
+            result.auction.listing.tenantId &&
+            result.winningBidder.tenantId !== result.auction.listing.tenantId) ||
+          (!eligibleBid ||
+            (entryFee?.status !== "CONFIRMED" &&
+              registration?.status !== "PAID" &&
+              registration?.status !== "WAIVED"))
+        )
+          return {
+            success: false as const,
+            error: "The proposed winner is no longer an eligible, approved participant.",
+          };
+      }
+
+      const settlementDeadline =
+        decision === "APPROVED"
+          ? new Date(now.getTime() + WINNER_SETTLEMENT_WINDOW_MS)
+          : result.settlementDeadline;
+      await tx.auctionResult.update({
+        where: { id: resultId },
+        data: {
+          winnerReviewStatus: decision,
+          winnerReviewedAt: now,
+          winnerReviewedById: user.id,
+          ...(decision === "APPROVED" ? { settlementDeadline } : {}),
+        },
+      });
+      if (decision === "APPROVED") {
+        await tx.listing.update({
+          where: { id: result.auction.listing.id },
+          data: { status: "AUCTIONED" },
+        });
+      }
+      return {
+        success: true as const,
+        auctionId: result.auctionId,
+        auctionTitle: result.auction.listing.title,
+        sellerId: result.auction.sellerId,
+        winnerId: result.winningBidderId,
+        winnerName: result.winningBidder.name,
+        winningAmount: result.winningAmount.toString(),
+        depositDue: result.depositDue.toString(),
+        settlementDeadline,
+      };
+    });
+    if (!review.success) return review;
+
+    await logAudit({
+      actorId: user.id,
+      action: `AUCTION_WINNER_${decision}`,
+      module: "AUCTIONS",
+      entityType: "AuctionResult",
+      entityId: resultId,
+      newValue: {
+        auctionId: review.auctionId,
+        winnerId: review.winnerId,
+        decision,
+      },
+    });
+    if (decision === "APPROVED") {
+      await notifyAuctionParticipant(review.winnerId, {
+        type: "AUCTION_WON",
+        title: "Your auction result is approved",
+        body: `Your winning bid for "${review.auctionTitle}" was ${Number(review.winningAmount).toLocaleString()} ETB. Pay the required deposit of ${Number(review.depositDue).toLocaleString()} ETB by ${review.settlementDeadline.toLocaleString()} (within 72 hours).`,
+        link: "/buyer?tab=payments",
+      });
+      await notify(review.sellerId, {
+        type: "AUCTION_WINNER_APPROVED",
+        title: "Auction winner approved",
+        body: `The administrator approved ${review.winnerName} as the winner for "${review.auctionTitle}".`,
+        link: "/seller?tab=auctions",
+      });
+    } else {
+      await notify(review.winnerId, {
+        type: "AUCTION_WINNER_REJECTED",
+        title: "Auction winner not approved",
+        body: `The proposed winner for "${review.auctionTitle}" was not approved by an administrator.`,
+        link: "/buyer",
+      });
+    }
+
+    revalidatePath("/admin");
+    revalidatePath("/buyer");
+    revalidatePath("/customer");
+    revalidatePath("/seller");
+    revalidatePath(`/auction/${review.auctionId}`);
+    return {
+      success: true,
+      message: `Auction winner ${decision.toLowerCase()}.`,
+    };
+  } catch (error) {
+    console.error("[reviewAuctionWinnerAction]", error);
+    return {
+      success: false,
+      error: "Could not review the auction winner. Refresh and try again.",
+    };
+  }
 }

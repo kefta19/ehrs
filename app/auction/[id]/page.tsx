@@ -51,6 +51,7 @@ export default async function AuctionDetailPage({
     select: {
       id: true,
       status: true,
+      type: true,
       startAt: true,
       endAt: true,
       startingPrice: true,
@@ -61,7 +62,8 @@ export default async function AuctionDetailPage({
         select: {
           winningAmount: true,
           reserveMet: true,
-          winningBidder: { select: { id: true, name: true } },
+          winnerReviewStatus: true,
+          winningBidderId: true,
         },
       },
       listing: {
@@ -96,6 +98,7 @@ export default async function AuctionDetailPage({
         },
       },
       bids: {
+        where: { status: "APPROVED" },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: {
           id: true,
@@ -177,8 +180,30 @@ export default async function AuctionDetailPage({
           select: { email: true, phone: true },
         })
       : null;
+  const canSeeWinnerIdentity =
+    auction.result?.winnerReviewStatus === "APPROVED" &&
+    (user?.role === "ADMIN" ||
+      user?.id === auction.listing.seller.id ||
+      user?.id === auction.result.winningBidderId);
+  const winnerIdentity = auction.result && canSeeWinnerIdentity
+    ? await prisma.user.findUnique({
+        where: { id: auction.result.winningBidderId },
+        select: { name: true },
+      })
+    : null;
   const auctionForClient = {
     ...auction,
+    result: auction.result
+      ? {
+          winningAmount: auction.result.winningAmount,
+          reserveMet: auction.result.reserveMet,
+          winnerReviewStatus: auction.result.winnerReviewStatus,
+          isCurrentUserWinner:
+            auction.result.winnerReviewStatus === "APPROVED" &&
+            user?.id === auction.result.winningBidderId,
+          winningBidderName: winnerIdentity?.name ?? null,
+        }
+      : null,
     bids: anonymizeAuctionBids(auction.bids, user?.id),
     listing: {
       ...auction.listing,
