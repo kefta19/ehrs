@@ -120,11 +120,9 @@ export async function createAuctionDraftAction(
     listingId: str(formData, "listingId"),
     type: str(formData, "type") || "FORWARD",
     startingPrice: str(formData, "startingPrice"),
-    reservePrice: str(formData, "reservePrice"),
     minBidIncrement: str(formData, "minBidIncrement"),
     startAt: str(formData, "startAt"),
     endAt: str(formData, "endAt"),
-    terms: str(formData, "terms") || undefined,
   });
   if (!parsed.success) return fail(parsed.error.issues[0].message);
   const d = parsed.data;
@@ -179,14 +177,9 @@ export async function createAuctionDraftAction(
   const data = {
     type: d.type,
     startingPrice: new Prisma.Decimal(d.startingPrice),
-    reservePrice:
-      d.reservePrice === undefined
-        ? null
-        : new Prisma.Decimal(d.reservePrice),
     minBidIncrement: new Prisma.Decimal(d.minBidIncrement),
     startAt: new Date(d.startAt),
     endAt: new Date(d.endAt),
-    terms: d.terms || null,
   };
   const draft = listing.auctions.find((a) => a.status === "DRAFT");
 

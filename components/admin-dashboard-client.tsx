@@ -170,11 +170,9 @@ type AdminListing = {
     id: string;
     status: string;
     startingPrice: number | string;
-    reservePrice?: number | string | null;
     minBidIncrement: number | string;
     startAt: string;
     endAt: string;
-    terms?: string | null;
     entryFees?: Array<{
       id: string;
       status: string;
@@ -237,10 +235,8 @@ type AdminBid = {
     startAt: string;
     endAt: string;
     startingPrice: number | string;
-    reservePrice: number | string | null;
     minBidIncrement: number | string;
     currentHighestBid: number | string;
-    terms: string | null;
     seller?: AdminUser & {
       sellerProfile?: {
         nationalIdNumber: string;
@@ -3454,14 +3450,6 @@ export function AdminDashboardClient({
                           </strong>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-slate-500">Reserve Price</span>
-                          <span className="font-semibold text-slate-800">
-                            {auc?.reservePrice
-                              ? `${Number(auc.reservePrice).toLocaleString()} ETB`
-                              : "None (No Reserve)"}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
                           <span className="text-slate-500">
                             Min Bid Increment
                           </span>
@@ -3487,11 +3475,6 @@ export function AdminDashboardClient({
                             {auc ? new Date(auc.endAt).toLocaleString() : "—"}
                           </span>
                         </div>
-                        {auc?.terms && (
-                          <div className="border-t border-slate-200 pt-1 text-slate-600 text-[11px]">
-                            <strong>Seller Terms:</strong> {auc.terms}
-                          </div>
-                        )}
                       </div>
                     </div>
 

@@ -34,7 +34,6 @@ interface AuctionDetail {
   startingPrice: number | string;
   currentHighestBid: number | string;
   minBidIncrement: number | string;
-  terms: string | null;
   result: {
     winningAmount: number | string;
     reserveMet: boolean;
@@ -600,12 +599,6 @@ export function AuctionDetailClient({
                   </div>
                 </div>
               </dl>
-              {auction.terms && (
-                <div className="mt-5 rounded-2xl bg-slate-50 p-4 dark:bg-slate-800">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Auction rules and terms</h3>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600 dark:text-slate-300">{auction.terms}</p>
-                </div>
-              )}
             </section>
 
             {/* Entrance Fee */}

@@ -57,7 +57,6 @@ export default async function AuctionDetailPage({
       startingPrice: true,
       currentHighestBid: true,
       minBidIncrement: true,
-      terms: true,
       result: {
         select: {
           winningAmount: true,

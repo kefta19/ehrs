@@ -183,11 +183,9 @@ export function ListingWizard({
   });
   const [startingPrice, setStartingPrice] = useState("");
   const [minBidIncrement, setMinBidIncrement] = useState("");
-  const [reservePrice, setReservePrice] = useState("");
   const [auctionType, setAuctionType] = useState<"FORWARD" | "REVERSE">(
     "FORWARD",
   );
-  const [terms, setTerms] = useState("");
   const [showScheduleGuide, setShowScheduleGuide] = useState(false);
   const [copiedBank, setCopiedBank] = useState<string | null>(null);
 
@@ -377,8 +375,6 @@ export function ListingWizard({
     fd.set("endAt", eDate.toISOString());
     if (startingPrice) fd.set("startingPrice", startingPrice);
     if (minBidIncrement) fd.set("minBidIncrement", minBidIncrement);
-    if (reservePrice) fd.set("reservePrice", reservePrice);
-    if (terms) fd.set("terms", terms);
 
     setError(null);
     setBusy(true);
@@ -481,13 +477,14 @@ export function ListingWizard({
         </div>
 
         {/* Step Progress Indicator */}
-        <div className="flex items-start justify-between gap-1 sm:gap-3">
+        <nav aria-label="Listing setup progress" className="flex items-start justify-between gap-1 sm:gap-3">
           {steps.map((s) => {
             const isActive = step === s.number;
             const isCompleted = step > s.number;
             return (
               <div
                 key={s.number}
+                aria-current={isActive ? "step" : undefined}
                 className="flex min-w-0 flex-1 items-start gap-1 sm:gap-3"
               >
                 <div className="flex min-w-0 flex-col items-center gap-1.5 sm:flex-row sm:gap-2.5">
@@ -529,10 +526,10 @@ export function ListingWizard({
               </div>
             );
           })}
-        </div>
+        </nav>
 
-        <div className="mt-5 flex items-center gap-3 border-t border-slate-200/80 pt-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+        <div className="mt-5 flex items-center gap-3.5 border-t border-slate-200/80 pt-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/25">
             {step === 1 && <PackagePlus size={20} />}
             {step === 2 && <Gavel size={20} />}
             {step === 3 && <CreditCard size={20} />}
@@ -549,6 +546,8 @@ export function ListingWizard({
               {step === 4 && "Your listing is under review"}
             </h2>
             <p className="mt-0.5 text-[11px] text-slate-500 sm:text-xs">
+              {step === 1 &&
+                "Add your asset details, high-quality photos, video link, and ownership documents."}
               {step === 2 &&
                 "Choose transparent pricing and a schedule that works for buyers."}
               {step === 3 &&
@@ -562,13 +561,23 @@ export function ListingWizard({
 
       <div className="space-y-5 pt-5">
         {notice && step !== 3 && (
-          <div className="flex items-start gap-2 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-700">
-            <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> {notice}
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-start gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50/90 p-3.5 text-xs font-medium text-emerald-800"
+          >
+            <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600" />
+            <span>{notice}</span>
           </div>
         )}
         {error && (
-          <div className="flex items-start gap-2 rounded-xl bg-rose-50 p-3 text-xs text-rose-700">
-            <AlertCircle size={16} className="mt-0.5 shrink-0" /> {error}
+          <div
+            role="alert"
+            aria-live="polite"
+            className="flex items-start gap-2.5 rounded-2xl border border-rose-200 bg-rose-50/90 p-3.5 text-xs font-medium text-rose-800"
+          >
+            <AlertCircle size={16} className="mt-0.5 shrink-0 text-rose-600" />
+            <span>{error}</span>
           </div>
         )}
 
@@ -576,318 +585,463 @@ export function ListingWizard({
         {step === 1 && (
           <form
             onSubmit={submitListing}
-            className={`grid grid-cols-1 items-start gap-4 text-xs lg:grid-cols-2 ${styles.stepContent}`}
+            aria-labelledby="listing-wizard-title"
+            className={`grid grid-cols-1 items-start gap-5 text-xs lg:grid-cols-12 ${styles.stepContent}`}
           >
-            {/* Asset Category */}
-            <div
-              className={`space-y-3 rounded-2xl border bg-white p-4 shadow-sm sm:p-5 lg:col-span-2 ${styles.section}`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <Sparkles size={16} className="text-blue-600" />
-                    Asset Category *
-                  </h3>
+            {/* Left Column: Category & Item Details */}
+            <div className="space-y-5 lg:col-span-7">
+              {/* Asset Category */}
+              <section
+                className={`space-y-3.5 rounded-2xl border bg-white p-5 shadow-sm sm:p-6 ${styles.section}`}
+              >
+                <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    <Sparkles size={17} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Asset Category <span className="text-rose-500">*</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Select the category that best matches your asset
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <label className="block max-w-2xl">
-                <span className="sr-only">Asset category</span>
-                <select
-                  name="categoryId"
-                  required
-                  value={selectedCategoryId || categories[0]?.id || ""}
-                  onChange={(event) =>
-                    setSelectedCategoryId(event.target.value)
-                  }
-                  className={`${input} bg-white py-3 text-sm text-slate-800 focus:ring-2 focus:ring-blue-100`}
-                >
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {getCategoryIcon(category.name)} {category.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+                {categories.length > 0 && categories.length <= 6 ? (
+                  <fieldset className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                    <legend className="sr-only">Asset Category</legend>
+                    {categories.map((category) => {
+                      const active =
+                        (selectedCategoryId || categories[0]?.id) ===
+                        category.id;
+                      return (
+                        <label
+                          key={category.id}
+                          className={`group relative flex min-h-[48px] cursor-pointer items-center gap-2.5 rounded-xl border px-3.5 py-2.5 transition-all focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 ${
+                            active
+                              ? "border-blue-600 bg-blue-50/70 text-blue-900 shadow-sm shadow-blue-600/10"
+                              : "border-slate-200 bg-slate-50/50 text-slate-700 hover:border-slate-300 hover:bg-white"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="categoryId"
+                            value={category.id}
+                            checked={active}
+                            onChange={() => setSelectedCategoryId(category.id)}
+                            required
+                            className="sr-only"
+                          />
+                          <span className="text-base leading-none" aria-hidden="true">
+                            {getCategoryIcon(category.name)}
+                          </span>
+                          <span className="truncate text-xs font-semibold">
+                            {category.name}
+                          </span>
+                          {active && (
+                            <Check
+                              size={14}
+                              className="ml-auto shrink-0 text-blue-600"
+                              aria-hidden="true"
+                            />
+                          )}
+                        </label>
+                      );
+                    })}
+                  </fieldset>
+                ) : (
+                  <label className="block">
+                    <span className="sr-only">Asset category</span>
+                    <select
+                      name="categoryId"
+                      required
+                      value={selectedCategoryId || categories[0]?.id || ""}
+                      onChange={(event) =>
+                        setSelectedCategoryId(event.target.value)
+                      }
+                      className={`${input} min-h-[46px] bg-slate-50/50 py-2.5 text-sm font-medium text-slate-800 hover:bg-white focus:bg-white`}
+                    >
+                      {categories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {getCategoryIcon(category.name)} {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </section>
 
-            {/* Basic Information Card */}
-            <div
-              className={`space-y-3.5 rounded-2xl border bg-white p-4 shadow-sm sm:p-5 lg:col-span-2 ${styles.section}`}
-            >
-              <div className="border-b border-slate-100 pb-2">
-                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <PackagePlus size={16} className="text-blue-600" />
-                  Item Details & Location
-                </h3>
-              </div>
+              {/* Basic Information Card */}
+              <section
+                className={`space-y-4 rounded-2xl border bg-white p-5 shadow-sm sm:p-6 ${styles.section}`}
+              >
+                <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                    <PackagePlus size={17} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Item Details & Location
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Clear details and accurate location help buyers evaluate faster
+                    </p>
+                  </div>
+                </div>
 
-              <AnimatedInput
-                label="Listing title *"
-                name="title"
-                value={listingForm.title}
-                onChange={(v) => setListingForm({ ...listingForm, title: v })}
-                required
-                minLength={5}
-                maxLength={200}
-                placeholder="e.g. Luxury villa in Bole"
-              />
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <AnimatedInput
-                  label="City *"
-                  name="city"
-                  value={listingForm.city}
-                  onChange={(v) => setListingForm({ ...listingForm, city: v })}
+                  label="Listing title"
+                  name="title"
+                  value={listingForm.title}
+                  onChange={(v) => setListingForm({ ...listingForm, title: v })}
                   required
-                  minLength={2}
-                  maxLength={100}
-                  placeholder="e.g. Addis Ababa"
+                  minLength={5}
+                  maxLength={200}
+                  placeholder="e.g. Luxury villa in Bole"
                 />
+
+                <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+                  <AnimatedInput
+                    label="City"
+                    name="city"
+                    value={listingForm.city}
+                    onChange={(v) => setListingForm({ ...listingForm, city: v })}
+                    required
+                    minLength={2}
+                    maxLength={100}
+                    autoComplete="address-level2"
+                    placeholder="e.g. Addis Ababa"
+                  />
+                  <AnimatedInput
+                    label="Subcity / Region"
+                    name="region"
+                    value={listingForm.region}
+                    onChange={(v) =>
+                      setListingForm({ ...listingForm, region: v })
+                    }
+                    maxLength={100}
+                    autoComplete="address-level1"
+                    placeholder="e.g. Bole, Kirkos, Yeka"
+                  />
+                </div>
+
                 <AnimatedInput
-                  label="Subcity / Region"
-                  name="region"
-                  value={listingForm.region}
+                  label="Physical address / landmark"
+                  name="address"
+                  value={listingForm.address}
                   onChange={(v) =>
-                    setListingForm({ ...listingForm, region: v })
+                    setListingForm({ ...listingForm, address: v })
                   }
-                  maxLength={100}
-                  placeholder="e.g. Bole, Kirkos, Yeka"
+                  maxLength={200}
+                  autoComplete="street-address"
+                  placeholder="e.g. Near Edna Mall, Block 14"
                 />
-              </div>
 
-              <AnimatedInput
-                label="Physical address / landmark"
-                name="address"
-                value={listingForm.address}
-                onChange={(v) =>
-                  setListingForm({ ...listingForm, address: v })
-                }
-                maxLength={200}
-                placeholder="e.g. Near Edna Mall, Block 14"
-              />
-
-              <div>
                 <AnimatedInput
-                  label="Comprehensive description *"
+                  label="Comprehensive description"
                   name="description"
                   value={listingForm.description}
                   onChange={(v) =>
                     setListingForm({ ...listingForm, description: v })
                   }
                   required
+                  multiline
+                  rows={4}
                   minLength={20}
                   maxLength={2000}
-                  placeholder="Describe condition, ownership, specifications, and utilities."
+                  placeholder="Describe condition, ownership history, specifications, and utilities."
                 />
-              </div>
 
-              <AnimatedInput
-                label="Key highlights / features (comma-separated)"
-                name="features"
-                value={listingForm.features}
-                onChange={(v) =>
-                  setListingForm({ ...listingForm, features: v })
-                }
-                maxLength={500}
-                placeholder="e.g. 4 bedrooms, 300 m², parking"
-              />
+                <AnimatedInput
+                  label="Key highlights / features"
+                  name="features"
+                  value={listingForm.features}
+                  onChange={(v) =>
+                    setListingForm({ ...listingForm, features: v })
+                  }
+                  maxLength={500}
+                  hint="Separate highlights with commas to display them as badges."
+                  placeholder="e.g. 4 bedrooms, 300 m², parking"
+                />
+              </section>
             </div>
 
-            {/* Media Uploads Card */}
-            <div
-              className={`space-y-4 rounded-2xl border bg-white p-4 shadow-sm sm:p-5 ${styles.section}`}
-            >
-              <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <ImagePlus size={16} className="text-blue-600" />
-                    Photos & Video
-                  </h3>
-                </div>
-                <span
-                  className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                    images.length >= MIN_LISTING_IMAGES
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-amber-50 text-amber-700"
-                  }`}
-                >
-                  {images.length} / {MIN_LISTING_IMAGES}+ photos
-                </span>
-              </div>
-
-              <div>
-                <label className="flex flex-col cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 py-6 text-slate-500 hover:border-blue-400 hover:bg-blue-50/20 hover:text-blue-600 transition">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm border border-slate-100 text-blue-600">
-                    <ImagePlus size={20} />
-                  </div>
-                  <span className="font-semibold text-slate-700 text-xs">
-                    Choose photos
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    JPG, PNG, or WebP up to 8 MB each. The first photo is the
-                    cover.
-                  </span>
-                  <input
-                    type="file"
-                    accept={IMG_TYPES.join(",")}
-                    multiple
-                    className="hidden"
-                    onChange={addImages}
-                  />
-                </label>
-
-                {previews.length > 0 && (
-                  <div className="mt-3 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2.5">
-                    {previews.map((src, i) => (
-                      <div
-                        key={src}
-                        className="relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-100 group shadow-sm"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={src}
-                          alt={`Photo ${i + 1}`}
-                          className="h-full w-full object-cover transition group-hover:scale-105"
-                        />
-                        {i === 0 && (
-                          <span className="absolute left-1 top-1 rounded-md bg-blue-600/90 backdrop-blur-xs px-1.5 py-0.5 text-[9px] font-bold text-white shadow">
-                            ★ Cover
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setImages((prev) =>
-                              prev.filter((_, idx) => idx !== i),
-                            )
-                          }
-                          className="absolute right-1 top-1 rounded-md bg-white/90 p-1 text-rose-600 shadow-sm hover:bg-white hover:scale-110 transition"
-                          aria-label={`Remove photo ${i + 1}`}
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className={label} htmlFor="videoUrl">
-                  Item Video Post Link *
-                </label>
-                <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-slate-600">
+            {/* Right Column: Media & Ownership Verification */}
+            <div className="space-y-5 lg:col-span-5">
+              {/* Media Uploads Card */}
+              <section
+                className={`space-y-4 rounded-2xl border bg-white p-5 shadow-sm sm:p-6 ${styles.section}`}
+              >
+                <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
                   <div className="flex items-center gap-3">
-                    <Film size={18} className="text-blue-600 shrink-0" />
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+                      <ImagePlus size={17} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">
+                        Photos & Video
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        First image becomes the cover photo
+                      </p>
+                    </div>
                   </div>
-                  <input
-                    id="videoUrl"
-                    name="videoUrl"
-                    type="url"
-                    required
-                    value={videoUrl}
-                    onChange={(event) => setVideoUrl(event.target.value)}
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    className={`${input} mt-3`}
-                  />
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold tabular-nums ${
+                      images.length >= MIN_LISTING_IMAGES
+                        ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                        : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                    }`}
+                  >
+                    {images.length}/{MIN_LISTING_IMAGES}+ photos
+                  </span>
                 </div>
-              </div>
-            </div>
 
-            {/* Legal Ownership Verification Card */}
-            <div
-              className={`space-y-4 rounded-2xl border bg-white p-4 shadow-sm sm:p-5 ${styles.section}`}
-            >
-              <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <ShieldCheck size={16} className="text-emerald-600" />
-                    Ownership Verification
-                  </h3>
-                </div>
-              </div>
-
-              <AnimatedInput
-                label="National ID / Passport Number *"
-                name="nationalIdNumber"
-                value={listingForm.nationalIdNumber}
-                onChange={(v) =>
-                  setListingForm({ ...listingForm, nationalIdNumber: v })
-                }
-                required
-                minLength={4}
-                maxLength={50}
-                placeholder="Fayda, passport, or Kebele ID number"
-              />
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className={label}>National ID Scan or Photo *</label>
-                  <label className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-slate-600 hover:border-blue-400 hover:bg-white transition">
-                    <div className="flex items-center gap-2 truncate">
-                      <FileText size={16} className="text-blue-600 shrink-0" />
-                      <span className="truncate text-slate-700 font-medium">
-                        {idDoc ? idDoc.name : "Upload National ID"}
-                      </span>
+                  <label className="group flex min-h-[136px] cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/60 px-4 py-5 text-center text-slate-500 transition hover:border-blue-400 hover:bg-blue-50/30 hover:text-blue-600 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200/80 bg-white text-blue-600 shadow-sm transition group-hover:scale-105 group-hover:border-blue-200">
+                      <ImagePlus size={20} />
                     </div>
-                    <span className="rounded bg-white px-2 py-0.5 text-[10px] font-semibold border border-slate-200 text-slate-700">
-                      {idDoc ? "✓ Loaded" : "Choose"}
+                    <span className="text-xs font-bold text-slate-700 group-hover:text-blue-700">
+                      Click to upload photos
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      JPG, PNG, or WebP · Max 8 MB each
                     </span>
                     <input
                       type="file"
-                      accept={[...IMG_TYPES, "application/pdf"].join(",")}
-                      className="hidden"
-                      onChange={pickDoc(setIdDoc)}
+                      accept={IMG_TYPES.join(",")}
+                      multiple
+                      className="sr-only"
+                      onChange={addImages}
                     />
                   </label>
+
+                  {previews.length > 0 && (
+                    <div className="mt-3 grid grid-cols-3 gap-2.5">
+                      {previews.map((src, i) => (
+                        <div
+                          key={src}
+                          className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-100 shadow-sm"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={src}
+                            alt={`Photo ${i + 1}`}
+                            className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                          />
+                          {i === 0 && (
+                            <span className="absolute left-1.5 top-1.5 rounded-md bg-blue-600/90 px-1.5 py-0.5 text-[9px] font-bold text-white shadow backdrop-blur-xs">
+                              ★ Cover
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setImages((prev) =>
+                                prev.filter((_, idx) => idx !== i),
+                              )
+                            }
+                            className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-lg bg-white/95 text-rose-600 shadow-sm transition hover:scale-110 hover:bg-rose-50"
+                            aria-label={`Remove photo ${i + 1}`}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div>
-                  <label className={label}>Title Deed / Libre (Optional)</label>
-                  <label className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-slate-600 hover:border-blue-400 hover:bg-white transition">
-                    <div className="flex items-center gap-2 truncate">
-                      <FileText
-                        size={16}
-                        className="text-emerald-600 shrink-0"
+                  <label className={label} htmlFor="videoUrl">
+                    Item Video Post Link{" "}
+                    <span className="text-rose-500" aria-hidden="true">
+                      *
+                    </span>
+                  </label>
+                  <p id="videoUrl-hint" className="mb-1.5 text-[11px] text-slate-500">
+                    YouTube, TikTok, Instagram, Facebook, or X video URL
+                  </p>
+                  <div className="relative">
+                    <Film
+                      size={16}
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                    />
+                    <input
+                      id="videoUrl"
+                      name="videoUrl"
+                      type="url"
+                      required
+                      aria-describedby="videoUrl-hint"
+                      autoCorrect="off"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      value={videoUrl}
+                      onChange={(event) => setVideoUrl(event.target.value)}
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      className={`${input} min-h-[44px] bg-slate-50/50 pl-10 hover:bg-white focus:bg-white`}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {/* Legal Ownership Verification Card */}
+              <section
+                className={`space-y-4 rounded-2xl border bg-white p-5 shadow-sm sm:p-6 ${styles.section}`}
+              >
+                <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                    <ShieldCheck size={17} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Ownership Verification
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Identity & proof of ownership for admin review
+                    </p>
+                  </div>
+                </div>
+
+                <AnimatedInput
+                  label="National ID / Passport Number"
+                  name="nationalIdNumber"
+                  value={listingForm.nationalIdNumber}
+                  onChange={(v) =>
+                    setListingForm({ ...listingForm, nationalIdNumber: v })
+                  }
+                  required
+                  minLength={4}
+                  maxLength={50}
+                  autoComplete="off"
+                  placeholder="Fayda, passport, or Kebele ID number"
+                />
+
+                <div className="space-y-3">
+                  <div>
+                    <span className={label}>
+                      National ID Scan or Photo{" "}
+                      <span className="text-rose-500" aria-hidden="true">
+                        *
+                      </span>
+                    </span>
+                    <label
+                      className={`flex min-h-[50px] cursor-pointer items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 transition focus-within:ring-2 focus-within:ring-blue-500 ${
+                        idDoc
+                          ? "border-emerald-200 bg-emerald-50/50 text-emerald-900"
+                          : "border-slate-200 bg-slate-50/60 text-slate-600 hover:border-blue-400 hover:bg-white"
+                      }`}
+                    >
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <div
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                            idDoc
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-white text-blue-600 shadow-xs"
+                          }`}
+                        >
+                          <FileText size={15} />
+                        </div>
+                        <span className="truncate text-xs font-semibold text-slate-700">
+                          {idDoc ? idDoc.name : "Upload National ID"}
+                        </span>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-bold ${
+                          idDoc
+                            ? "bg-emerald-600 text-white"
+                            : "border border-slate-200 bg-white text-slate-700"
+                        }`}
+                      >
+                        {idDoc ? "✓ Loaded" : "Choose"}
+                      </span>
+                      <input
+                        type="file"
+                        accept={[...IMG_TYPES, "application/pdf"].join(",")}
+                        className="sr-only"
+                        onChange={pickDoc(setIdDoc)}
                       />
-                      <span className="truncate text-slate-700 font-medium">
-                        {ownershipDoc
-                          ? ownershipDoc.name
-                          : "Upload Title Deed / Libre"}
+                    </label>
+                  </div>
+
+                  <div>
+                    <span className={label}>Title Deed / Libre (Optional)</span>
+                    <label
+                      className={`flex min-h-[50px] cursor-pointer items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 transition focus-within:ring-2 focus-within:ring-blue-500 ${
+                        ownershipDoc
+                          ? "border-emerald-200 bg-emerald-50/50 text-emerald-900"
+                          : "border-slate-200 bg-slate-50/60 text-slate-600 hover:border-blue-400 hover:bg-white"
+                      }`}
+                    >
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <div
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                            ownershipDoc
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-white text-emerald-600 shadow-xs"
+                          }`}
+                        >
+                          <FileText size={15} />
+                        </div>
+                        <span className="truncate text-xs font-semibold text-slate-700">
+                          {ownershipDoc
+                            ? ownershipDoc.name
+                            : "Upload Title Deed / Libre"}
+                        </span>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-bold ${
+                          ownershipDoc
+                            ? "bg-emerald-600 text-white"
+                            : "border border-slate-200 bg-white text-slate-700"
+                        }`}
+                      >
+                        {ownershipDoc ? "✓ Loaded" : "Choose"}
                       </span>
-                    </div>
-                    <span className="rounded bg-white px-2 py-0.5 text-[10px] font-semibold border border-slate-200 text-slate-700">
-                      {ownershipDoc ? "✓ Loaded" : "Choose"}
-                    </span>
-                    <input
-                      type="file"
-                      accept={[...IMG_TYPES, "application/pdf"].join(",")}
-                      className="hidden"
-                      onChange={pickDoc(setOwnershipDoc)}
-                    />
-                  </label>
+                      <input
+                        type="file"
+                        accept={[...IMG_TYPES, "application/pdf"].join(",")}
+                        className="sr-only"
+                        onChange={pickDoc(setOwnershipDoc)}
+                      />
+                    </label>
+                  </div>
                 </div>
-              </div>
+              </section>
             </div>
 
-            <div className="flex items-center gap-3 pt-2 lg:col-span-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 rounded-xl border border-slate-200 py-3 font-semibold text-slate-700 hover:bg-slate-100 transition"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={busy}
-                className="flex-1 rounded-xl bg-blue-600 py-3 font-bold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-2"
-              >
-                {busy
-                  ? progress || "Processing…"
-                  : "Continue to Schedule Auction →"}
-              </button>
+            {/* Footer Action Bar */}
+            <div className="flex flex-col-reverse gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between lg:col-span-12">
+              <p className="text-[11px] text-slate-500">
+                Saved privately as a draft until you schedule and submit your auction.
+              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="min-h-[46px] flex-1 rounded-xl border border-slate-200 px-6 py-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 sm:flex-initial"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={busy}
+                  enterKeyHint="next"
+                  className="flex min-h-[46px] flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-7 py-2.5 text-xs font-bold text-white shadow-lg shadow-blue-600/25 transition hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 sm:flex-initial"
+                >
+                  {busy ? (
+                    progress || "Processing…"
+                  ) : (
+                    <>
+                      <span>Continue to Schedule Auction</span>
+                      <ArrowRight size={15} aria-hidden="true" />
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </form>
         )}
@@ -1235,39 +1389,6 @@ export function ListingWizard({
                     )}
                   </div>
                 </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className={label}>
-                      {auctionType === "REVERSE"
-                        ? "Minimum acceptable price (Optional)"
-                        : "Confidential reserve price (Optional)"}
-                    </label>
-                    <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full">
-                      🔒 Kept 100% Secret
-                    </span>
-                  </div>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      name="reservePrice"
-                      min="1"
-                      step="any"
-                      value={reservePrice}
-                      onChange={(e) => setReservePrice(e.target.value)}
-                      placeholder="Lowest confidential price you are willing to accept"
-                      className={`${input} pr-14`}
-                    />
-                    <span className="absolute right-3 top-2.5 font-bold text-slate-400 text-xs">
-                      ETB
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[10px] text-slate-400">
-                    {auctionType === "REVERSE"
-                      ? "Bids below this seller-approved minimum will not qualify as a winner."
-                      : "Bidders will never see this amount. If bidding ends below your reserve, you are under no legal obligation to sell."}
-                  </p>
-                </div>
               </div>
 
               {/* Schedule Dates & Times Card */}
@@ -1420,23 +1541,6 @@ export function ListingWizard({
                     </div>
                   );
                 })()}
-              </div>
-
-              {/* Requirements & Terms */}
-              <div
-                className={`rounded-2xl border bg-white p-4 shadow-sm space-y-2 sm:p-5 ${styles.section}`}
-              >
-                <label className={label}>
-                  Requirements and Seller Terms (Optional)
-                </label>
-                <textarea
-                  name="terms"
-                  rows={3}
-                  value={terms}
-                  onChange={(e) => setTerms(e.target.value)}
-                  placeholder="e.g. 10% refundable bid deposit required. Winner must complete remaining transfer payment within 5 business days at Commercial Bank of Ethiopia. Physical site inspection allowed on Saturdays."
-                  className={`${input} p-3 leading-relaxed`}
-                />
               </div>
 
               {/* Workflow Notice */}

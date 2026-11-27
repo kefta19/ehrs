@@ -234,8 +234,7 @@ async function closeAuction(auctionId: string, now: Date) {
         };
       }
 
-      const reserveMet =
-        auction.reservePrice === null || top.amount.gte(auction.reservePrice);
+      const reserveMet = true;
 
       const setting = await tx.systemSetting.findUnique({
         where: { key: "auction.depositPercent" },

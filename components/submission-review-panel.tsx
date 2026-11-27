@@ -8,11 +8,9 @@ import { buildChecklist, failedItems } from "@/lib/listing-readiness";
 export type PendingSubmission = {
   id: string;
   startingPrice: number | string;
-  reservePrice?: number | string | null;
   minBidIncrement: number | string;
   startAt: string;
   endAt: string;
-  terms?: string | null;
   createdAt: string;
   seller: { name: string; email: string };
   listing: {
@@ -198,10 +196,6 @@ function SubmissionCard({ s }: { s: PendingSubmission }) {
               <strong>{money(s.startingPrice)}</strong>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Reserve price</span>
-              <strong>{money(s.reservePrice)}</strong>
-            </div>
-            <div className="flex justify-between">
               <span className="text-slate-500">Min. increment</span>
               <strong>{money(s.minBidIncrement)}</strong>
             </div>
@@ -213,11 +207,6 @@ function SubmissionCard({ s }: { s: PendingSubmission }) {
               <span className="text-slate-500">Ends (auto-closes)</span>
               <strong>{when(s.endAt)}</strong>
             </div>
-            {s.terms && (
-              <p className="border-t border-slate-200 pt-2 text-slate-600">
-                {s.terms}
-              </p>
-            )}
           </div>
         </div>
       </div>

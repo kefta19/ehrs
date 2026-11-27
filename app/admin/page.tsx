@@ -193,10 +193,8 @@ export default async function AdminPage({
             startAt: true,
             endAt: true,
             startingPrice: true,
-            reservePrice: true,
             minBidIncrement: true,
             currentHighestBid: true,
-            terms: true,
             seller: {
               select: {
                 id: true,

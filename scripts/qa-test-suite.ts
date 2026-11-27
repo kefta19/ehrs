@@ -295,7 +295,6 @@ async function main() {
       select: {
         id: true,
         startingPrice: true,
-        reservePrice: true,
         minBidIncrement: true,
         currentHighestBid: true,
         status: true,

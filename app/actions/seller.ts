@@ -313,11 +313,9 @@ export async function createAuctionAction(
   const parsed = submitAuctionSchema.safeParse({
     listingId: str(formData, "listingId"),
     startingPrice: str(formData, "startingPrice"),
-    reservePrice: str(formData, "reservePrice"),
     minBidIncrement: str(formData, "minBidIncrement"),
     startAt: str(formData, "startAt"),
     endAt: str(formData, "endAt"),
-    terms: str(formData, "terms") || undefined,
   });
   if (!parsed.success) return fail(parsed.error.issues[0].message);
   const d = parsed.data;
@@ -349,11 +347,9 @@ export async function createAuctionAction(
 
   const data = {
     startingPrice: d.startingPrice,
-    reservePrice: d.reservePrice ?? null,
     minBidIncrement: d.minBidIncrement,
     startAt: new Date(d.startAt),
     endAt: new Date(d.endAt),
-    terms: d.terms || null,
   };
   const draft = listing.auctions.find((a) => a.status === "DRAFT");
 

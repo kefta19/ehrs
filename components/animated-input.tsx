@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import { Check, X, AlertCircle } from "lucide-react";
 
 interface AnimatedInputProps {
@@ -17,6 +17,10 @@ interface AnimatedInputProps {
   disabled?: boolean;
   name?: string;
   showCounter?: boolean;
+  multiline?: boolean;
+  rows?: number;
+  hint?: string;
+  autoComplete?: string;
 }
 
 export function AnimatedInput({
@@ -33,11 +37,20 @@ export function AnimatedInput({
   disabled = false,
   name,
   showCounter = true,
+  multiline = false,
+  rows = 4,
+  hint,
+  autoComplete,
 }: AnimatedInputProps) {
+  const inputId = useId();
+  const hintId = `${inputId}-hint`;
+  const errorId = `${inputId}-error`;
   const [touched, setTouched] = useState(false);
   const [isValid, setIsValid] = useState<boolean | null>(null);
   const [validationMessage, setValidationMessage] = useState<string>("");
   const [showSuccess, setShowSuccess] = useState(false);
+
+  const cleanLabel = required ? label.replace(/\s*\*+$/, "") : label;
 
   useEffect(() => {
     if (!touched || value === "") {
@@ -50,31 +63,26 @@ export function AnimatedInput({
     let valid = true;
     let message = "";
 
-    // Required check
     if (required && value.trim() === "") {
       valid = false;
       message = "This field is required";
     }
 
-    // Min length check
     if (valid && minLength && value.length < minLength) {
       valid = false;
       message = `Minimum ${minLength} characters required`;
     }
 
-    // Max length check
     if (valid && maxLength && value.length > maxLength) {
       valid = false;
       message = `Maximum ${maxLength} characters allowed`;
     }
 
-    // Pattern check
     if (valid && pattern && !pattern.test(value)) {
       valid = false;
       message = "Invalid format";
     }
 
-    // Custom validation
     if (valid && validate) {
       const result = validate(value);
       valid = result.valid;
@@ -86,11 +94,14 @@ export function AnimatedInput({
 
     if (valid && value.length > 0) {
       setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 1500);
+      const timer = setTimeout(() => setShowSuccess(false), 1200);
+      return () => clearTimeout(timer);
     }
   }, [value, touched, required, minLength, maxLength, pattern, validate]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
     onChange(e.target.value);
   };
 
@@ -98,73 +109,120 @@ export function AnimatedInput({
     setTouched(true);
   };
 
+  const hasError = touched && isValid === false;
+  const hasSuccess = touched && isValid === true;
+  const describedBy = [
+    hint ? hintId : null,
+    hasError && validationMessage ? errorId : null,
+  ]
+    .filter(Boolean)
+    .join(" ") || undefined;
+
+  const fieldClasses = `w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-all duration-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 ${
+    touched && value.length > 0 && !multiline ? "pr-10" : ""
+  } ${
+    disabled
+      ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed"
+      : "bg-slate-50/50 hover:bg-white focus:bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+  } ${
+    hasError
+      ? "border-rose-400 dark:border-rose-600 focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10"
+      : hasSuccess
+        ? "border-emerald-400 dark:border-emerald-600 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+        : "border-slate-200 dark:border-slate-700 focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10"
+  }`;
+
   return (
     <div className="relative">
-      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-        {label}
-        {required && <span className="text-rose-500 ml-1">*</span>}
-      </label>
+      <div className="flex items-baseline justify-between gap-2 mb-1.5">
+        <label
+          htmlFor={inputId}
+          className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
+        >
+          {cleanLabel}
+          {required && (
+            <span className="text-rose-500 ml-1" aria-hidden="true">
+              *
+            </span>
+          )}
+        </label>
+        {showCounter && maxLength && (
+          <span className="text-[11px] tabular-nums text-slate-400">
+            {value.length}/{maxLength}
+          </span>
+        )}
+      </div>
+
+      {hint && (
+        <p id={hintId} className="mb-1.5 text-[11px] text-slate-500">
+          {hint}
+        </p>
+      )}
+
       <div className="relative">
-        <input
-          type={type}
-          name={name}
-          value={value}
-          onChange={handleChange}
-          onBlur={handleBlur}
-          disabled={disabled}
-          placeholder={placeholder}
-          className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-all duration-300 placeholder:text-slate-400 dark:placeholder:text-slate-500 ${
-            disabled
-              ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed"
-              : "bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-          } ${
-            touched && isValid === false
-              ? "border-rose-300 dark:border-rose-600 focus:border-rose-500 focus:ring-2 focus:ring-rose-100 dark:focus:ring-rose-950"
-              : touched && isValid === true
-                ? "border-emerald-300 dark:border-emerald-600 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-950"
-                : "border-slate-200 dark:border-slate-700 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900"
-          }`}
-        />
+        {multiline ? (
+          <textarea
+            id={inputId}
+            name={name}
+            rows={rows}
+            value={value}
+            onChange={handleChange}
+            onBlur={handleBlur}
+            disabled={disabled}
+            required={required}
+            minLength={minLength}
+            maxLength={maxLength}
+            placeholder={placeholder}
+            aria-invalid={hasError ? "true" : "false"}
+            aria-describedby={describedBy}
+            className={`${fieldClasses} min-h-[104px] resize-y leading-relaxed`}
+          />
+        ) : (
+          <input
+            id={inputId}
+            type={type}
+            name={name}
+            value={value}
+            onChange={handleChange}
+            onBlur={handleBlur}
+            disabled={disabled}
+            required={required}
+            minLength={minLength}
+            maxLength={maxLength}
+            autoComplete={autoComplete}
+            placeholder={placeholder}
+            aria-invalid={hasError ? "true" : "false"}
+            aria-describedby={describedBy}
+            className={`${fieldClasses} min-h-[44px]`}
+          />
+        )}
 
         {/* Status Icon */}
-        {touched && value.length > 0 && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 transition-all duration-300">
+        {touched && value.length > 0 && !multiline && (
+          <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-all duration-200">
             {isValid === true ? (
               <div
-                className={`flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white ${showSuccess ? "scale-125" : "scale-100"} transition-transform duration-300`}
+                className={`flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white ${showSuccess ? "scale-110" : "scale-100"} transition-transform duration-200`}
               >
                 <Check size={12} />
               </div>
             ) : isValid === false ? (
-              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-white animate-pulse">
+              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-white">
                 <X size={12} />
               </div>
             ) : null}
           </div>
         )}
-
-        {/* Success Animation */}
-        {showSuccess && isValid === true && (
-          <div className="absolute inset-0 rounded-xl border-2 border-emerald-400 animate-ping pointer-events-none" />
-        )}
       </div>
 
       {/* Validation Message */}
-      {touched && validationMessage && (
+      {hasError && validationMessage && (
         <div
-          className={`mt-1.5 flex items-center gap-1.5 text-[11px] transition-all duration-300 ${
-            isValid === false ? "text-rose-600" : "text-emerald-600"
-          }`}
+          id={errorId}
+          className="mt-1.5 flex items-center gap-1.5 text-[11px] font-medium text-rose-600"
         >
-          {isValid === false ? <AlertCircle size={12} /> : <Check size={12} />}
+          <AlertCircle size={12} className="shrink-0" />
           <span>{validationMessage}</span>
-        </div>
-      )}
-
-      {/* Character Counter */}
-      {showCounter && maxLength && (
-        <div className="mt-1 text-[10px] text-slate-400 text-right">
-          {value.length} / {maxLength}
         </div>
       )}
     </div>

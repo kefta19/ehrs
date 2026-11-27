@@ -288,15 +288,12 @@ async function run() {
         listingId: listingHouse.id,
         sellerId: seller.id,
         startingPrice: 280000,
-        reservePrice: 310000,
         minBidIncrement: 5000,
         currentHighestBid: 320000,
         highestBidderId: getachew.id,
         startAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
         endAt: new Date(Date.now() + 52 * 60 * 60 * 1000), // Ends in 2d 4h 32m
         status: "ACTIVE",
-        terms:
-          "5% deposit required upon winning. Balance settled within 14 calendar days.",
       },
     });
 
@@ -389,14 +386,11 @@ async function run() {
         listingId: listingCar.id,
         sellerId: seller.id,
         startingPrice: 45000,
-        reservePrice: 50000,
         minBidIncrement: 1000,
         currentHighestBid: 0,
         startAt: new Date(Date.now() + 84 * 60 * 60 * 1000), // Starts in 3d 12h
         endAt: new Date(Date.now() + 150 * 60 * 60 * 1000),
         status: "SCHEDULED",
-        terms:
-          "Full payment via bank transfer within 48 hours of auction closing.",
       },
     });
 
@@ -451,14 +445,12 @@ async function run() {
         listingId: listingLand.id,
         sellerId: seller.id,
         startingPrice: 70000,
-        reservePrice: 80000,
         minBidIncrement: 2000,
         currentHighestBid: 85000,
         highestBidderId: getachew.id,
         startAt: new Date(Date.now() - 30 * 60 * 60 * 1000),
         endAt: new Date(Date.now() + 340 * 60 * 60 * 1000), // Ends in 14d 6h 15m
         status: "ACTIVE",
-        terms: "10% earnest money deposit due upon auction conclusion.",
       },
     });
 
@@ -531,14 +523,11 @@ async function run() {
         listingId: listingCommercial.id,
         sellerId: seller.id,
         startingPrice: 1200000,
-        reservePrice: 1400000,
         minBidIncrement: 25000,
         currentHighestBid: 0,
         startAt: new Date(Date.now() + 120 * 60 * 60 * 1000), // Starts in 5d 8h
         endAt: new Date(Date.now() + 240 * 60 * 60 * 1000),
         status: "SCHEDULED",
-        terms:
-          "Certified bank guarantee or bank escrow deposit required prior to bidding.",
       },
     });
 
@@ -581,7 +570,6 @@ async function run() {
         listingId: wonAuctionListing.id,
         sellerId: seller.id,
         startingPrice: 4000,
-        reservePrice: 4500,
         minBidIncrement: 100,
         currentHighestBid: 4850,
         highestBidderId: getachew.id,

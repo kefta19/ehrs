@@ -316,7 +316,6 @@ model Auction {
   sellerId          String
   seller            User          @relation("SellerAuctions", fields: [sellerId], references: [id], onDelete: Restrict)
   startingPrice     Decimal       @db.Decimal(14, 2)
-  reservePrice      Decimal?      @db.Decimal(14, 2)
   minBidIncrement   Decimal       @db.Decimal(14, 2)
   currentHighestBid Decimal       @default(0) @db.Decimal(14, 2)
   highestBidderId   String?
@@ -327,7 +326,6 @@ model Auction {
   endAt             DateTime
   status            AuctionStatus @default(DRAFT)
   approvedById      String?
-  terms             String?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 

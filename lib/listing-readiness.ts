@@ -21,7 +21,6 @@ export type ReadinessListing = {
 
 export type ReadinessAuction = {
   startingPrice: Num;
-  reservePrice?: Num | null;
   minBidIncrement: Num;
   startAt: Date | string;
   endAt: Date | string;
@@ -68,8 +67,6 @@ export function buildChecklist(
     const end = new Date(auction.endAt);
     const startingPrice = num(auction.startingPrice);
     const increment = num(auction.minBidIncrement);
-    const reserve =
-      auction.reservePrice == null ? null : num(auction.reservePrice);
 
     items.push(
       {
@@ -81,11 +78,6 @@ export function buildChecklist(
         key: "increment",
         label: "Bid increment is at least 0.5% of the starting price",
         ok: Number.isFinite(increment) && increment >= startingPrice * 0.005,
-      },
-      {
-        key: "reserve",
-        label: "Reserve price is not below the starting price",
-        ok: reserve === null || reserve >= startingPrice,
       },
       {
         key: "schedule",

@@ -146,14 +146,12 @@ async function main() {
         listingId: liveListing.id,
         sellerId: seller.id,
         startingPrice: 500000,
-        reservePrice: 550000,
         minBidIncrement: 10000,
         currentHighestBid: 520000,
         highestBidderId: buyer.id,
         startAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
         endAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         status: 'ACTIVE',
-        terms: '5% deposit required upon winning.',
       },
     });
 
@@ -206,13 +204,11 @@ async function main() {
         listingId: upcomingListing.id,
         sellerId: seller.id,
         startingPrice: 80000,
-        reservePrice: 90000,
         minBidIncrement: 2000,
         currentHighestBid: 0,
         startAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
         endAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         status: 'SCHEDULED',
-        terms: 'Full payment within 48 hours.',
       },
     });
 

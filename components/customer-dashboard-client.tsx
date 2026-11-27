@@ -107,11 +107,9 @@ type DashboardAuction = {
   startingPrice: number | string;
   currentHighestBid?: number | string | null;
   minBidIncrement: number | string;
-  reservePrice?: number | string | null;
   entryFeeStatus?: string;
   highestBidderId?: string | null;
   listing: DashboardListing;
-  terms?: string;
   bids?: Array<{
     id: string;
     amount: number | string;
@@ -1253,16 +1251,6 @@ export function CustomerDashboardClient({
                         </div>
                       )}
                     </dl>
-                    {previewAuction.terms && (
-                      <div className="mt-5 rounded-xl border border-amber-100 bg-amber-50/70 p-4 dark:border-amber-900 dark:bg-amber-950/30">
-                        <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">
-                          Auction terms
-                        </h4>
-                        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-amber-900/80 dark:text-amber-100/80">
-                          {previewAuction.terms}
-                        </p>
-                      </div>
-                    )}
                     {previewAuction.listing.videoUrl && (
                       <a
                         href={previewAuction.listing.videoUrl}

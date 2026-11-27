@@ -89,14 +89,9 @@ export const submitAuctionSchema = z
     listingId: z.string().min(1, "Select a listing"),
     type: z.enum(["FORWARD", "REVERSE"]).default("FORWARD"),
     startingPrice: money,
-    reservePrice: z.preprocess(
-      (v) => (v === "" || v == null ? undefined : v),
-      money.optional(),
-    ),
     minBidIncrement: money,
     startAt: isoDate,
     endAt: isoDate,
-    terms: z.string().trim().max(3000).optional(),
   })
   .superRefine((v, ctx) => {
     const start = Date.parse(v.startAt);
@@ -125,18 +120,5 @@ export const submitAuctionSchema = z
         path: ["minBidIncrement"],
         message:
           "Minimum increment must be at least 0.5% of the starting price",
-      });
-    if (
-      v.reservePrice !== undefined &&
-      ((v.type === "FORWARD" && v.reservePrice < v.startingPrice) ||
-        (v.type === "REVERSE" && v.reservePrice > v.startingPrice))
-    )
-      ctx.addIssue({
-        code: "custom",
-        path: ["reservePrice"],
-        message:
-          v.type === "REVERSE"
-            ? "Reserve price cannot be above the starting price"
-            : "Reserve price cannot be below the starting price",
       });
   });

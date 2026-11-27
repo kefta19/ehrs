@@ -50,11 +50,24 @@
     background-color 180ms ease;
 }
 
+.stepContent :global(input:not([type="file"]):user-invalid),
+.stepContent :global(select:user-invalid),
+.stepContent :global(textarea:user-invalid) {
+  border-color: #f43f5e;
+}
+
 .stepContent :global(input:not([type="file"]):focus),
 .stepContent :global(select:focus),
 .stepContent :global(textarea:focus) {
   border-color: #3b82f6;
   box-shadow: 0 0 0 4px rgb(59 130 246 / 13%);
+}
+
+.stepContent :global(input:not([type="file"]):focus-visible),
+.stepContent :global(select:focus-visible),
+.stepContent :global(textarea:focus-visible) {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 
 .stepContent :global(button[type="submit"]) {
