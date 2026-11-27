@@ -616,6 +616,24 @@ export async function markNotificationReadAction(notificationId: string) {
   revalidatePath("/customer");
   revalidatePath("/seller");
   revalidatePath("/provider");
+  revalidatePath("/admin");
+  return { success: true };
+}
+
+export async function markAllNotificationsReadAction() {
+  const user = await getCurrentUser();
+  if (!user) return { success: false };
+
+  await prisma.notification.updateMany({
+    where: { userId: user.id, readAt: null },
+    data: { readAt: new Date() },
+  });
+
+  revalidatePath("/buyer");
+  revalidatePath("/customer");
+  revalidatePath("/seller");
+  revalidatePath("/provider");
+  revalidatePath("/admin");
   return { success: true };
 }
 

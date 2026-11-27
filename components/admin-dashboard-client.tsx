@@ -59,7 +59,11 @@ import {
   approveBidPaymentAction,
   rejectBidPaymentAction,
 } from "@/app/actions/bid-payment";
-import { deleteNotificationAction } from "@/app/actions/buyer";
+import {
+  deleteNotificationAction,
+  markAllNotificationsReadAction,
+  markNotificationReadAction,
+} from "@/app/actions/buyer";
 import { AccountManagement } from "@/components/account-management";
 import { adminConfirmBuyerRegistrationAction } from "@/app/actions/bid-registration";
 import {
@@ -707,6 +711,7 @@ export function AdminDashboardClient({
 
   const [notifsPage, setNotifsPage] = useState(1);
   const [notifsPageSize, setNotifsPageSize] = useState(10);
+  const unreadNotifCount = notifications.filter((n) => !n.readAt).length;
   const notifsTotal = notifications.length;
   const notifsTotalPages = Math.max(1, Math.ceil(notifsTotal / notifsPageSize));
   const paginatedNotifications = notifications.slice(
@@ -973,14 +978,27 @@ export function AdminDashboardClient({
               </div>
               <button
                 onClick={() => selectTab("notifications")}
-                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
+                className={`flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 font-medium transition-all ${
                   activeTab === "notifications"
                     ? "bg-blue-600 text-white shadow-sm"
                     : "text-slate-400 hover:bg-[#12233f] hover:text-white"
                 }`}
               >
-                <Bell size={16} />
-                <span>Notifications</span>
+                <span className="flex items-center gap-3">
+                  <Bell size={16} />
+                  <span>Notifications</span>
+                </span>
+                {unreadNotifCount > 0 && (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums ${
+                      activeTab === "notifications"
+                        ? "bg-white text-blue-600"
+                        : "bg-blue-600 text-white"
+                    }`}
+                  >
+                    {unreadNotifCount > 99 ? "99+" : unreadNotifCount}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => selectTab("account")}
@@ -1045,7 +1063,29 @@ export function AdminDashboardClient({
             </h1>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => selectTab("notifications")}
+              aria-label={
+                unreadNotifCount > 0
+                  ? `Notifications (${unreadNotifCount} unread)`
+                  : "Notifications"
+              }
+              title="Notifications"
+              className={`relative flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${
+                activeTab === "notifications"
+                  ? "border-blue-600 bg-blue-50 text-blue-600 dark:border-blue-500 dark:bg-blue-950/60 dark:text-blue-400"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+              }`}
+            >
+              <Bell size={17} />
+              {unreadNotifCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white dark:ring-[#0c1220]">
+                  {unreadNotifCount > 99 ? "99+" : unreadNotifCount}
+                </span>
+              )}
+            </button>
             <ThemeToggle />
             <div className="relative">
               <button
@@ -3072,14 +3112,31 @@ export function AdminDashboardClient({
 
           {activeTab === "notifications" && (
             <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Admin notifications
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Delete a notification from your account. This does not delete
-                  its related inquiry or other users&apos; notifications.
-                </p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                    Admin notifications
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Delete a notification from your account. This does not delete
+                    its related inquiry or other users&apos; notifications.
+                  </p>
+                </div>
+                {unreadNotifCount > 0 && (
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => {
+                      startTransition(async () => {
+                        await markAllNotificationsReadAction();
+                        router.refresh();
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-300"
+                  >
+                    <CheckCircle2 size={14} /> Mark all as read ({unreadNotifCount})
+                  </button>
+                )}
               </div>
               {notifications.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-300 px-4 py-10 text-center dark:border-slate-700">
@@ -3122,6 +3179,30 @@ export function AdminDashboardClient({
                           {notification.link && (
                             <Link
                               href={notification.link}
+                              onClick={(e) => {
+                                if (!notification.readAt) {
+                                  startTransition(async () => {
+                                    await markNotificationReadAction(
+                                      notification.id,
+                                    );
+                                    router.refresh();
+                                  });
+                                }
+                                if (notification.link?.startsWith("/admin?tab=")) {
+                                  const tab = new URL(
+                                    notification.link,
+                                    "http://localhost",
+                                  ).searchParams.get("tab");
+                                  if (tab) {
+                                    e.preventDefault();
+                                    selectTab(
+                                      tab === "kyc"
+                                        ? "sellers"
+                                        : (tab as typeof activeTab),
+                                    );
+                                  }
+                                }
+                              }}
                               className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-800 dark:text-blue-300"
                             >
                               View details <ExternalLink size={12} />
@@ -3129,25 +3210,45 @@ export function AdminDashboardClient({
                           )}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        disabled={isPending}
-                        onClick={() => {
-                          if (
-                            !window.confirm(
-                              "Delete this notification? This will not delete the inquiry or other users’ copies.",
+                      <div className="flex shrink-0 items-center gap-2">
+                        {!notification.readAt && (
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => {
+                              startTransition(async () => {
+                                await markNotificationReadAction(
+                                  notification.id,
+                                );
+                                router.refresh();
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-3 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/40"
+                          >
+                            <CheckCircle2 size={13} /> Mark read
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          disabled={isPending}
+                          onClick={() => {
+                            if (
+                              !window.confirm(
+                                "Delete this notification? This will not delete the inquiry or other users’ copies.",
+                              )
                             )
-                          )
-                            return;
-                          startTransition(async () => {
-                            await deleteNotificationAction(notification.id);
-                          });
-                        }}
-                        aria-label={`Delete notification: ${notification.title}`}
-                        className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-rose-200 px-3 py-1.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/40"
-                      >
-                        <Trash2 size={13} /> Delete
-                      </button>
+                              return;
+                            startTransition(async () => {
+                              await deleteNotificationAction(notification.id);
+                              router.refresh();
+                            });
+                          }}
+                          aria-label={`Delete notification: ${notification.title}`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-3 py-1.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/40"
+                        >
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      </div>
                     </article>
                   ))}
                 </div>
