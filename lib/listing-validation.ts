@@ -13,23 +13,18 @@ const isoDate = z
 
 export const createListingSchema = z.object({
   categoryId: z.string().min(1, "Select a category"),
-  title: z
-    .string()
-    .trim()
-    .min(5, "Title must be at least 5 characters")
-    .max(150),
+  title: z.string().trim().min(5, "Title must be at least 5 characters"),
   description: z
     .string()
     .trim()
-    .min(20, "Description must be at least 20 characters")
-    .max(10000),
-  city: z.string().trim().min(2, "City is required").max(100),
-  region: z.string().trim().max(100).optional(),
-  address: z.string().trim().max(200).optional(),
+    .min(20, "Description must be at least 20 characters"),
+  city: z.string().trim().min(2, "City is required"),
+  region: z.string().trim().optional(),
+  address: z.string().trim().optional(),
   condition: z
     .enum(["NEW", "USED", "NOT_APPLICABLE"])
     .default("NOT_APPLICABLE"),
-  features: z.array(z.string().trim().min(1).max(100)).max(30).default([]),
+  features: z.array(z.string().trim().min(1)).default([]),
   imageIds: z
     .array(z.string().min(1))
     .min(MIN_LISTING_IMAGES, `Upload at least ${MIN_LISTING_IMAGES} photos`)
@@ -41,37 +36,28 @@ export const createListingSchema = z.object({
       isSocialVideoPostUrl,
       "Enter a valid video post URL from YouTube, TikTok, Instagram, Facebook, or X.",
     ),
-  nationalIdNumber: z
-    .string()
-    .trim()
-    .min(7, "National ID number is required")
-    .max(60),
+  nationalIdNumber: z.string().trim().min(7, "National ID number is required"),
   idDocumentId: z.string().min(1, "Upload a photo or scan of your national ID"),
   ownershipDocumentId: z.string().optional(),
 });
 
 export const listingDraftSchema = z.object({
   categoryId: z.string().min(1, "Select a category"),
-  title: z
-    .string()
-    .trim()
-    .min(5, "Title must be at least 5 characters")
-    .max(150),
+  title: z.string().trim().min(5, "Title must be at least 5 characters"),
   description: z
     .string()
     .trim()
-    .min(20, "Description must be at least 20 characters")
-    .max(10000),
-  city: z.string().trim().min(2, "City is required").max(100),
-  region: z.string().trim().max(100).optional(),
-  address: z.string().trim().max(200).optional(),
+    .min(20, "Description must be at least 20 characters"),
+  city: z.string().trim().min(2, "City is required"),
+  region: z.string().trim().optional(),
+  address: z.string().trim().optional(),
   condition: z
     .enum(["NEW", "USED", "NOT_APPLICABLE"])
     .default("NOT_APPLICABLE"),
-  features: z.array(z.string().trim().min(1).max(100)).max(30).default([]),
+  features: z.array(z.string().trim().min(1)).default([]),
   imageUrls: z.array(z.string()).default([]),
   attributes: z.record(z.string(), z.unknown()).optional(),
-  ownerNationalId: z.string().trim().min(4).max(60).optional(),
+  ownerNationalId: z.string().trim().min(4).optional(),
   idDocumentMediaId: z.string().optional(),
   ownershipDocumentMediaId: z.string().optional(),
   videoUrl: z

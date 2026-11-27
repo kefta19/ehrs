@@ -697,7 +697,6 @@ export function ListingWizard({
                   onChange={(v) => setListingForm({ ...listingForm, title: v })}
                   required
                   minLength={5}
-                  maxLength={200}
                   placeholder="e.g. Luxury villa in Bole"
                 />
 
@@ -709,7 +708,6 @@ export function ListingWizard({
                     onChange={(v) => setListingForm({ ...listingForm, city: v })}
                     required
                     minLength={2}
-                    maxLength={100}
                     autoComplete="address-level2"
                     placeholder="e.g. Addis Ababa"
                   />
@@ -720,7 +718,6 @@ export function ListingWizard({
                     onChange={(v) =>
                       setListingForm({ ...listingForm, region: v })
                     }
-                    maxLength={100}
                     autoComplete="address-level1"
                     placeholder="e.g. Bole, Kirkos, Yeka"
                   />
@@ -733,7 +730,6 @@ export function ListingWizard({
                   onChange={(v) =>
                     setListingForm({ ...listingForm, address: v })
                   }
-                  maxLength={200}
                   autoComplete="street-address"
                   placeholder="e.g. Near Edna Mall, Block 14"
                 />
@@ -749,7 +745,6 @@ export function ListingWizard({
                   multiline
                   rows={4}
                   minLength={20}
-                  maxLength={2000}
                   placeholder="Describe condition, ownership history, specifications, and utilities."
                 />
 
@@ -760,7 +755,6 @@ export function ListingWizard({
                   onChange={(v) =>
                     setListingForm({ ...listingForm, features: v })
                   }
-                  maxLength={500}
                   hint="Separate highlights with commas to display them as badges."
                   placeholder="e.g. 4 bedrooms, 300 m², parking"
                 />
@@ -915,7 +909,6 @@ export function ListingWizard({
                   }
                   required
                   minLength={4}
-                  maxLength={50}
                   autoComplete="off"
                   placeholder="Fayda, passport, or Kebele ID number"
                 />
