@@ -1500,6 +1500,7 @@ export function ProviderDashboardClient({
                     onClick={() => {
                       startTransition(async () => {
                         await markAllNotificationsReadAction();
+                        router.refresh();
                       });
                     }}
                     className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
@@ -1645,6 +1646,7 @@ export function ProviderDashboardClient({
                                   await markNotificationReadAction(
                                     notification.id,
                                   );
+                                  router.refresh();
                                 })
                               }
                               className="rounded-lg bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
