@@ -1,13 +1,23 @@
 import "dotenv/config";
 import { promises as fs } from "node:fs";
-import { prisma } from "../lib/prisma";
+import { neon } from "@neondatabase/serverless";
 import { storagePath } from "../lib/storage";
 
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error("DATABASE_URL is missing");
+}
+
+const sql = neon(connectionString);
+
 async function main() {
-  const rows = await prisma.mediaFile.findMany({
-    where: { data: null },
-    select: { id: true, storageKey: true, sizeBytes: true },
-  });
+  await sql`ALTER TABLE "MediaFile" ADD COLUMN IF NOT EXISTS "data" BYTEA`;
+
+  const rows = (await sql`
+    SELECT "id", "storageKey", "sizeBytes"
+    FROM "MediaFile"
+    WHERE "data" IS NULL
+  `) as Array<{ id: string; storageKey: string; sizeBytes: number }>;
 
   console.log(`Found ${rows.length} MediaFile rows without database bytes.`);
   let updated = 0;
@@ -16,10 +26,11 @@ async function main() {
   for (const row of rows) {
     try {
       const buf = await fs.readFile(storagePath(row.storageKey));
-      await prisma.mediaFile.update({
-        where: { id: row.id },
-        data: { data: buf },
-      });
+      await sql`
+        UPDATE "MediaFile"
+        SET "data" = ${buf}
+        WHERE "id" = ${row.id}
+      `;
       updated++;
     } catch {
       missing++;
@@ -29,9 +40,7 @@ async function main() {
   console.log(`Backfill complete: ${updated} updated, ${missing} missing on disk.`);
 }
 
-main()
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
