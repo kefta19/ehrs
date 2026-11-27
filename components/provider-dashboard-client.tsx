@@ -43,6 +43,7 @@ import {
 } from "@/app/actions/seller";
 import {
   deleteNotificationAction,
+  markAllNotificationsReadAction,
   markNotificationReadAction,
 } from "@/app/actions/buyer";
 import { ListingWizard } from "./listing-wizard";
@@ -666,6 +667,30 @@ export function ProviderDashboardClient({
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4">
+            <button
+              type="button"
+              onClick={() => selectTab("notifications")}
+              aria-label={
+                notifications.filter((n) => !n.readAt).length > 0
+                  ? `Notifications (${notifications.filter((n) => !n.readAt).length} unread)`
+                  : "Notifications"
+              }
+              title="Notifications"
+              className={`relative flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${
+                activeTab === "notifications"
+                  ? "border-blue-600 bg-blue-50 text-blue-600 dark:border-blue-500 dark:bg-blue-950/60 dark:text-blue-400"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+              }`}
+            >
+              <Bell size={17} />
+              {notifications.filter((n) => !n.readAt).length > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white dark:ring-slate-950">
+                  {notifications.filter((n) => !n.readAt).length > 99
+                    ? "99+"
+                    : notifications.filter((n) => !n.readAt).length}
+                </span>
+              )}
+            </button>
             <ThemeToggle />
             <button
               onClick={openListingWizard}
@@ -1458,14 +1483,31 @@ export function ProviderDashboardClient({
 
           {activeTab === "notifications" && (
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="mb-5">
-                <h2 className="text-lg font-bold text-slate-900">
-                  Notification Center
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Updates about your listings, auctions, payments, and account.
-                  Reply to buyer inquiries here.
-                </p>
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    Notification Center
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Updates about your listings, auctions, payments, and account.
+                    Reply to buyer inquiries here.
+                  </p>
+                </div>
+                {notifications.filter((n) => !n.readAt).length > 0 && (
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => {
+                      startTransition(async () => {
+                        await markAllNotificationsReadAction();
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+                  >
+                    <CheckCircle2 size={14} /> Mark all as read (
+                    {notifications.filter((n) => !n.readAt).length})
+                  </button>
+                )}
               </div>
 
               {notifications.length === 0 ? (

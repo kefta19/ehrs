@@ -39,6 +39,7 @@ import {
   submitPaymentAction,
   submitComplaintTicketAction,
   updateBuyerProfileAction,
+  markAllNotificationsReadAction,
   markNotificationReadAction,
   deleteNotificationAction,
   placeBuyerBidAction,
@@ -816,13 +817,24 @@ export function CustomerDashboardClient({
             <ThemeToggle />
             {/* Notification Bell */}
             <button
-              onClick={() => setActiveTab("notifications")}
-              className="relative rounded-full p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+              type="button"
+              onClick={() => selectTab("notifications")}
+              aria-label={
+                unreadNotifsCount > 0
+                  ? `Notifications (${unreadNotifsCount} unread)`
+                  : "Notifications"
+              }
+              title="Notifications"
+              className={`relative flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${
+                activeTab === "notifications"
+                  ? "border-blue-600 bg-blue-50 text-blue-600 dark:border-blue-500 dark:bg-blue-950/60 dark:text-blue-400"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+              }`}
             >
-              <Bell size={20} />
+              <Bell size={17} />
               {unreadNotifsCount > 0 && (
-                <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-                  {unreadNotifsCount}
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white dark:ring-slate-950">
+                  {unreadNotifsCount > 99 ? "99+" : unreadNotifsCount}
                 </span>
               )}
             </button>
@@ -2858,17 +2870,45 @@ export function CustomerDashboardClient({
           {/* ══════════════════ TAB 9: NOTIFICATIONS ══════════════════ */}
           {activeTab === "notifications" && (
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">
-                  Notification Center
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Real-time alerts for bids, outbid events, won auctions, and
-                  settlements.
-                </p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    Notification Center
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Real-time alerts for bids, outbid events, won auctions, and
+                    settlements.
+                  </p>
+                </div>
+                {unreadNotifsCount > 0 && (
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => {
+                      startTransition(async () => {
+                        await markAllNotificationsReadAction();
+                        router.refresh();
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+                  >
+                    <CheckCircle2 size={14} /> Mark all as read ({unreadNotifsCount})
+                  </button>
+                )}
               </div>
 
-              <div className="space-y-3">
+              {notifications.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-300 px-4 py-10 text-center">
+                  <Bell className="mx-auto mb-2 text-slate-400" size={24} />
+                  <p className="text-sm font-semibold text-slate-700">
+                    You&apos;re all caught up
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    New bid, outbid, and settlement alerts will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
                 {paginatedNotifications.map((n) => (
                   <div
                     key={n.id}
@@ -2930,7 +2970,8 @@ export function CustomerDashboardClient({
                     </div>
                   </div>
                 ))}
-              </div>
+                </div>
+              )}
               <Pagination
                 currentPage={notifsPage}
                 totalPages={notifsTotalPages}
