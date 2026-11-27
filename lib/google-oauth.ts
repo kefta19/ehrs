@@ -1,6 +1,7 @@
 import "server-only";
 
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import type { NextRequest } from "next/server";
 import { OAuth2Client } from "google-auth-library";
 
 export const GOOGLE_OAUTH_STATE_COOKIE = "google_oauth_state";
@@ -16,19 +17,68 @@ export type GoogleOAuthState = {
   role: GoogleOAuthRole;
 };
 
-export function getGoogleOAuthConfig() {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+function isLocalHostname(hostname: string) {
+  return ["localhost", "127.0.0.1", "[::1]"].includes(hostname);
+}
 
-  if (!clientId || !clientSecret || !redirectUri) return null;
+export function getPublicOrigin(request: NextRequest): string {
+  const forwardedHost = request.headers
+    .get("x-forwarded-host")
+    ?.split(",")[0]
+    ?.trim();
+  const host = forwardedHost || request.headers.get("host")?.trim();
+  if (host) {
+    const hostname = host.split(":")[0].toLowerCase();
+    const forwardedProto = request.headers
+      .get("x-forwarded-proto")
+      ?.split(",")[0]
+      ?.trim();
+    const proto =
+      forwardedProto || (isLocalHostname(hostname) ? "http" : "https");
+    return `${proto}://${host}`;
+  }
+  return request.nextUrl.origin;
+}
+
+export function getGoogleOAuthConfig(request?: NextRequest) {
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+  const configuredRedirectUri = process.env.GOOGLE_REDIRECT_URI?.trim();
+
+  if (!clientId || !clientSecret) return null;
+
+  let redirectUri = configuredRedirectUri;
+  if (request) {
+    const origin = getPublicOrigin(request);
+    const dynamicRedirectUri = `${origin}/api/auth/google/callback`;
+    if (!redirectUri) {
+      redirectUri = dynamicRedirectUri;
+    } else {
+      try {
+        const configuredUrl = new URL(redirectUri);
+        const requestUrl = new URL(origin);
+        if (
+          isLocalHostname(configuredUrl.hostname) &&
+          !isLocalHostname(requestUrl.hostname)
+        ) {
+          redirectUri = dynamicRedirectUri;
+        }
+      } catch {
+        redirectUri = dynamicRedirectUri;
+      }
+    }
+  }
+
+  if (!redirectUri) return null;
 
   try {
     const redirectUrl = new URL(redirectUri);
     if (
       redirectUrl.protocol !== "https:" &&
-      !(redirectUrl.protocol === "http:" &&
-        ["localhost", "127.0.0.1", "[::1]"].includes(redirectUrl.hostname))
+      !(
+        redirectUrl.protocol === "http:" &&
+        isLocalHostname(redirectUrl.hostname)
+      )
     ) {
       console.warn("GOOGLE_REDIRECT_URI must use HTTPS except on localhost.");
       return null;
@@ -40,8 +90,8 @@ export function getGoogleOAuthConfig() {
   }
 }
 
-export function createGoogleOAuthClient() {
-  const config = getGoogleOAuthConfig();
+export function createGoogleOAuthClient(request?: NextRequest) {
+  const config = getGoogleOAuthConfig(request);
   if (!config) throw new Error("Google OAuth is not configured.");
 
   return {

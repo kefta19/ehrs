@@ -3,6 +3,7 @@ import {
   createGoogleOAuthClient,
   createGoogleOAuthState,
   getGoogleOAuthConfig,
+  getPublicOrigin,
   GOOGLE_OAUTH_STATE_COOKIE,
   GOOGLE_OAUTH_STATE_TTL_SECONDS,
   type GoogleOAuthMode,
@@ -16,12 +17,13 @@ export async function GET(request: NextRequest) {
   const mode: GoogleOAuthMode =
     requestedMode === "register" ? "register" : "login";
   const pagePath = mode === "register" ? "/register" : "/login";
+  const origin = getPublicOrigin(request);
 
   try {
-    const config = getGoogleOAuthConfig();
+    const config = getGoogleOAuthConfig(request);
     if (!config) {
       return NextResponse.redirect(
-        new URL(`${pagePath}?error=google_not_configured`, request.url),
+        new URL(`${pagePath}?error=google_not_configured`, origin),
       );
     }
 
@@ -29,7 +31,7 @@ export async function GET(request: NextRequest) {
     const role: GoogleOAuthRole =
       mode === "register" && requestedRole === "SELLER" ? "SELLER" : "BUYER";
     const oauthState = createGoogleOAuthState(mode, role);
-    const { client } = createGoogleOAuthClient();
+    const { client } = createGoogleOAuthClient(request);
     const authorizationUrl = client.generateAuthUrl({
       access_type: "online",
       prompt: "select_account",
@@ -57,7 +59,7 @@ export async function GET(request: NextRequest) {
       error instanceof Error ? error.message : "Unknown error",
     );
     return NextResponse.redirect(
-      new URL(`${pagePath}?error=google_failed`, request.url),
+      new URL(`${pagePath}?error=google_failed`, origin),
     );
   }
 }

@@ -15,6 +15,7 @@ import { roleHome } from "@/lib/rbac";
 import {
   constantTimeStringEqual,
   createGoogleOAuthClient,
+  getPublicOrigin,
   GOOGLE_OAUTH_STATE_COOKIE,
   parseGoogleOAuthState,
 } from "@/lib/google-oauth";
@@ -25,7 +26,7 @@ function redirectToAuthPage(
   error: string,
 ) {
   const response = NextResponse.redirect(
-    new URL(`/${mode}?error=${encodeURIComponent(error)}`, request.url),
+    new URL(`/${mode}?error=${encodeURIComponent(error)}`, getPublicOrigin(request)),
   );
   response.cookies.set(GOOGLE_OAUTH_STATE_COOKIE, "", {
     httpOnly: true,
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
   if (!code) return redirectToAuthPage(request, mode, "google_failed");
 
   try {
-    const { client, config } = createGoogleOAuthClient();
+    const { client, config } = createGoogleOAuthClient(request);
     const { tokens } = await client.getToken(code);
     if (!tokens.id_token) throw new Error("Google did not return an ID token.");
 
@@ -192,7 +193,7 @@ export async function GET(request: NextRequest) {
     });
 
     const response = NextResponse.redirect(
-      new URL(roleHome(user.role), request.url),
+      new URL(roleHome(user.role), getPublicOrigin(request)),
     );
     response.cookies.set(GOOGLE_OAUTH_STATE_COOKIE, "", {
       httpOnly: true,
