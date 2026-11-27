@@ -43,12 +43,17 @@ export async function GET(
   }
   if (!allowed) return missing();
 
+  const dbData = media.data ? Buffer.from(media.data) : null;
   const file = storagePath(media.storageKey);
   let size: number;
-  try {
-    size = (await fs.stat(file)).size;
-  } catch {
-    return missing();
+  if (dbData) {
+    size = dbData.length;
+  } else {
+    try {
+      size = (await fs.stat(file)).size;
+    } catch {
+      return missing();
+    }
   }
 
   let start = 0;
@@ -75,18 +80,20 @@ export async function GET(
     return missing();
   }
 
-  const stream = Readable.toWeb(
-    createReadStream(file, { start, end }),
-  ) as unknown as ReadableStream;
+  const body: BodyInit = dbData
+    ? new Uint8Array(dbData.subarray(start, end + 1))
+    : (Readable.toWeb(
+        createReadStream(file, { start, end }),
+      ) as unknown as ReadableStream);
   const isPublicMedia = media.kind === "IMAGE" || media.kind === "VIDEO";
-  return new NextResponse(stream, {
+  return new NextResponse(body, {
     status,
     headers: {
       "Content-Type": media.mimeType,
       "Content-Length": String(end - start + 1),
       "Accept-Ranges": "bytes",
       "Cache-Control": isPublicMedia
-        ? "private, max-age=3600"
+        ? "public, max-age=31536000, immutable"
         : "private, no-store",
       "X-Content-Type-Options": "nosniff",
       ...(status === 206

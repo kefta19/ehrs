@@ -647,6 +647,7 @@ model MediaFile {
   mimeType   String
   sizeBytes  Int
   storageKey String    @unique
+  data       Bytes?
   attachedAt DateTime?
   createdAt  DateTime  @default(now())
 

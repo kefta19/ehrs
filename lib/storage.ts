@@ -10,13 +10,26 @@ export function storagePath(key: string) {
   return path.join(ROOT, path.basename(key));
 }
 
+export function newStorageKey(ext: string) {
+  return `${randomUUID()}.${ext}`;
+}
+
 export async function saveFile(buf: Buffer, ext: string) {
-  await fs.mkdir(ROOT, { recursive: true });
-  const key = `${randomUUID()}.${ext}`;
-  await fs.writeFile(storagePath(key), buf, { flag: "wx" });
+  const key = newStorageKey(ext);
+  try {
+    await fs.mkdir(ROOT, { recursive: true });
+    await fs.writeFile(storagePath(key), buf, { flag: "wx" });
+  } catch {
+    // Serverless environments (e.g. Vercel) have a read-only filesystem;
+    // primary media bytes are persisted in PostgreSQL (MediaFile.data).
+  }
   return key;
 }
 
 export async function deleteFile(key: string) {
-  await fs.rm(storagePath(key), { force: true });
+  try {
+    await fs.rm(storagePath(key), { force: true });
+  } catch {
+    // Ignore on read-only filesystems.
+  }
 }

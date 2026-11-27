@@ -81,6 +81,7 @@ export function POST(
           mimeType: mime,
           sizeBytes: buf.length,
           storageKey: storageKey,
+          data: buf,
         },
       });
       const url = `/api/media/${media.id}`;
