@@ -25,7 +25,6 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { BiometricButton } from "./biometric-button";
 import { AnimatedInput } from "./animated-input";
 import { createListingAction } from "@/app/actions/seller";
 import { isSocialVideoPostUrl } from "@/lib/social-video-url";
@@ -225,7 +224,6 @@ export function ListingWizard({
   const [videoUrl, setVideoUrl] = useState("");
   const [idDoc, setIdDoc] = useState<File | null>(null);
   const [ownershipDoc, setOwnershipDoc] = useState<File | null>(null);
-  const [verificationId, setVerificationId] = useState<string | null>(null);
 
   // Listing form state
   const [listingForm, setListingForm] = useState({
@@ -233,7 +231,6 @@ export function ListingWizard({
     city: "",
     region: "",
     address: "",
-    referenceNumber: "",
     description: "",
     features: "",
     nationalIdNumber: "",
@@ -301,7 +298,6 @@ export function ListingWizard({
         "Add a valid video post link from YouTube, TikTok, Instagram, Facebook, or X.",
       );
     if (!idDoc) return setError("Upload a photo or scan of your national ID.");
-    if (!verificationId) return setError("Verify your fingerprint first.");
 
     // Get category from selected state or fallback form
     const form = e.currentTarget;
@@ -333,7 +329,6 @@ export function ListingWizard({
       text.set("city", listingForm.city);
       text.set("region", listingForm.region);
       text.set("address", listingForm.address);
-      text.set("referenceNumber", listingForm.referenceNumber);
       text.set("description", listingForm.description);
       text.set("features", listingForm.features);
       text.set("nationalIdNumber", listingForm.nationalIdNumber);
@@ -341,11 +336,9 @@ export function ListingWizard({
       text.set("videoUrl", videoUrl.trim());
       text.set("idDocumentId", idDocumentId);
       text.set("ownershipDocumentId", ownershipDocumentId);
-      text.set("biometricVerificationId", verificationId);
 
       const res = await createListingAction(text);
       if (!res.success) {
-        setVerificationId(null);
         setError(res.error);
         return;
       }
@@ -663,28 +656,16 @@ export function ListingWizard({
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <AnimatedInput
-                  label="Physical address / landmark"
-                  name="address"
-                  value={listingForm.address}
-                  onChange={(v) =>
-                    setListingForm({ ...listingForm, address: v })
-                  }
-                  maxLength={200}
-                  placeholder="e.g. Near Edna Mall, Block 14"
-                />
-                <AnimatedInput
-                  label="Reference / Title / VIN Number"
-                  name="referenceNumber"
-                  value={listingForm.referenceNumber}
-                  onChange={(v) =>
-                    setListingForm({ ...listingForm, referenceNumber: v })
-                  }
-                  maxLength={50}
-                  placeholder="e.g. ETH-PRP-2026-9021"
-                />
-              </div>
+              <AnimatedInput
+                label="Physical address / landmark"
+                name="address"
+                value={listingForm.address}
+                onChange={(v) =>
+                  setListingForm({ ...listingForm, address: v })
+                }
+                maxLength={200}
+                placeholder="e.g. Near Edna Mall, Block 14"
+              />
 
               <div>
                 <AnimatedInput
@@ -814,7 +795,7 @@ export function ListingWizard({
               </div>
             </div>
 
-            {/* Legal Ownership & Biometric Verification Card */}
+            {/* Legal Ownership Verification Card */}
             <div
               className={`space-y-4 rounded-2xl border bg-white p-4 shadow-sm sm:p-5 ${styles.section}`}
             >
@@ -887,27 +868,6 @@ export function ListingWizard({
                     />
                   </label>
                 </div>
-              </div>
-
-              <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="font-bold text-slate-800 text-xs">
-                    Identity Verification *
-                  </label>
-                  {verificationId && (
-                    <span className="text-emerald-600 font-bold flex items-center gap-1 text-[11px]">
-                      <CheckCircle2 size={13} /> Verified
-                    </span>
-                  )}
-                </div>
-                <BiometricButton
-                  verificationId={verificationId}
-                  onVerified={setVerificationId}
-                  disabled={busy}
-                />
-                <p className="text-[11px] text-slate-500">
-                  Use your device passkey or fingerprint. Valid for 15 minutes.
-                </p>
               </div>
             </div>
 

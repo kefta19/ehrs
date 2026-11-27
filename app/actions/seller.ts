@@ -8,7 +8,6 @@ import { logAudit } from "@/lib/security";
 import { can } from "@/lib/rbac";
 import { assertTransition, canTransition } from "@/lib/auction-state";
 import {
-  BIOMETRIC_MAX_AGE_MS,
   buildChecklist,
   failedItems,
 } from "@/lib/listing-readiness";
@@ -175,7 +174,6 @@ export async function createListingAction(
     city: str(formData, "city"),
     region: str(formData, "region") || undefined,
     address: str(formData, "address") || undefined,
-    referenceNumber: str(formData, "referenceNumber") || undefined,
     condition: str(formData, "condition") || "NOT_APPLICABLE",
     features: str(formData, "features")
       .split(",")
@@ -188,7 +186,6 @@ export async function createListingAction(
     nationalIdNumber: str(formData, "nationalIdNumber"),
     idDocumentId: str(formData, "idDocumentId"),
     ownershipDocumentId: str(formData, "ownershipDocumentId") || undefined,
-    biometricVerificationId: str(formData, "biometricVerificationId"),
   });
   if (!parsed.success) return fail(parsed.error.issues[0].message);
   const d = parsed.data;
@@ -207,20 +204,6 @@ export async function createListingAction(
   try {
     const listing = await prisma.$transaction(async (tx) => {
       const now = new Date();
-
-      const consumed = await tx.biometricVerification.updateMany({
-        where: {
-          id: d.biometricVerificationId,
-          userId: user.id,
-          consumedAt: null,
-          createdAt: { gte: new Date(now.getTime() - BIOMETRIC_MAX_AGE_MS) },
-        },
-        data: { consumedAt: now },
-      });
-      if (consumed.count !== 1)
-        throw new ActionError(
-          "Fingerprint verification expired. Please verify again.",
-        );
 
       const wanted = [
         ...d.imageIds,
@@ -257,7 +240,6 @@ export async function createListingAction(
           city: d.city,
           region: d.region || d.city,
           address: d.address,
-          referenceNumber: d.referenceNumber || undefined,
           condition: d.condition,
           features: d.features,
           attributes,
@@ -265,7 +247,6 @@ export async function createListingAction(
           videoUrl: d.videoUrl,
           ownerNationalId: d.nationalIdNumber,
           idDocumentMediaId: d.idDocumentId,
-          biometricVerificationId: d.biometricVerificationId,
           images: {
             create: d.imageIds.map((id, i) => ({
               url: `/api/media/${id}`,
@@ -314,7 +295,7 @@ export async function createListingAction(
     if (err instanceof ActionError) return fail(err.message);
     if ((err as { code?: string })?.code === "P2002")
       return fail(
-        "A listing with this reference / parcel / VIN number already exists.",
+        "A listing with these details already exists.",
       );
     console.error("[createListingAction]", err);
     return fail("Could not save the listing. Please try again.");

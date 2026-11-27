@@ -1,5 +1,4 @@
 export const MIN_LISTING_IMAGES = 2;
-export const BIOMETRIC_MAX_AGE_MS = 15 * 60 * 1000;
 
 type Num = number | string | { toNumber(): number };
 const num = (v: Num | null | undefined) =>
@@ -17,7 +16,6 @@ export type ReadinessListing = {
   videoUrl?: string | null;
   ownerNationalId?: string | null;
   idDocumentMediaId?: string | null;
-  biometricVerificationId?: string | null;
   description?: string | null;
 };
 
@@ -57,11 +55,6 @@ export function buildChecklist(
       key: "idDoc",
       label: "National ID document uploaded",
       ok: !!listing.idDocumentMediaId,
-    },
-    {
-      key: "fingerprint",
-      label: "Fingerprint (device biometric) verified",
-      ok: !!listing.biometricVerificationId,
     },
     {
       key: "description",

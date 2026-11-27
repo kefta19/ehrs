@@ -77,7 +77,6 @@ export default async function AuctionDetailPage({
           city: true,
           region: true,
           country: true,
-          referenceNumber: true,
           features: true,
           attributes: true,
           videoUrl: true,

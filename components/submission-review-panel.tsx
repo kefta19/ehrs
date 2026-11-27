@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCircle2, Fingerprint, FileText, XCircle } from "lucide-react";
+import { CheckCircle2, FileText, XCircle } from "lucide-react";
 import { reviewSubmissionAction } from "@/app/actions/review";
 import { buildChecklist, failedItems } from "@/lib/listing-readiness";
 
@@ -21,12 +21,9 @@ export type PendingSubmission = {
     description: string;
     city: string;
     region: string;
-    referenceNumber?: string | null;
     videoUrl?: string | null;
     ownerNationalId?: string | null;
     idDocumentMediaId?: string | null;
-    biometricVerificationId?: string | null;
-    biometricVerification?: { method: string; createdAt: string } | null;
     category: { name: string };
     images: { id: string; url: string }[];
     documents: { id: string; title: string; fileUrl: string }[];
@@ -94,7 +91,7 @@ function SubmissionCard({ s }: { s: PendingSubmission }) {
           <span className="font-bold text-blue-600">{l.category.name}</span>
           <h3 className="text-base font-bold text-slate-900">{l.title}</h3>
           <p className="text-slate-500">
-            {l.city}, {l.region} · Ref: {l.referenceNumber || "—"}
+            {l.city}, {l.region}
           </p>
           <p className="text-slate-400">
             Seller: <strong className="text-slate-700">{s.seller.name}</strong>{" "}
@@ -177,17 +174,6 @@ function SubmissionCard({ s }: { s: PendingSubmission }) {
                 </a>
               ) : (
                 <span className="text-rose-600">Missing</span>
-              )}
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Fingerprint</span>
-              {l.biometricVerification ? (
-                <span className="flex items-center gap-1 font-semibold text-emerald-600">
-                  <Fingerprint size={13} /> Verified on device ·{" "}
-                  {when(l.biometricVerification.createdAt)}
-                </span>
-              ) : (
-                <span className="text-rose-600">Not verified</span>
               )}
             </div>
             {l.documents.map((d) => (

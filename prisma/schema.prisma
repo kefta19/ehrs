@@ -159,9 +159,6 @@ model User {
   auditLogs              AuditLog[]
   entryFeesPaid          AuctionEntryFee[]       @relation("EntryFeePayer")
   mediaFiles             MediaFile[]
-  biometricCredentials   BiometricCredential[]
-  biometricVerifications BiometricVerification[]
-  webauthnChallenges     WebAuthnChallenge[]
   buyerRegistrations     BuyerBidRegistration[]  @relation("BuyerRegistrations")
   buyerEntryFees         BuyerAuctionEntryFee[]  @relation("BuyerEntryFees")
   reviewedAuctionResults AuctionResult[]         @relation("AuctionResultReviewer")
@@ -260,7 +257,6 @@ model Listing {
   region                  String
   country                 String                 @default("ET")
   postalCode              String?
-  referenceNumber         String?                @unique // parcel no., VIN, serial no. etc.
   features                String[]
   attributes              Json? // category-specific fields (see lib/categories.ts)
   status                  ListingStatus          @default(DRAFT)
@@ -271,8 +267,6 @@ model Listing {
   videoUrl                String?
   ownerNationalId         String?
   idDocumentMediaId       String?
-  biometricVerificationId String?                @unique
-  biometricVerification   BiometricVerification? @relation(fields: [biometricVerificationId], references: [id], onDelete: SetNull)
   submittedAt             DateTime?
   reviewedAt              DateTime?
 
@@ -660,49 +654,6 @@ model MediaFile {
 
   @@index([ownerId, kind])
   @@index([attachedAt, createdAt])
-}
-
-model BiometricCredential {
-  id           String    @id @default(cuid())
-  userId       String
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  credentialId String    @unique
-  publicKey    Bytes
-  counter      Int       @default(0)
-  transports   String[]
-  lastUsedAt   DateTime?
-  createdAt    DateTime  @default(now())
-
-  verifications BiometricVerification[]
-
-  @@index([userId])
-}
-
-model BiometricVerification {
-  id           String              @id @default(cuid())
-  userId       String
-  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  credentialId String
-  credential   BiometricCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
-  method       String
-  consumedAt   DateTime?
-  createdAt    DateTime            @default(now())
-
-  listing Listing?
-
-  @@index([userId, createdAt])
-}
-
-model WebAuthnChallenge {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  challenge String
-  purpose   String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  @@index([userId])
 }
 
 enum EntryFeeStatus {

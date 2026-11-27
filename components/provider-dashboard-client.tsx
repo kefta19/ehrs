@@ -111,7 +111,6 @@ type Listing = {
   region?: string;
   status?: string;
   rejectionReason?: string | null;
-  referenceNumber?: string;
   category?: ListingCategory;
   images?: ListingImage[];
   _count?: { auctions: number };
@@ -1002,10 +1001,7 @@ export function ProviderDashboardClient({
                       </div>
                     </div>
 
-                    <div className="p-5 pt-0 border-t border-slate-100 mt-4 flex items-center justify-between text-xs">
-                      <span className="text-slate-500 font-mono text-[11px]">
-                        Ref: {l.referenceNumber || "ETH-LST"}
-                      </span>
+                    <div className="p-5 pt-0 border-t border-slate-100 mt-4 flex items-center justify-end text-xs">
                       <div className="flex items-center gap-2">
                         {(l.status === "DRAFT" ||
                           l.status === "REJECTED" ||

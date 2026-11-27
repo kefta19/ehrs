@@ -112,16 +112,16 @@ async function main() {
 
     // Create LIVE auction (Active now)
     const liveListing = await prisma.listing.upsert({
-      where: { referenceNumber: 'LIVE-001' },
+      where: { id: 'listing-live-001' },
       update: {},
       create: {
+        id: 'listing-live-001',
         sellerId: seller.id,
         categoryId: catHomes.id,
         title: 'Modern Villa - Live Auction',
         description: 'Beautiful modern villa with 4 bedrooms, 3 bathrooms, and a garden.',
         city: 'Addis Ababa',
         region: 'Bole',
-        referenceNumber: 'LIVE-001',
         status: 'APPROVED',
         tenantId: defaultTenant.id,
         images: {
@@ -172,16 +172,16 @@ async function main() {
 
     // Create UPCOMING auction (Scheduled)
     const upcomingListing = await prisma.listing.upsert({
-      where: { referenceNumber: 'UPCOMING-001' },
+      where: { id: 'listing-upcoming-001' },
       update: {},
       create: {
+        id: 'listing-upcoming-001',
         sellerId: seller.id,
         categoryId: catCars.id,
         title: 'Toyota Land Cruiser - Upcoming',
         description: '2021 Toyota Land Cruiser in excellent condition.',
         city: 'Addis Ababa',
         region: 'Kazanchis',
-        referenceNumber: 'UPCOMING-001',
         status: 'APPROVED',
         tenantId: defaultTenant.id,
         images: {

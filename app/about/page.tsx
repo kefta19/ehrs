@@ -152,7 +152,7 @@ const roleGuides = [
       {
         title: "Prepare a complete listing",
         description:
-          "Add the asset category, description, location, at least three photos, a valid social video post link, your ID document, and fingerprint verification. Include ownership documents when available.",
+          "Add the asset category, description, location, at least three photos, a valid social video post link, and your ID document. Include ownership documents when available.",
       },
       {
         title: "Set up and submit the auction",

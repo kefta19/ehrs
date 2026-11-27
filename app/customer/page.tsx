@@ -51,7 +51,6 @@ export default async function CustomerPage({
             city: true,
             region: true,
             country: true,
-            referenceNumber: true,
             features: true,
             attributes: true,
             videoUrl: true,

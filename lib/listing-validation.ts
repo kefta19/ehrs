@@ -26,7 +26,6 @@ export const createListingSchema = z.object({
   city: z.string().trim().min(2, "City is required").max(100),
   region: z.string().trim().max(100).optional(),
   address: z.string().trim().max(200).optional(),
-  referenceNumber: z.string().trim().max(100).optional(),
   condition: z
     .enum(["NEW", "USED", "NOT_APPLICABLE"])
     .default("NOT_APPLICABLE"),
@@ -49,9 +48,6 @@ export const createListingSchema = z.object({
     .max(60),
   idDocumentId: z.string().min(1, "Upload a photo or scan of your national ID"),
   ownershipDocumentId: z.string().optional(),
-  biometricVerificationId: z
-    .string()
-    .min(1, "Verify your fingerprint before adding the listing"),
 });
 
 export const listingDraftSchema = z.object({
@@ -69,7 +65,6 @@ export const listingDraftSchema = z.object({
   city: z.string().trim().min(2, "City is required").max(100),
   region: z.string().trim().max(100).optional(),
   address: z.string().trim().max(200).optional(),
-  referenceNumber: z.string().trim().max(100).optional(),
   condition: z
     .enum(["NEW", "USED", "NOT_APPLICABLE"])
     .default("NOT_APPLICABLE"),
@@ -87,7 +82,6 @@ export const listingDraftSchema = z.object({
       "Enter a valid video post URL from YouTube, TikTok, Instagram, Facebook, or X.",
     )
     .optional(),
-  biometricVerificationId: z.string().optional(),
 });
 
 export const submitAuctionSchema = z

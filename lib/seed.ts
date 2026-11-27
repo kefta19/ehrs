@@ -239,7 +239,6 @@ async function run() {
         address: "Bole Subcity, Woreda 03",
         city: "Addis Ababa",
         region: "Bole",
-        referenceNumber: "ETH-HOM-2026-001",
         features: [
           "3 Beds",
           "2 Baths",
@@ -346,7 +345,6 @@ async function run() {
         address: "Bole Medhanialem",
         city: "Addis Ababa",
         region: "Addis Ababa",
-        referenceNumber: "ETH-CAR-2021-LC200",
         features: [
           "4WD",
           "65,000 km",
@@ -413,7 +411,6 @@ async function run() {
         address: "Quiha Expansion Zone, Plot 42",
         city: "Mekelle",
         region: "Tigray",
-        referenceNumber: "ETH-LND-2026-1000M",
         features: [
           "1,000 m²",
           "Clear Title",
@@ -493,7 +490,6 @@ async function run() {
         address: "Kezira Commercial Hub, Boulevard 02",
         city: "Dire Dawa",
         region: "Dire Dawa",
-        referenceNumber: "ETH-COM-2026-DIR",
         features: [
           "2,500 m²",
           "G+4 Structure",
@@ -567,7 +563,6 @@ async function run() {
           "Irrigated fertile agricultural land with river frontage and access roads.",
         city: "Bahir Dar",
         region: "Amhara",
-        referenceNumber: "ETH-FARM-WON-01",
         features: ["5 Hectares", "Irrigation System", "River Access"],
         status: "APPROVED",
         images: {

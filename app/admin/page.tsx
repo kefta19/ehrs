@@ -122,7 +122,6 @@ export default async function AdminPage({
         category: true,
         images: { orderBy: { displayOrder: "asc" }, take: 3 },
         documents: { take: 5 },
-        biometricVerification: true,
         entryFees: { orderBy: { createdAt: "desc" }, take: 3 },
         auctions: {
           include: {
@@ -230,7 +229,6 @@ export default async function AdminPage({
                 region: true,
                 country: true,
                 postalCode: true,
-                referenceNumber: true,
                 features: true,
                 attributes: true,
                 status: true,

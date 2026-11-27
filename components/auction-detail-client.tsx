@@ -51,7 +51,6 @@ interface AuctionDetail {
     city: string;
     region: string;
     country: string;
-    referenceNumber: string | null;
     features: string[];
     attributes: Record<string, unknown> | null;
     videoUrl: string | null;
@@ -441,12 +440,6 @@ export function AuctionDetailClient({
                     {auction.listing.condition.replaceAll("_", " ").toLowerCase()}
                   </dd>
                 </div>
-                {auction.listing.referenceNumber && (
-                  <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-800">
-                    <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reference</dt>
-                    <dd className="mt-1 text-sm font-medium text-slate-900 dark:text-white">{auction.listing.referenceNumber}</dd>
-                  </div>
-                )}
               </dl>
               {auction.listing.features.length > 0 && (
                 <div className="mt-5">

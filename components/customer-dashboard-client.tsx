@@ -78,7 +78,6 @@ type DashboardListing = {
   region?: string | null;
   address?: string | null;
   country?: string;
-  referenceNumber?: string | null;
   videoUrl?: string | null;
   attributes?: Record<string, unknown> | null;
   category: {
@@ -1250,16 +1249,6 @@ export function CustomerDashboardClient({
                             {previewAuction.listing.condition
                               .replaceAll("_", " ")
                               .toLowerCase()}
-                          </dd>
-                        </div>
-                      )}
-                      {previewAuction.listing.referenceNumber && (
-                        <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-800">
-                          <dt className="text-xs text-slate-500">
-                            Reference number
-                          </dt>
-                          <dd className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-                            {previewAuction.listing.referenceNumber}
                           </dd>
                         </div>
                       )}

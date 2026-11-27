@@ -31,7 +31,6 @@ import {
   Palette,
   User,
   FileText,
-  Fingerprint,
   Phone,
   Mail,
   Building2,
@@ -137,7 +136,6 @@ type AdminListing = {
   condition?: string;
   category: { id?: string; name: string };
   seller: AdminUser;
-  referenceNumber?: string | null;
   city: string;
   region?: string | null;
   address?: string | null;
@@ -146,12 +144,6 @@ type AdminListing = {
   videoUrl?: string | null;
   ownerNationalId?: string | null;
   idDocumentMediaId?: string | null;
-  biometricVerificationId?: string | null;
-  biometricVerification?: {
-    method?: string;
-    createdAt?: string;
-    credentialId?: string;
-  } | null;
   images?: Array<{ id?: string; url: string; isPrimary?: boolean }>;
   documents?: Array<{
     id: string;
@@ -269,7 +261,6 @@ type AdminBid = {
       region: string;
       country: string;
       postalCode: string | null;
-      referenceNumber: string | null;
       features: string[];
       attributes: Record<string, unknown> | null;
       status: string;
@@ -1988,8 +1979,7 @@ export function AdminDashboardClient({
                           {l.description}
                         </p>
                         <div className="text-slate-400">
-                          Seller: <strong>{l.seller.name}</strong> • Ref:{" "}
-                          {l.referenceNumber}
+                          Seller: <strong>{l.seller.name}</strong>
                         </div>
                       </div>
                     </div>
@@ -3280,11 +3270,6 @@ export function AdminDashboardClient({
                       >
                         STATUS: {getListingStatusLabel(reviewingListing.status)}
                       </span>
-                      {reviewingListing.referenceNumber && (
-                        <span className="text-slate-400 font-mono">
-                          Ref: {reviewingListing.referenceNumber}
-                        </span>
-                      )}
                     </div>
                     <h3 className="text-xl font-bold text-slate-900">
                       {reviewingListing.title}
@@ -3444,44 +3429,6 @@ export function AdminDashboardClient({
                             <p className="text-rose-600 text-[11px]">
                               No ownership documents attached.
                             </p>
-                          )}
-                        </div>
-
-                        {/* Biometric Verification */}
-                        <div className="pt-1 border-t border-slate-200">
-                          {reviewingListing.biometricVerification ? (
-                            <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-2 text-emerald-800 border border-emerald-200">
-                              <Fingerprint
-                                size={18}
-                                className="text-emerald-600"
-                              />
-                              <div>
-                                <p className="font-bold">
-                                  Passkey Fingerprint Signed on Device
-                                </p>
-                                <p className="text-[10px] text-emerald-600">
-                                  Method:{" "}
-                                  {reviewingListing.biometricVerification
-                                    .method || "WebAuthn"}{" "}
-                                  ·{" "}
-                                  {new Date(
-                                    reviewingListing.biometricVerification
-                                      .createdAt!,
-                                  ).toLocaleString()}
-                                </p>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2 rounded-lg bg-amber-50 p-2 text-amber-800 border border-amber-200">
-                              <ShieldCheck
-                                size={18}
-                                className="text-amber-600"
-                              />
-                              <p className="text-[11px]">
-                                Standard authenticated session (No device
-                                passkey)
-                              </p>
-                            </div>
                           )}
                         </div>
                       </div>
@@ -4164,12 +4111,6 @@ export function AdminDashboardClient({
                         <dt className="text-xs text-slate-500">Condition</dt>
                         <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
                           {selectedBidListing.condition}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs text-slate-500">Reference</dt>
-                        <dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">
-                          {selectedBidListing.referenceNumber || "Not provided"}
                         </dd>
                       </div>
                       <div className="sm:col-span-2">
